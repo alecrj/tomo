@@ -42,8 +42,15 @@ export async function generateDestination(
       throw new Error('Unexpected response type from Claude');
     }
 
-    // Parse the JSON response
-    const destinationData = JSON.parse(content.text);
+    // Parse the JSON response (strip markdown code fences if present)
+    let jsonText = content.text.trim();
+    if (jsonText.startsWith('```json')) {
+      jsonText = jsonText.replace(/^```json\n/, '').replace(/\n```$/, '');
+    } else if (jsonText.startsWith('```')) {
+      jsonText = jsonText.replace(/^```\n/, '').replace(/\n```$/, '');
+    }
+
+    const destinationData = JSON.parse(jsonText);
 
     // Enrich with Google Places data
     const enrichedDestination = await enrichDestination(

@@ -146,7 +146,7 @@ export interface HomeBase {
 export interface UserPreferences {
   homeBase: HomeBase | null;
   walkingTolerance: 'low' | 'moderate' | 'high';
-  budget: 'budget' | 'moderate' | 'flexible';
+  budget: 'budget' | 'moderate' | 'luxury';
   dietary: string[];
   interests: string[];
   avoidCrowds: boolean;

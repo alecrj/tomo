@@ -10,50 +10,11 @@ import { ChatInput } from '../components/ChatInput';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { useLocation } from '../hooks/useLocation';
 import { useWeather } from '../hooks/useWeather';
-import { Destination } from '../types';
+import { useDestinationGeneration } from '../hooks/useDestinationGeneration';
 import { useWeatherStore } from '../stores/useWeatherStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
 import { useDestinationsStore } from '../stores/useDestinationsStore';
 import { typography, colors, spacing } from '../constants/theme';
-
-// Mock destination for development
-const MOCK_DESTINATION: Destination = {
-  id: '1',
-  title: 'Golden Gai',
-  description: 'Tiny bars, big vibes',
-  whatItIs: '200+ tiny bars in 6 narrow alleys. Each seats 5-7 people. Cover charges ¥300-500, drinks ¥600-800.',
-  whenToGo: 'After 8pm — earlier is dead. Weeknights less crowded.',
-  neighborhood: 'Shinjuku',
-  category: 'nightlife',
-  whyNow: 'Perfect for evening, bars just opening',
-  placeId: 'ChIJ_____mock_place_id',
-  address: 'Kabukicho, Shinjuku',
-  coordinates: { latitude: 35.6938, longitude: 139.7034 },
-  priceLevel: 2,
-  estimatedCost: 3000,
-  transitPreview: {
-    method: 'train',
-    line: 'Yamanote',
-    totalMinutes: 15,
-    description: '15 min by train',
-  },
-  spots: [
-    {
-      placeId: 'spot_1',
-      name: 'Albatross',
-      description: '3 floors, good for first-timers',
-      rating: 4.4,
-      priceLevel: 2,
-    },
-    {
-      placeId: 'spot_2',
-      name: 'Death Match in Hell',
-      description: 'Horror/metal theme, wild decor',
-      rating: 4.3,
-      priceLevel: 2,
-    },
-  ],
-};
 
 export default function HomeScreen() {
   const timeOfDay = useTimeOfDay();
@@ -63,16 +24,19 @@ export default function HomeScreen() {
   const { location } = useLocation();
   const { weather } = useWeather();
 
+  // Destination generation (uses Claude API)
+  const { regenerate } = useDestinationGeneration();
+
   // Store selectors
   const weatherCondition = useWeatherStore((state) => state.condition);
   const weatherTemperature = useWeatherStore((state) => state.temperature);
   const currentDestination = useDestinationsStore((state) => state.currentDestination);
-  const setDestination = useDestinationsStore((state) => state.setDestination);
+  const loading = useDestinationsStore((state) => state.loading);
   const excludeDestination = useDestinationsStore((state) => state.excludeDestination);
 
   // Initialize stores with mock data
   useEffect(() => {
-    // Initialize budget
+    // Initialize budget (one-time setup)
     const budgetStore = useBudgetStore.getState();
     if (budgetStore.dailyBudget === 0) {
       budgetStore.setTripBudget(70000, 7); // 7-day trip, ¥70,000 total
@@ -85,12 +49,7 @@ export default function HomeScreen() {
         timestamp: Date.now(),
       });
     }
-
-    // Initialize destination
-    if (!currentDestination) {
-      setDestination(MOCK_DESTINATION);
-    }
-  }, [currentDestination, setDestination]);
+  }, []);
 
   const handleSendMessage = () => {
     if (chatInput.trim()) {
@@ -113,8 +72,8 @@ export default function HomeScreen() {
   const handleSomethingElse = () => {
     if (currentDestination) {
       excludeDestination(currentDestination.id);
-      // TODO: Generate new destination via Claude API
-      console.log('Generating new destination...');
+      console.log('Excluded:', currentDestination.title);
+      regenerate();
     }
   };
 
@@ -151,25 +110,35 @@ export default function HomeScreen() {
               <Text style={styles.sectionLabel}>TONIGHT</Text>
             </View>
 
-            {/* Destination Card */}
-            {currentDestination && (
-              <DestinationCard
-                destination={currentDestination}
-                onSeeMore={handleSeeMore}
-                onTakeMeThere={handleTakeMeThere}
-              />
+            {/* Destination Card or Loading */}
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>✨ Finding the perfect place...</Text>
+              </View>
+            ) : currentDestination ? (
+              <>
+                <DestinationCard
+                  destination={currentDestination}
+                  onSeeMore={handleSeeMore}
+                  onTakeMeThere={handleTakeMeThere}
+                />
+                {/* Something Else Button */}
+                <View style={styles.somethingElseContainer}>
+                  <TouchableOpacity
+                    style={styles.somethingElseButton}
+                    onPress={handleSomethingElse}
+                    activeOpacity={0.7}
+                    disabled={loading}
+                  >
+                    <Text style={styles.somethingElseText}>Something else</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>🗺️ Getting your location...</Text>
+              </View>
             )}
-
-            {/* Something Else Button */}
-            <View style={styles.somethingElseContainer}>
-              <TouchableOpacity
-                style={styles.somethingElseButton}
-                onPress={handleSomethingElse}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.somethingElseText}>Something else</Text>
-              </TouchableOpacity>
-            </View>
 
             {/* Chat Area (placeholder for now) */}
             <View style={styles.chatArea}>
@@ -223,6 +192,19 @@ const styles = StyleSheet.create({
   sectionLabel: {
     ...typography.presets.sectionLabel,
     color: colors.text.light.secondary,
+  },
+  loadingContainer: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing['3xl'],
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 200,
+  },
+  loadingText: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.medium,
+    color: colors.text.light.secondary,
+    textAlign: 'center',
   },
   somethingElseContainer: {
     paddingHorizontal: spacing.xl,
