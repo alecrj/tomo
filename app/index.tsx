@@ -68,8 +68,14 @@ export default function HomeScreen() {
   };
 
   const handleSeeMore = () => {
-    // TODO: Navigate to destination detail screen
-    console.log('See more:', currentDestination?.title);
+    if (!currentDestination) return;
+
+    router.push({
+      pathname: '/destination',
+      params: {
+        destination: JSON.stringify(currentDestination),
+      },
+    });
   };
 
   const handleTakeMeThere = async () => {
