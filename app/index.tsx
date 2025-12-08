@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Text, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Text, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { AnimatedBackground } from '../components/AnimatedBackground';
 import { Header } from '../components/Header';
 import { BudgetBar } from '../components/BudgetBar';
@@ -14,11 +15,16 @@ import { useDestinationGeneration } from '../hooks/useDestinationGeneration';
 import { useWeatherStore } from '../stores/useWeatherStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
 import { useDestinationsStore } from '../stores/useDestinationsStore';
+import { useLocationStore } from '../stores/useLocationStore';
+import { useNavigationStore } from '../stores/useNavigationStore';
+import { getTransitDirections } from '../services/routes';
 import { typography, colors, spacing } from '../constants/theme';
 
 export default function HomeScreen() {
+  const router = useRouter();
   const timeOfDay = useTimeOfDay();
   const [chatInput, setChatInput] = useState('');
+  const [fetchingRoute, setFetchingRoute] = useState(false);
 
   // Location and weather hooks (automatically update stores)
   const { location } = useLocation();
@@ -28,11 +34,13 @@ export default function HomeScreen() {
   const { regenerate } = useDestinationGeneration();
 
   // Store selectors
+  const coordinates = useLocationStore((state) => state.coordinates);
   const weatherCondition = useWeatherStore((state) => state.condition);
   const weatherTemperature = useWeatherStore((state) => state.temperature);
   const currentDestination = useDestinationsStore((state) => state.currentDestination);
   const loading = useDestinationsStore((state) => state.loading);
   const excludeDestination = useDestinationsStore((state) => state.excludeDestination);
+  const startNavigation = useNavigationStore((state) => state.startNavigation);
 
   // Initialize stores with mock data
   useEffect(() => {
@@ -64,9 +72,55 @@ export default function HomeScreen() {
     console.log('See more:', currentDestination?.title);
   };
 
-  const handleTakeMeThere = () => {
-    // TODO: Navigate to navigation screen
-    console.log('Take me there:', currentDestination?.title);
+  const handleTakeMeThere = async () => {
+    if (!currentDestination || !coordinates) {
+      Alert.alert('Error', 'Location not available. Please try again.');
+      return;
+    }
+
+    try {
+      setFetchingRoute(true);
+
+      console.log('Fetching transit directions...');
+      const route = await getTransitDirections(coordinates, currentDestination.coordinates);
+
+      if (!route) {
+        Alert.alert(
+          'Route not found',
+          'Could not find transit directions. Would you like to see walking directions?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Walk',
+              onPress: () => {
+                // TODO: Get walking directions
+                console.log('Get walking directions');
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      console.log('Route found, navigating...');
+
+      // Update navigation store
+      startNavigation(currentDestination, route);
+
+      // Navigate to navigation screen with params
+      router.push({
+        pathname: '/navigation',
+        params: {
+          destination: JSON.stringify(currentDestination),
+          route: JSON.stringify(route),
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching route:', error);
+      Alert.alert('Error', 'Could not fetch directions. Please try again.');
+    } finally {
+      setFetchingRoute(false);
+    }
   };
 
   const handleSomethingElse = () => {
