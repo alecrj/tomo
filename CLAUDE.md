@@ -39,17 +39,23 @@ Replace Google Maps + ChatGPT + travel guides with one app. User opens Tomo, see
 - Dark text on light backgrounds, white on dark
 
 ## Current Build Status
-- [ ] Project setup + types
-- [ ] Design system
-- [ ] Animated background
-- [ ] Main screen layout
-- [ ] Zustand stores
-- [ ] Location service
-- [ ] Weather service
+- [x] Project setup + types
+- [x] Design system
+- [x] Animated background
+- [x] Main screen layout
+- [x] Zustand stores
+- [x] Location service
+- [x] Weather service
 - [ ] Claude integration
 - [ ] Chat functionality
 - [ ] Camera + vision
-- [ ] Budget tracking
+- [x] Budget tracking
 - [ ] Stamps screen
 - [ ] Settings screen
 - [ ] Polish + animations
+
+## Thinking Guidelines
+- Use "think" for simple component fixes
+- Use "think hard" for service architecture
+- Use "ultrathink" for system-wide decisions (navigation flow, state management)
+- Continue until task complete without stopping between steps
