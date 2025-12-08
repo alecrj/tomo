@@ -8,6 +8,7 @@ import { BudgetBar } from '../components/BudgetBar';
 import { DestinationCard } from '../components/DestinationCard';
 import { QuickActions } from '../components/QuickActions';
 import { ChatInput } from '../components/ChatInput';
+import { AddExpenseModal } from '../components/AddExpenseModal';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { useLocation } from '../hooks/useLocation';
 import { useWeather } from '../hooks/useWeather';
@@ -25,6 +26,7 @@ export default function HomeScreen() {
   const timeOfDay = useTimeOfDay();
   const [chatInput, setChatInput] = useState('');
   const [fetchingRoute, setFetchingRoute] = useState(false);
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
 
   // Location and weather hooks (automatically update stores)
   const { location } = useLocation();
@@ -210,7 +212,7 @@ export default function HomeScreen() {
             <QuickActions
               timeOfDay={timeOfDay}
               onCamera={() => console.log('Camera pressed')}
-              onAddExpense={() => console.log('Add expense pressed')}
+              onAddExpense={() => setShowExpenseModal(true)}
               onStamps={() => console.log('Stamps pressed')}
             />
 
@@ -226,6 +228,12 @@ export default function HomeScreen() {
           />
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      {/* Add Expense Modal */}
+      <AddExpenseModal
+        visible={showExpenseModal}
+        onClose={() => setShowExpenseModal(false)}
+      />
     </View>
   );
 }

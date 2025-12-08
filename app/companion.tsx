@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Camera, DollarSign, MapPin, X, Send, ChevronDown } from 'lucide-react-native';
 import { colors, spacing, typography, shadows } from '../constants/theme';
+import { AddExpenseModal } from '../components/AddExpenseModal';
 import { useNavigationStore } from '../stores/useNavigationStore';
 import { useTripStore } from '../stores/useTripStore';
 import { useLocationStore } from '../stores/useLocationStore';
@@ -38,6 +39,7 @@ export default function CompanionScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Initial greeting when companion mode starts
@@ -147,8 +149,7 @@ export default function CompanionScreen() {
   };
 
   const handleAddExpense = () => {
-    // TODO: Implement add expense modal
-    console.log('Add expense');
+    setShowExpenseModal(true);
   };
 
   const handleExploreNearby = () => {
@@ -271,6 +272,12 @@ export default function CompanionScreen() {
           </TouchableOpacity>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      {/* Add Expense Modal */}
+      <AddExpenseModal
+        visible={showExpenseModal}
+        onClose={() => setShowExpenseModal(false)}
+      />
     </View>
   );
 }
