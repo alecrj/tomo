@@ -154,6 +154,7 @@ export default function HomeScreen() {
                 condition: weatherCondition,
                 temperature: weatherTemperature,
               } : undefined}
+              onSettingsPress={() => router.push('/settings')}
             />
 
             {/* Budget Bar */}

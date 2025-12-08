@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Cloud, CloudRain, Sun, CloudSnow } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Cloud, CloudRain, Sun, CloudSnow, Settings } from 'lucide-react-native';
 import { typography, spacing, getTextColors, TimeOfDay, WeatherCondition } from '../constants/theme';
 
 interface HeaderProps {
@@ -10,9 +10,10 @@ interface HeaderProps {
     condition: WeatherCondition;
     temperature: number;
   };
+  onSettingsPress?: () => void;
 }
 
-export function Header({ timeOfDay, location, weather }: HeaderProps) {
+export function Header({ timeOfDay, location, weather, onSettingsPress }: HeaderProps) {
   const textColors = getTextColors(timeOfDay);
 
   const getGreeting = () => {
@@ -60,6 +61,11 @@ export function Header({ timeOfDay, location, weather }: HeaderProps) {
             </Text>
           )}
         </Text>
+        {onSettingsPress && (
+          <TouchableOpacity style={styles.settingsButton} onPress={onSettingsPress}>
+            <Settings size={24} color={textColors.primary} strokeWidth={2} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {weather && (
@@ -86,13 +92,22 @@ const styles = StyleSheet.create({
   greetingRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: spacing.xs,
   },
   greeting: {
     ...typography.presets.greeting,
+    flex: 1,
   },
   location: {
     ...typography.presets.greeting,
+  },
+  settingsButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: spacing.sm,
   },
   weatherRow: {
     flexDirection: 'row',
