@@ -7,13 +7,13 @@ interface TripState {
   startDate: string | null; // ISO date string
   currentDay: number;
   visits: Visit[];
-  completedMoveIds: string[];
+  completedDestinationIds: string[];
   totalWalkingMinutes: number;
 
   // Actions
   startTrip: (startDate: string) => void;
   addVisit: (visit: Visit) => void;
-  completeMove: (moveId: string) => void;
+  completeDestination: (destinationId: string) => void;
   addWalkingTime: (minutes: number) => void;
   reset: () => void;
 }
@@ -22,7 +22,7 @@ const initialState = {
   startDate: null,
   currentDay: 0,
   visits: [] as Visit[],
-  completedMoveIds: [] as string[],
+  completedDestinationIds: [] as string[],
   totalWalkingMinutes: 0,
 };
 
@@ -38,9 +38,9 @@ export const useTripStore = create<TripState>()(
           visits: [...state.visits, visit],
         })),
 
-      completeMove: (moveId) =>
+      completeDestination: (destinationId) =>
         set((state) => ({
-          completedMoveIds: [...state.completedMoveIds, moveId],
+          completedDestinationIds: [...state.completedDestinationIds, destinationId],
         })),
 
       addWalkingTime: (minutes) =>

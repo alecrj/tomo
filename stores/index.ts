@@ -2,7 +2,9 @@
 export { useLocationStore } from './useLocationStore';
 export { useWeatherStore } from './useWeatherStore';
 export { useBudgetStore } from './useBudgetStore';
-export { useMovesStore } from './useMovesStore';
+export { useDestinationsStore } from './useDestinationsStore';
+export { useNavigationStore } from './useNavigationStore';
+export { useWarningsStore } from './useWarningsStore';
 export { usePreferencesStore } from './usePreferencesStore';
 export { useTripStore } from './useTripStore';
 export { useStampsStore } from './useStampsStore';

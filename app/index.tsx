@@ -1,107 +1,59 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Text, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnimatedBackground } from '../components/AnimatedBackground';
 import { Header } from '../components/Header';
 import { BudgetBar } from '../components/BudgetBar';
-import { MoveCard } from '../components/MoveCard';
+import { DestinationCard } from '../components/DestinationCard';
 import { QuickActions } from '../components/QuickActions';
 import { ChatInput } from '../components/ChatInput';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { useLocation } from '../hooks/useLocation';
 import { useWeather } from '../hooks/useWeather';
-import { Move } from '../types';
+import { Destination } from '../types';
 import { useWeatherStore } from '../stores/useWeatherStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
-import { useMovesStore } from '../stores/useMovesStore';
+import { useDestinationsStore } from '../stores/useDestinationsStore';
+import { typography, colors, spacing } from '../constants/theme';
 
-// Mock data for development
-const MOCK_MOVES: Move[] = [
-  {
-    id: '1',
-    title: 'Golden Gai Bar Crawl',
-    description: 'Explore 200+ tiny bars in atmospheric alleyways',
-    neighborhood: 'Shinjuku',
-    category: 'nightlife',
-    duration: 180,
-    transit: {
-      method: 'train',
-      line: 'Yamanote',
-      direction: 'Shinjuku',
-      stops: 3,
-      totalMinutes: 15,
-      exitInfo: 'East Exit',
-    },
-    whyNow: 'Perfect for evening, bars just opening',
-    priceLevel: 2,
-    estimatedCost: 3000,
-    highlights: [
-      'Tiny bars with 5-7 seats each',
-      'Unique atmosphere and locals',
-    ],
-    startingPoint: {
-      name: 'Golden Gai',
-      address: 'Kabukicho, Shinjuku',
-      coordinates: { latitude: 35.6938, longitude: 139.7034 },
-    },
+// Mock destination for development
+const MOCK_DESTINATION: Destination = {
+  id: '1',
+  title: 'Golden Gai',
+  description: 'Tiny bars, big vibes',
+  whatItIs: '200+ tiny bars in 6 narrow alleys. Each seats 5-7 people. Cover charges ¥300-500, drinks ¥600-800.',
+  whenToGo: 'After 8pm — earlier is dead. Weeknights less crowded.',
+  neighborhood: 'Shinjuku',
+  category: 'nightlife',
+  whyNow: 'Perfect for evening, bars just opening',
+  placeId: 'ChIJ_____mock_place_id',
+  address: 'Kabukicho, Shinjuku',
+  coordinates: { latitude: 35.6938, longitude: 139.7034 },
+  priceLevel: 2,
+  estimatedCost: 3000,
+  transitPreview: {
+    method: 'train',
+    line: 'Yamanote',
+    totalMinutes: 15,
+    description: '15 min by train',
   },
-  {
-    id: '2',
-    title: 'Omoide Yokocho Yakitori',
-    description: 'Smoky alley of grilled meat under the tracks',
-    neighborhood: 'Shinjuku',
-    category: 'food',
-    duration: 90,
-    transit: {
-      method: 'train',
-      line: 'Yamanote',
-      direction: 'Shinjuku',
-      stops: 3,
-      totalMinutes: 15,
-      exitInfo: 'West Exit',
+  spots: [
+    {
+      placeId: 'spot_1',
+      name: 'Albatross',
+      description: '3 floors, good for first-timers',
+      rating: 4.4,
+      priceLevel: 2,
     },
-    whyNow: 'Dinner time, freshly grilled',
-    priceLevel: 1,
-    estimatedCost: 1500,
-    highlights: [
-      'Authentic yakitori stalls',
-      'Budget-friendly and delicious',
-    ],
-    startingPoint: {
-      name: 'Omoide Yokocho',
-      address: 'Nishi-Shinjuku, Shinjuku',
-      coordinates: { latitude: 35.6917, longitude: 139.7006 },
+    {
+      placeId: 'spot_2',
+      name: 'Death Match in Hell',
+      description: 'Horror/metal theme, wild decor',
+      rating: 4.3,
+      priceLevel: 2,
     },
-  },
-  {
-    id: '3',
-    title: 'TeamLab Borderless',
-    description: 'Immersive digital art that you walk through',
-    neighborhood: 'Azabudai',
-    category: 'culture',
-    duration: 120,
-    transit: {
-      method: 'train',
-      line: 'Oedo Line',
-      direction: 'Roppongi',
-      stops: 5,
-      totalMinutes: 25,
-      exitInfo: 'Azabudai Hills Exit',
-    },
-    whyNow: 'Evening slots available',
-    priceLevel: 3,
-    estimatedCost: 4200,
-    highlights: [
-      'Stunning digital installations',
-      'Interactive art experiences',
-    ],
-    startingPoint: {
-      name: 'TeamLab Borderless',
-      address: 'Azabudai Hills, Minato',
-      coordinates: { latitude: 35.6586, longitude: 139.7454 },
-    },
-  },
-];
+  ],
+};
 
 export default function HomeScreen() {
   const timeOfDay = useTimeOfDay();
@@ -109,14 +61,14 @@ export default function HomeScreen() {
 
   // Location and weather hooks (automatically update stores)
   const { location } = useLocation();
-  const { weather: weatherData } = useWeather();
+  const { weather } = useWeather();
 
   // Store selectors
   const weatherCondition = useWeatherStore((state) => state.condition);
-  const moves = useMovesStore((state) => state.moves);
-  const selectedMoveId = useMovesStore((state) => state.selectedMoveId);
-  const selectMove = useMovesStore((state) => state.selectMove);
-  const setMoves = useMovesStore((state) => state.setMoves);
+  const weatherTemperature = useWeatherStore((state) => state.temperature);
+  const currentDestination = useDestinationsStore((state) => state.currentDestination);
+  const setDestination = useDestinationsStore((state) => state.setDestination);
+  const excludeDestination = useDestinationsStore((state) => state.excludeDestination);
 
   // Initialize stores with mock data
   useEffect(() => {
@@ -134,9 +86,11 @@ export default function HomeScreen() {
       });
     }
 
-    // Initialize moves
-    setMoves(MOCK_MOVES);
-  }, [setMoves]);
+    // Initialize destination
+    if (!currentDestination) {
+      setDestination(MOCK_DESTINATION);
+    }
+  }, [currentDestination, setDestination]);
 
   const handleSendMessage = () => {
     if (chatInput.trim()) {
@@ -146,8 +100,22 @@ export default function HomeScreen() {
     }
   };
 
-  const handleMovePress = (moveId: string) => {
-    selectMove(selectedMoveId === moveId ? null : moveId);
+  const handleSeeMore = () => {
+    // TODO: Navigate to destination detail screen
+    console.log('See more:', currentDestination?.title);
+  };
+
+  const handleTakeMeThere = () => {
+    // TODO: Navigate to navigation screen
+    console.log('Take me there:', currentDestination?.title);
+  };
+
+  const handleSomethingElse = () => {
+    if (currentDestination) {
+      excludeDestination(currentDestination.id);
+      // TODO: Generate new destination via Claude API
+      console.log('Generating new destination...');
+    }
   };
 
   return (
@@ -169,25 +137,43 @@ export default function HomeScreen() {
             <Header
               timeOfDay={timeOfDay}
               location={location.neighborhood || undefined}
-              weather={weatherData.weather.condition && weatherData.weather.temperature ? {
-                condition: weatherData.weather.condition,
-                temperature: weatherData.weather.temperature,
+              weather={weatherCondition && weatherTemperature ? {
+                condition: weatherCondition,
+                temperature: weatherTemperature,
               } : undefined}
             />
 
             {/* Budget Bar */}
             <BudgetBar timeOfDay={timeOfDay} />
 
-            {/* Move Cards */}
-            <View style={styles.movesContainer}>
-              {moves.map((move) => (
-                <MoveCard
-                  key={move.id}
-                  move={move}
-                  isSelected={selectedMoveId === move.id}
-                  onPress={() => handleMovePress(move.id)}
-                />
-              ))}
+            {/* Section Label */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>TONIGHT</Text>
+            </View>
+
+            {/* Destination Card */}
+            {currentDestination && (
+              <DestinationCard
+                destination={currentDestination}
+                onSeeMore={handleSeeMore}
+                onTakeMeThere={handleTakeMeThere}
+              />
+            )}
+
+            {/* Something Else Button */}
+            <View style={styles.somethingElseContainer}>
+              <TouchableOpacity
+                style={styles.somethingElseButton}
+                onPress={handleSomethingElse}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.somethingElseText}>Something else</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Chat Area (placeholder for now) */}
+            <View style={styles.chatArea}>
+              <Text style={styles.chatPlaceholder}>Chat responses will appear here...</Text>
             </View>
 
             {/* Quick Actions */}
@@ -230,8 +216,41 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 100, // Space for chat input
   },
-  movesContainer: {
-    marginVertical: 8,
+  sectionHeader: {
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.sm,
+  },
+  sectionLabel: {
+    ...typography.presets.sectionLabel,
+    color: colors.text.light.secondary,
+  },
+  somethingElseContainer: {
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.lg,
+    alignItems: 'center',
+  },
+  somethingElseButton: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.surface.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.text.light.tertiary,
+  },
+  somethingElseText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.text.light.secondary,
+  },
+  chatArea: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    minHeight: 100,
+  },
+  chatPlaceholder: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.light.tertiary,
+    fontStyle: 'italic',
   },
   bottomPadding: {
     height: 40,

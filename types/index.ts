@@ -29,34 +29,94 @@ export interface Weather {
 // === TIME ===
 export type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'night';
 
-// === MOVES ===
-export interface TransitInfo {
-  method: 'walk' | 'train' | 'bus' | 'taxi';
-  line?: string;
-  direction?: string;
-  stops?: number;
-  exitInfo?: string;
-  walkingMinutes?: number;
-  totalMinutes: number;
+// === DESTINATIONS ===
+
+// A spot within a destination (suggestion, not requirement)
+export interface Spot {
+  placeId: string;
+  name: string;
+  description: string;
+  rating?: number;
+  priceLevel?: 1 | 2 | 3 | 4;
+  photos?: string[];
+  hours?: string;
+  isOpen?: boolean;
 }
 
-export interface Move {
+// Transit step for navigation
+export interface TransitStep {
+  mode: 'walk' | 'train' | 'bus' | 'taxi';
+  instruction: string; // "Walk to Shibuya Station"
+  details?: string; // "Platform 2, look for green line"
+  line?: string; // "Yamanote Line"
+  direction?: string; // "Shinjuku direction"
+  duration: number; // minutes
+  distance?: number; // meters
+}
+
+// Full transit route (from routes service)
+export interface TransitRoute {
+  steps: TransitStep[];
+  totalDuration: number; // minutes
+  totalDistance: number; // meters
+  polyline: string; // For map rendering
+  lastTrain?: Date; // CRITICAL for warnings
+}
+
+// Simple transit preview (before full navigation)
+export interface TransitPreview {
+  method: 'walk' | 'train' | 'bus' | 'taxi';
+  line?: string;
+  totalMinutes: number;
+  description: string; // "15 min by train"
+}
+
+// A contextual destination suggestion
+export interface Destination {
   id: string;
   title: string;
-  description: string;
+  description: string; // One-line summary
+  whatItIs: string; // Detailed explanation
+  whenToGo: string; // "After 8pm - earlier is dead"
   neighborhood: string;
-  category: 'food' | 'culture' | 'walk' | 'nightlife' | 'shopping' | 'nature';
-  duration: number; // minutes
-  transit: TransitInfo;
-  whyNow: string; // "Perfect for rainy evenings" etc
-  priceLevel: 1 | 2 | 3 | 4; // 1 = cheap, 4 = expensive
+  category: 'food' | 'culture' | 'nightlife' | 'nature' | 'shopping' | 'iconic';
+  whyNow: string; // "Perfect for evening, bars just opening"
+
+  // Location
+  placeId?: string; // Google Places ID (if specific place)
+  address: string;
+  coordinates: Coordinates;
+
+  // Cost
+  priceLevel: 1 | 2 | 3 | 4;
   estimatedCost?: number; // yen
-  highlights: string[];
-  startingPoint: {
-    name: string;
-    address: string;
-    coordinates: Coordinates;
-  };
+
+  // Getting there
+  transitPreview: TransitPreview;
+
+  // Spots you might like (suggestions, not requirements)
+  spots: Spot[];
+
+  // Enrichment from Google Places API
+  photos?: string[];
+  rating?: number;
+  hours?: string;
+  isOpen?: boolean;
+}
+
+// Context sent to Claude for destination generation
+export interface DestinationContext {
+  location: Coordinates;
+  neighborhood: string | null;
+  timeOfDay: TimeOfDay;
+  weather: Weather | null;
+  budgetRemaining: number;
+  dailyBudget: number;
+  preferences: UserPreferences;
+  visitedPlaces: Visit[];
+  completedStamps: string[];
+  excludedToday: string[]; // From "Something else" taps
+  totalWalkingToday: number;
 }
 
 // === BUDGET ===
@@ -66,7 +126,7 @@ export interface Expense {
   category: 'food' | 'transport' | 'activity' | 'shopping' | 'other';
   note?: string;
   timestamp: number;
-  moveId?: string; // if associated with a move
+  destinationId?: string; // if associated with a destination
 }
 
 export interface Budget {
@@ -106,7 +166,7 @@ export interface TripMemory {
   startDate: number;
   currentDay: number;
   visits: Visit[];
-  completedMoveIds: string[];
+  completedDestinationIds: string[];
   totalWalkingMinutes: number;
 }
 
@@ -126,12 +186,12 @@ export interface Stamp {
 // === CHAT ===
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system'; // system for warnings
   content: string;
   timestamp: number;
   image?: string; // base64
   action?: {
-    type: 'navigate' | 'add_expense' | 'start_move' | 'stamp';
+    type: 'navigate_to_destination' | 'add_expense' | 'complete_stamp' | 'go_home';
     payload: any;
   };
 }
@@ -163,4 +223,29 @@ export interface NearbyPlace {
   types: string[];
   isOpen: boolean;
   distance: number; // meters
+}
+
+// === NAVIGATION STATE ===
+export type NavigationMode = 'idle' | 'viewing_detail' | 'navigating' | 'companion_mode';
+
+export interface NavigationState {
+  mode: NavigationMode;
+  currentDestination: Destination | null;
+  currentRoute: TransitRoute | null;
+  arrivalDetected: boolean;
+}
+
+// === PROACTIVE WARNINGS ===
+export type WarningType = 'last_train' | 'closing_time' | 'weather' | 'budget' | 'energy';
+export type WarningSeverity = 'info' | 'warning' | 'urgent';
+
+export interface Warning {
+  id: string;
+  type: WarningType;
+  severity: WarningSeverity;
+  message: string;
+  action?: string; // "Get directions home"
+  actionType?: 'navigate_home' | 'view_details' | 'dismiss';
+  expiresAt?: number; // timestamp when warning is no longer relevant
+  dismissed: boolean;
 }
