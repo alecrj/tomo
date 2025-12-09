@@ -86,41 +86,27 @@ export default function HomeScreen() {
   };
 
   const handleTakeMeThere = async () => {
-    if (!currentDestination || !coordinates) {
-      Alert.alert('Error', 'Location not available. Please try again.');
+    if (!currentDestination) {
+      Alert.alert('Error', 'No destination selected.');
       return;
     }
 
+    // Simplified for Expo Go - navigation screen disabled
+    Alert.alert(
+      'Navigation',
+      `Would open directions to ${currentDestination.title}.\n\nMaps feature requires native build.`,
+      [{ text: 'OK' }]
+    );
+
+    /* DISABLED FOR EXPO GO - ENABLE IN NATIVE BUILD
     try {
       setFetchingRoute(true);
-
-      console.log('Fetching transit directions...');
       const route = await getTransitDirections(coordinates, currentDestination.coordinates);
-
       if (!route) {
-        Alert.alert(
-          'Route not found',
-          'Could not find transit directions. Would you like to see walking directions?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Walk',
-              onPress: () => {
-                // TODO: Get walking directions
-                console.log('Get walking directions');
-              },
-            },
-          ]
-        );
+        Alert.alert('Route not found', 'Could not find transit directions.');
         return;
       }
-
-      console.log('Route found, navigating...');
-
-      // Update navigation store
       startNavigation(currentDestination, route);
-
-      // Navigate to navigation screen with params
       router.push({
         pathname: '/navigation',
         params: {
@@ -129,11 +115,11 @@ export default function HomeScreen() {
         },
       });
     } catch (error) {
-      console.error('Error fetching route:', error);
-      Alert.alert('Error', 'Could not fetch directions. Please try again.');
+      Alert.alert('Error', 'Could not fetch directions.');
     } finally {
       setFetchingRoute(false);
     }
+    */
   };
 
   const handleSomethingElse = () => {

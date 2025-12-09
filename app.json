@@ -43,13 +43,7 @@
     },
     "plugins": [
       "expo-router",
-      "expo-location",
-      [
-        "react-native-maps",
-        {
-          "useGoogleMaps": true
-        }
-      ]
+      "expo-location"
     ],
     "extra": {
       "router": {},
