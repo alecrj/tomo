@@ -9,10 +9,12 @@ import { DestinationCard } from '../components/DestinationCard';
 import { QuickActions } from '../components/QuickActions';
 import { ChatInput } from '../components/ChatInput';
 import { AddExpenseModal } from '../components/AddExpenseModal';
+import { SetupWarning } from '../components/SetupWarning';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { useLocation } from '../hooks/useLocation';
 import { useWeather } from '../hooks/useWeather';
 import { useDestinationGeneration } from '../hooks/useDestinationGeneration';
+import { checkAppSetup } from '../utils/setupCheck';
 import { useWeatherStore } from '../stores/useWeatherStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
 import { useDestinationsStore } from '../stores/useDestinationsStore';
@@ -27,6 +29,9 @@ export default function HomeScreen() {
   const [chatInput, setChatInput] = useState('');
   const [fetchingRoute, setFetchingRoute] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
+
+  // Check app setup on mount
+  const setupCheck = checkAppSetup();
 
   // Location and weather hooks (automatically update stores)
   const { location } = useLocation();
@@ -164,6 +169,11 @@ export default function HomeScreen() {
               } : undefined}
               onSettingsPress={() => router.push('/settings')}
             />
+
+            {/* Setup Warning */}
+            {setupCheck.issues.length > 0 && (
+              <SetupWarning issues={setupCheck.issues} />
+            )}
 
             {/* Budget Bar */}
             <BudgetBar timeOfDay={timeOfDay} />

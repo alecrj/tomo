@@ -1,6 +1,7 @@
 import { Destination, DestinationContext, Coordinates, ChatMessage } from '../types';
 import { config } from '../constants/config';
 import { searchPlace, placeToSpot, searchNearby } from './places';
+import { getApiErrorMessage } from '../utils/setupCheck';
 
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 
@@ -33,6 +34,8 @@ export async function generateDestination(
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Claude API error:', response.status, errorText);
       throw new Error(`Claude API error: ${response.status}`);
     }
 
@@ -60,7 +63,8 @@ export async function generateDestination(
 
     return enrichedDestination;
   } catch (error) {
-    console.error('Error generating destination:', error);
+    const errorMsg = getApiErrorMessage(error, 'Claude AI');
+    console.error('Error generating destination:', errorMsg, error);
     return null;
   }
 }
