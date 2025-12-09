@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import { Coordinates, Station } from '../types';
+import { config } from '../constants/config';
 
 /**
  * Request location permissions
@@ -16,9 +17,16 @@ export async function requestLocationPermission(): Promise<boolean> {
 
 /**
  * Get current GPS coordinates
+ * In development mode, can use devLocationOverride from config for testing
  */
 export async function getCurrentLocation(): Promise<Coordinates | null> {
   try {
+    // Use dev override if set (for testing in simulator)
+    if (config.devLocationOverride) {
+      console.log('[DEV] Using location override:', config.devLocationOverride);
+      return config.devLocationOverride;
+    }
+
     const hasPermission = await requestLocationPermission();
     if (!hasPermission) {
       throw new Error('Location permission denied');
@@ -26,6 +34,11 @@ export async function getCurrentLocation(): Promise<Coordinates | null> {
 
     const location = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
+    });
+
+    console.log('[Location] Got GPS coordinates:', {
+      latitude: location.coords.latitude.toFixed(4),
+      longitude: location.coords.longitude.toFixed(4),
     });
 
     return {
@@ -174,10 +187,31 @@ export async function getNearestStation(
 }
 
 /**
- * Get neighborhood name from coordinates
- * This is a helper that could be expanded with reverse geocoding
+ * Get neighborhood name from coordinates using reverse geocoding
  */
-export function getNeighborhoodName(station: Station | null): string | null {
-  if (!station) return null;
-  return station.name;
+export async function getNeighborhoodName(coordinates: Coordinates): Promise<string | null> {
+  try {
+    const [reverseGeocode] = await Location.reverseGeocodeAsync({
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+    });
+
+    if (reverseGeocode) {
+      // Try to build a useful location string
+      const parts = [
+        reverseGeocode.district || reverseGeocode.subregion,
+        reverseGeocode.city,
+        reverseGeocode.region,
+      ].filter(Boolean);
+
+      const locationName = parts.join(', ');
+      console.log('[Location] Reverse geocoded to:', locationName);
+      return locationName;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error reverse geocoding:', error);
+    return null;
+  }
 }

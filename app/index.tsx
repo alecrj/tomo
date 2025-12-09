@@ -7,8 +7,8 @@ import { Header } from '../components/Header';
 import { BudgetBar } from '../components/BudgetBar';
 import { DestinationCard } from '../components/DestinationCard';
 import { QuickActions } from '../components/QuickActions';
-import { ChatInput } from '../components/ChatInput';
 import { AddExpenseModal } from '../components/AddExpenseModal';
+import { ChatModal } from '../components/ChatModal';
 import { SetupWarning } from '../components/SetupWarning';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { useLocation } from '../hooks/useLocation';
@@ -26,9 +26,9 @@ import { typography, colors, spacing } from '../constants/theme';
 export default function HomeScreen() {
   const router = useRouter();
   const timeOfDay = useTimeOfDay();
-  const [chatInput, setChatInput] = useState('');
   const [fetchingRoute, setFetchingRoute] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [showChatModal, setShowChatModal] = useState(false);
 
   // Check app setup on mount
   const setupCheck = checkAppSetup();
@@ -49,29 +49,19 @@ export default function HomeScreen() {
   const excludeDestination = useDestinationsStore((state) => state.excludeDestination);
   const startNavigation = useNavigationStore((state) => state.startNavigation);
 
-  // Initialize stores with mock data
+  // Initialize stores with default budget
   useEffect(() => {
     // Initialize budget (one-time setup)
+    // Users should configure this in settings for their trip
     const budgetStore = useBudgetStore.getState();
     if (budgetStore.dailyBudget === 0) {
-      budgetStore.setTripBudget(70000, 7); // 7-day trip, ¥70,000 total
-      // Add a mock expense for today
-      budgetStore.addExpense({
-        id: '1',
-        amount: 3500,
-        category: 'food',
-        note: 'Lunch at Tsukiji',
-        timestamp: Date.now(),
-      });
+      budgetStore.setTripBudget(70000, 7); // Default: 7-day trip, ¥70,000 total
+      // No mock expenses - user will add their own
     }
   }, []);
 
-  const handleSendMessage = () => {
-    if (chatInput.trim()) {
-      // TODO: Implement chat functionality
-      console.log('Send message:', chatInput);
-      setChatInput('');
-    }
+  const handleOpenChat = () => {
+    setShowChatModal(true);
   };
 
   const handleSeeMore = () => {
@@ -217,12 +207,16 @@ export default function HomeScreen() {
             <View style={styles.bottomPadding} />
           </ScrollView>
 
-          {/* Chat Input */}
-          <ChatInput
-            value={chatInput}
-            onChangeText={setChatInput}
-            onSubmit={handleSendMessage}
-          />
+          {/* Chat Input - Tap to open modal */}
+          <TouchableOpacity
+            style={styles.chatInputContainer}
+            onPress={handleOpenChat}
+            activeOpacity={0.7}
+          >
+            <View style={styles.chatInputPlaceholder}>
+              <Text style={styles.chatInputText}>Ask me anything...</Text>
+            </View>
+          </TouchableOpacity>
         </KeyboardAvoidingView>
       </SafeAreaView>
 
@@ -230,6 +224,12 @@ export default function HomeScreen() {
       <AddExpenseModal
         visible={showExpenseModal}
         onClose={() => setShowExpenseModal(false)}
+      />
+
+      {/* Chat Modal */}
+      <ChatModal
+        visible={showChatModal}
+        onClose={() => setShowChatModal(false)}
       />
     </View>
   );
@@ -303,5 +303,29 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
+  },
+  chatInputContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.surface.modal,
+    borderTopWidth: 1,
+    borderTopColor: colors.surface.input,
+    paddingBottom: Platform.OS === 'ios' ? spacing.xl : spacing.md,
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.xl,
+  },
+  chatInputPlaceholder: {
+    backgroundColor: colors.surface.input,
+    borderRadius: 24,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  chatInputText: {
+    fontSize: typography.sizes.base,
+    color: colors.text.light.tertiary,
   },
 });

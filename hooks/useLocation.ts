@@ -50,10 +50,12 @@ export function useLocation() {
       const station = await getNearestStation(coords);
       if (station) {
         setNearestStation(station);
-        const neighborhood = getNeighborhoodName(station);
-        if (neighborhood) {
-          setNeighborhood(neighborhood);
-        }
+      }
+
+      // Get actual neighborhood via reverse geocoding
+      const neighborhood = await getNeighborhoodName(coords);
+      if (neighborhood) {
+        setNeighborhood(neighborhood);
       }
 
       // Load stamps for detected city
@@ -97,10 +99,13 @@ export function useLocation() {
       getNearestStation(coords).then((station) => {
         if (station) {
           setNearestStation(station);
-          const neighborhood = getNeighborhoodName(station);
-          if (neighborhood) {
-            setNeighborhood(neighborhood);
-          }
+        }
+      });
+
+      // Update neighborhood via reverse geocoding
+      getNeighborhoodName(coords).then((neighborhood) => {
+        if (neighborhood) {
+          setNeighborhood(neighborhood);
         }
       });
 
