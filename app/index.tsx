@@ -178,6 +178,7 @@ export default function HomeScreen() {
               <>
                 <DestinationCard
                   destination={currentDestination}
+                  userLocation={coordinates}
                   onSeeMore={handleSeeMore}
                   onTakeMeThere={handleTakeMeThere}
                 />

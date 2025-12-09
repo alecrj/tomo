@@ -1,16 +1,51 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Train, Bus, TrendingUp } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { Train, Bus, TrendingUp, Star, MapPin } from 'lucide-react-native';
 import { typography, spacing, colors, borders, shadows } from '../constants/theme';
-import { Destination } from '../types';
+import { Destination, Coordinates } from '../types';
+import { config } from '../constants/config';
 
 interface DestinationCardProps {
   destination: Destination;
+  userLocation?: Coordinates;
   onSeeMore?: () => void;
   onTakeMeThere?: () => void;
 }
 
-export function DestinationCard({ destination, onSeeMore, onTakeMeThere }: DestinationCardProps) {
+/**
+ * Convert photo name to full URL
+ */
+function getPhotoUrl(photoName: string, maxWidth: number = 400): string {
+  return `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=${maxWidth}&key=${config.googlePlacesApiKey}`;
+}
+
+/**
+ * Calculate distance between two coordinates (Haversine formula)
+ * Returns distance in kilometers
+ */
+function calculateDistance(coord1: Coordinates, coord2: Coordinates): number {
+  const R = 6371; // Earth's radius in km
+  const dLat = (coord2.latitude - coord1.latitude) * Math.PI / 180;
+  const dLon = (coord2.longitude - coord1.longitude) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(coord1.latitude * Math.PI / 180) * Math.cos(coord2.latitude * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/**
+ * Format distance for display
+ */
+function formatDistance(km: number): string {
+  if (km < 1) {
+    return `${Math.round(km * 1000)}m`;
+  }
+  return `${km.toFixed(1)}km`;
+}
+
+export function DestinationCard({ destination, userLocation, onSeeMore, onTakeMeThere }: DestinationCardProps) {
   const getTransitIcon = () => {
     const iconProps = {
       size: 16,
@@ -34,57 +69,95 @@ export function DestinationCard({ destination, onSeeMore, onTakeMeThere }: Desti
     return '¥'.repeat(destination.priceLevel);
   };
 
+  // Calculate distance if user location available
+  const distance = userLocation
+    ? formatDistance(calculateDistance(userLocation, destination.coordinates))
+    : null;
+
+  // Get first photo URL if available
+  const photoUrl = destination.photos?.[0] ? getPhotoUrl(destination.photos[0], 600) : null;
+
   return (
     <View style={[styles.container, shadows.md]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title} numberOfLines={1}>
-          {destination.title}
+      {/* Photo */}
+      {photoUrl && (
+        <Image
+          source={{ uri: photoUrl }}
+          style={styles.photo}
+          resizeMode="cover"
+        />
+      )}
+
+      {/* Content Container */}
+      <View style={styles.contentContainer}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title} numberOfLines={1}>
+            {destination.title}
+          </Text>
+          <Text style={styles.priceLevel}>{getPriceLevelDots()}</Text>
+        </View>
+
+        {/* Meta Info Row (Rating + Distance) */}
+        {(destination.rating || distance) && (
+          <View style={styles.metaRow}>
+            {destination.rating && (
+              <View style={styles.ratingContainer}>
+                <Star size={14} color="#FFB800" fill="#FFB800" strokeWidth={2} />
+                <Text style={styles.ratingText}>{destination.rating.toFixed(1)}</Text>
+              </View>
+            )}
+            {distance && (
+              <View style={styles.distanceContainer}>
+                <MapPin size={14} color={colors.text.light.secondary} strokeWidth={2} />
+                <Text style={styles.distanceText}>{distance}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Description */}
+        <Text style={styles.description} numberOfLines={2}>
+          {destination.description}
         </Text>
-        <Text style={styles.priceLevel}>{getPriceLevelDots()}</Text>
-      </View>
 
-      {/* Description */}
-      <Text style={styles.description} numberOfLines={2}>
-        {destination.description}
-      </Text>
+        {/* Transit Preview */}
+        <View style={styles.transitContainer}>
+          {getTransitIcon()}
+          <Text style={styles.transitText}>
+            {destination.transitPreview.description}
+          </Text>
+          {destination.transitPreview.line && (
+            <Text style={styles.transitLine}>· {destination.transitPreview.line}</Text>
+          )}
+        </View>
 
-      {/* Transit Preview */}
-      <View style={styles.transitContainer}>
-        {getTransitIcon()}
-        <Text style={styles.transitText}>
-          {destination.transitPreview.description}
-        </Text>
-        {destination.transitPreview.line && (
-          <Text style={styles.transitLine}>· {destination.transitPreview.line}</Text>
-        )}
-      </View>
+        {/* Why Now Badge */}
+        <View style={styles.whyNowContainer}>
+          <Text style={styles.whyNow}>{destination.whyNow}</Text>
+        </View>
 
-      {/* Why Now Badge */}
-      <View style={styles.whyNowContainer}>
-        <Text style={styles.whyNow}>{destination.whyNow}</Text>
-      </View>
-
-      {/* Action Buttons */}
-      <View style={styles.buttonsContainer}>
-        {onSeeMore && (
-          <TouchableOpacity
-            style={[styles.button, styles.buttonSecondary]}
-            onPress={onSeeMore}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.buttonTextSecondary}>See more</Text>
-          </TouchableOpacity>
-        )}
-        {onTakeMeThere && (
-          <TouchableOpacity
-            style={[styles.button, styles.buttonPrimary]}
-            onPress={onTakeMeThere}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.buttonTextPrimary}>Take me there</Text>
-          </TouchableOpacity>
-        )}
+        {/* Action Buttons */}
+        <View style={styles.buttonsContainer}>
+          {onSeeMore && (
+            <TouchableOpacity
+              style={[styles.button, styles.buttonSecondary]}
+              onPress={onSeeMore}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.buttonTextSecondary}>See more</Text>
+            </TouchableOpacity>
+          )}
+          {onTakeMeThere && (
+            <TouchableOpacity
+              style={[styles.button, styles.buttonPrimary]}
+              onPress={onTakeMeThere}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.buttonTextPrimary}>Take me there</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -94,15 +167,49 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: colors.surface.card,
     borderRadius: borders.radius.lg,
-    padding: spacing.lg,
     marginHorizontal: spacing.xl,
     marginBottom: spacing.md,
+    overflow: 'hidden', // For photo border radius
+  },
+  photo: {
+    width: '100%',
+    height: 180,
+    backgroundColor: colors.surface.muted,
+  },
+  contentContainer: {
+    padding: spacing.lg,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.xs,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratingText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.text.light.primary,
+  },
+  distanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  distanceText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.text.light.secondary,
   },
   title: {
     ...typography.presets.cardTitle,
