@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Text, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { AnimatedBackground } from '../components/AnimatedBackground';
+// import { AnimatedBackground } from '../components/AnimatedBackground';
 import { Header } from '../components/Header';
 import { BudgetBar } from '../components/BudgetBar';
 import { DestinationCard } from '../components/DestinationCard';
@@ -146,7 +146,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <AnimatedBackground timeOfDay={timeOfDay} weatherCondition={weatherCondition} />
+      {/* <AnimatedBackground timeOfDay={timeOfDay} weatherCondition={weatherCondition} /> */}
 
       <SafeAreaView style={styles.content} edges={['top']}>
         <KeyboardAvoidingView
@@ -251,6 +251,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f5f5f5',
   },
   content: {
     flex: 1,
