@@ -35,9 +35,7 @@ export function useDestinationGeneration() {
 
   const visits = useTripStore((state) => state.visits);
   const totalWalkingMinutes = useTripStore((state) => state.totalWalkingMinutes);
-  const completedStamps = useStampsStore((state) =>
-    state.stamps.filter((s) => s.completed).map((s) => s.id)
-  );
+  const stamps = useStampsStore((state) => state.stamps);
   const excludedToday = useDestinationsStore((state) => state.excludedTodayIds);
   const setDestination = useDestinationsStore((state) => state.setDestination);
   const setLoading = useDestinationsStore((state) => state.setLoading);
@@ -58,6 +56,9 @@ export function useDestinationGeneration() {
       humidity: 60, // Default value
       description: weatherCondition,
     } : null;
+
+    // Compute completed stamps here to avoid creating new arrays on every render
+    const completedStamps = stamps.filter((s) => s.completed).map((s) => s.id);
 
     return {
       location: coordinates,
@@ -94,7 +95,7 @@ export function useDestinationGeneration() {
     interests,
     avoidCrowds,
     visits,
-    completedStamps,
+    stamps,
     excludedToday,
     totalWalkingMinutes,
   ]);
