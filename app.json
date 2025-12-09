@@ -15,10 +15,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tomo.app",
+      "bundleIdentifier": "com.alecrodriguez.tomo",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Tomo needs your location to suggest nearby destinations and provide navigation.",
-        "NSCameraUsageDescription": "Tomo uses the camera to scan menus and signs for translation."
+        "NSCameraUsageDescription": "Tomo uses the camera to scan menus and signs for translation.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -26,11 +27,13 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.tomo.app",
+      "package": "com.alecrodriguez.tomo",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "CAMERA"
+        "CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -47,6 +50,12 @@
           "useGoogleMaps": true
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6d2c2c57-0dfb-4ce5-8560-44056eff5938"
+      }
+    }
   }
 }
