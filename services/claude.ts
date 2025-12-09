@@ -133,7 +133,7 @@ Return ONLY a JSON object with this structure:
 }
 
 IMPORTANT:
-- Use REAL places that actually exist in Tokyo
+- Use REAL places that actually exist in ${context.neighborhood || 'the current location'}
 - Be specific (not generic)
 - Consider the user's energy level (walking time)
 - Match their budget
@@ -276,7 +276,7 @@ export async function chat(
  * Build system prompt for chat
  */
 function buildChatSystemPrompt(context: DestinationContext): string {
-  return `You are Tomo, an AI travel companion helping a user explore Tokyo.
+  return `You are Tomo, an AI travel companion helping a user explore ${context.neighborhood || 'their current location'}.
 
 CURRENT CONTEXT:
 - Location: ${context.neighborhood || 'Unknown'}
