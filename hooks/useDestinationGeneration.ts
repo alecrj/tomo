@@ -16,7 +16,7 @@ import { DestinationContext } from '../types';
 export function useDestinationGeneration() {
   const timeOfDay = useTimeOfDay();
 
-  // Store selectors
+  // Store selectors - use individual selectors to avoid creating new objects
   const coordinates = useLocationStore((state) => state.coordinates);
   const neighborhood = useLocationStore((state) => state.neighborhood);
   const weatherCondition = useWeatherStore((state) => state.condition);
@@ -24,14 +24,15 @@ export function useDestinationGeneration() {
   const dailyBudget = useBudgetStore((state) => state.dailyBudget);
   const spentToday = useBudgetStore((state) => state.spentToday());
   const remainingToday = useBudgetStore((state) => state.remainingToday());
-  const userPreferences = usePreferencesStore((state) => ({
-    homeBase: state.homeBase,
-    walkingTolerance: (state.walkingTolerance === 'medium' ? 'moderate' : state.walkingTolerance) as 'low' | 'moderate' | 'high',
-    budget: state.budgetLevel,
-    dietary: state.dietary,
-    interests: state.interests,
-    avoidCrowds: state.avoidCrowds,
-  }));
+
+  // Individual preference selectors
+  const homeBase = usePreferencesStore((state) => state.homeBase);
+  const walkingTolerance = usePreferencesStore((state) => state.walkingTolerance);
+  const budgetLevel = usePreferencesStore((state) => state.budgetLevel);
+  const dietary = usePreferencesStore((state) => state.dietary);
+  const interests = usePreferencesStore((state) => state.interests);
+  const avoidCrowds = usePreferencesStore((state) => state.avoidCrowds);
+
   const visits = useTripStore((state) => state.visits);
   const totalWalkingMinutes = useTripStore((state) => state.totalWalkingMinutes);
   const completedStamps = useStampsStore((state) =>
@@ -65,7 +66,14 @@ export function useDestinationGeneration() {
       weather,
       budgetRemaining: remainingToday,
       dailyBudget,
-      preferences: userPreferences,
+      preferences: {
+        homeBase,
+        walkingTolerance: (walkingTolerance === 'medium' ? 'moderate' : walkingTolerance) as 'low' | 'moderate' | 'high',
+        budget: budgetLevel,
+        dietary,
+        interests,
+        avoidCrowds,
+      },
       visitedPlaces: visits,
       completedStamps,
       excludedToday,
@@ -79,7 +87,12 @@ export function useDestinationGeneration() {
     weatherTemperature,
     remainingToday,
     dailyBudget,
-    userPreferences,
+    homeBase,
+    walkingTolerance,
+    budgetLevel,
+    dietary,
+    interests,
+    avoidCrowds,
     visits,
     completedStamps,
     excludedToday,
