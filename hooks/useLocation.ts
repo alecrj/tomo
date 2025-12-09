@@ -14,11 +14,10 @@ import {
  * Automatically requests permission, gets location, and watches for changes
  */
 export function useLocation() {
-  const location = useLocationStore((state) => ({
-    coordinates: state.coordinates,
-    nearestStation: state.nearestStation,
-    neighborhood: state.neighborhood,
-  }));
+  // Use individual selectors to avoid creating new objects on every render
+  const coordinates = useLocationStore((state) => state.coordinates);
+  const nearestStation = useLocationStore((state) => state.nearestStation);
+  const neighborhood = useLocationStore((state) => state.neighborhood);
   const loading = useLocationStore((state) => state.loading);
   const error = useLocationStore((state) => state.error);
 
@@ -126,7 +125,11 @@ export function useLocation() {
   }, [updateLocation, setCoordinates, setNearestStation, setNeighborhood]);
 
   return {
-    location,
+    location: {
+      coordinates,
+      nearestStation,
+      neighborhood,
+    },
     loading,
     error,
     refresh,
