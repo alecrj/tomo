@@ -9,10 +9,9 @@ import { getWeather } from '../services/weather';
  */
 export function useWeather() {
   const coordinates = useLocationStore((state) => state.coordinates);
-  const weather = useWeatherStore((state) => ({
-    condition: state.condition,
-    temperature: state.temperature,
-  }));
+  // Use individual selectors to avoid creating new objects on every render
+  const condition = useWeatherStore((state) => state.condition);
+  const temperature = useWeatherStore((state) => state.temperature);
   const loading = useWeatherStore((state) => state.loading);
 
   const setWeather = useWeatherStore((state) => state.setWeather);
@@ -50,7 +49,10 @@ export function useWeather() {
   }, [coordinates, setWeather, setLoading]);
 
   return {
-    weather,
+    weather: {
+      condition,
+      temperature,
+    },
     loading,
   };
 }
