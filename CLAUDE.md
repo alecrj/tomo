@@ -43,6 +43,14 @@ npx expo start --clear
 2. **Google Places API photo URLs** - PlaceCard photo prop needs real photo URL from Places API
 3. **Claude structured responses** - Depends on Claude following JSON format instructions
 
+### Next Session TODO:
+1. Deploy `tomo-whisper-backend/` to Railway
+2. Add `EXPO_PUBLIC_WHISPER_BACKEND_URL` to `.env`
+3. Test voice transcription end-to-end
+4. Fix PlaceCard to fetch real photos from Google Places API
+5. Improve Claude prompt reliability for structured JSON
+6. Test full app flow on device
+
 ---
 
 ## 🎯 The Core Insight
