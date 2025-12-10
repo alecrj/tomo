@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, MapPin, DollarSign, Utensils, Heart, Users, Check, Navigation } from 'lucide-react-native';
+import { ArrowLeft, MapPin, DollarSign, Utensils, Heart, Users, Check, Navigation, Brain } from 'lucide-react-native';
 import { colors, spacing, typography, shadows } from '../constants/theme';
 import { usePreferencesStore } from '../stores/usePreferencesStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
@@ -200,6 +200,23 @@ export default function SettingsScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* Memory Link */}
+          <TouchableOpacity
+            style={styles.memoryLink}
+            onPress={() => router.push('/memory')}
+          >
+            <View style={styles.memoryLinkContent}>
+              <Brain size={24} color="#007AFF" />
+              <View style={styles.memoryLinkText}>
+                <Text style={styles.memoryLinkTitle}>Memory</Text>
+                <Text style={styles.memoryLinkDescription}>
+                  View and manage things Tomo remembers about you
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.memoryLinkArrow}>›</Text>
+          </TouchableOpacity>
+
           {/* Home Base Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -445,6 +462,41 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: spacing.xl,
+  },
+  memoryLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface.card,
+    borderRadius: 12,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
+    ...shadows.sm,
+  },
+  memoryLinkContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: spacing.md,
+  },
+  memoryLinkText: {
+    flex: 1,
+  },
+  memoryLinkTitle: {
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+    color: colors.text.light.primary,
+    marginBottom: 4,
+  },
+  memoryLinkDescription: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.light.secondary,
+    lineHeight: 18,
+  },
+  memoryLinkArrow: {
+    fontSize: 28,
+    color: colors.text.light.tertiary,
+    marginLeft: spacing.sm,
   },
   section: {
     backgroundColor: colors.surface.card,

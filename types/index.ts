@@ -288,3 +288,37 @@ export interface Warning {
   expiresAt?: number; // timestamp when warning is no longer relevant
   dismissed: boolean;
 }
+
+// === MEMORY SYSTEM ===
+export type MemoryType =
+  | 'dislike' // Food, place types user dislikes
+  | 'like' // Food, place types user loves
+  | 'preference' // General preferences (spicy food, quiet places, etc)
+  | 'visited_feedback' // Feedback on places visited ("was overrated", "amazing")
+  | 'personal_info' // Travel companions, dietary needs, etc
+  | 'avoid'; // Specific places or areas to avoid
+
+export interface Memory {
+  id: string;
+  type: MemoryType;
+  category?: string; // 'food', 'place_type', 'activity', 'general'
+  content: string; // Natural language: "dislikes tuna", "loves spicy food"
+  extractedFrom?: string; // Original user message that created this
+  timestamp: number;
+  tripId?: string; // Optional: link to specific trip
+  confidence?: 'high' | 'medium' | 'low'; // How confident we are in this memory
+  lastUsed?: number; // Last time this was referenced
+}
+
+// === CONVERSATION HISTORY ===
+export interface Conversation {
+  id: string;
+  title: string; // Auto-generated or user-set
+  startedAt: number;
+  lastMessageAt: number;
+  messages: ChatMessage[];
+  location?: string; // Where conversation started
+  tripId?: string; // Associated trip if any
+  summary?: string; // Brief summary of conversation
+  messageCount: number;
+}

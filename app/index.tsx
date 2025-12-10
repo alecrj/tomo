@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Send, Mic, Camera, Settings, MapPin, Plus, Home } from 'lucide-react-native';
+import { Send, Mic, Camera, Settings, MapPin, Plus, Home, MessageSquare } from 'lucide-react-native';
 import { colors, spacing, typography } from '../constants/theme';
 import { chat } from '../services/claude';
 import { takePhoto, pickPhoto } from '../services/camera';
@@ -25,6 +25,8 @@ import { useWeatherStore } from '../stores/useWeatherStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
 import { usePreferencesStore } from '../stores/usePreferencesStore';
 import { useTripStore } from '../stores/useTripStore';
+import { useMemoryStore } from '../stores/useMemoryStore';
+import { useConversationStore } from '../stores/useConversationStore';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { useLocation } from '../hooks/useLocation';
 import { useWeather } from '../hooks/useWeather';
@@ -61,8 +63,13 @@ export default function ChatScreen() {
   const currentTrip = useTripStore((state) => state.currentTrip);
   const getTripStats = useTripStore((state) => state.getTripStats);
 
+  // Memory and conversation stores
+  const getMemoryContext = useMemoryStore((state) => state.getMemoryContext);
+  const conversationStore = useConversationStore();
+  const currentConversation = conversationStore.getCurrentConversation();
+
   // Local state
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(currentConversation?.messages || []);
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showBudgetBar, setShowBudgetBar] = useState(true);
@@ -79,9 +86,24 @@ export default function ChatScreen() {
     }
   }, [dailyBudget]);
 
-  // Initial greeting when app opens
+  // Initialize conversation on first load
   useEffect(() => {
-    if (messages.length === 0 && coordinates) {
+    if (!currentConversation && coordinates) {
+      // Start new conversation
+      conversationStore.startNewConversation(neighborhood || undefined, currentTrip?.id);
+    }
+  }, []);
+
+  // Sync messages with current conversation
+  useEffect(() => {
+    if (currentConversation) {
+      setMessages(currentConversation.messages);
+    }
+  }, [currentConversation?.id]);
+
+  // Initial greeting when conversation starts
+  useEffect(() => {
+    if (messages.length === 0 && coordinates && currentConversation) {
       const cityCountry = neighborhood || 'your current location';
       const greeting: ChatMessage = {
         id: `greeting-${Date.now()}`,
@@ -100,9 +122,10 @@ What would you like to do? You can:
 Where should we start?`,
         timestamp: Date.now(),
       };
-      setMessages([greeting]);
+
+      conversationStore.addMessage(greeting);
     }
-  }, [coordinates, neighborhood, messages.length]);
+  }, [coordinates, neighborhood, messages.length, currentConversation]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -125,7 +148,8 @@ Where should we start?`,
       image: imageBase64,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    // Add to conversation store
+    conversationStore.addMessage(userMessage);
     setInputText('');
     setIsSending(true);
 
@@ -159,9 +183,12 @@ Where should we start?`,
         totalWalkingToday: totalWalkingMinutes,
       };
 
-      // Enhanced message with location and currency context
+      // Get memory context
+      const memoryContext = getMemoryContext();
+
+      // Enhanced message with location, currency, and memory context
       const systemContext = coordinates
-        ? `\n\n[SYSTEM CONTEXT: User is at GPS ${coordinates.latitude.toFixed(6)}, ${coordinates.longitude.toFixed(6)} in ${neighborhood || 'unknown'}. Local currency: ${currency.name} (${currency.symbol}). Current time: ${timeOfDay}. Weather: ${weatherCondition || 'unknown'}. Budget remaining today: ${currency.symbol}${budgetRemaining}. Use local currency for ALL prices. Be conversational, helpful, and specific. Include exact places with addresses when relevant.]`
+        ? `\n\n[SYSTEM CONTEXT: User is at GPS ${coordinates.latitude.toFixed(6)}, ${coordinates.longitude.toFixed(6)} in ${neighborhood || 'unknown'}. Local currency: ${currency.name} (${currency.symbol}). Current time: ${timeOfDay}. Weather: ${weatherCondition || 'unknown'}. Budget remaining today: ${currency.symbol}${budgetRemaining}. Use local currency for ALL prices. Be conversational, helpful, and specific. Include exact places with addresses when relevant.]${memoryContext}`
         : '';
 
       const enhancedMessage = text + systemContext;
@@ -175,7 +202,8 @@ Where should we start?`,
         timestamp: Date.now(),
       };
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      // Add to conversation store
+      conversationStore.addMessage(assistantMessage);
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMessage: ChatMessage = {
@@ -184,7 +212,7 @@ Where should we start?`,
         content: "Sorry, I'm having trouble responding. Please try again.",
         timestamp: Date.now(),
       };
-      setMessages((prev) => [...prev, errorMessage]);
+      conversationStore.addMessage(errorMessage);
     } finally {
       setIsSending(false);
     }
@@ -294,6 +322,12 @@ Where should we start?`,
               )}
             </View>
             <View style={styles.headerButtons}>
+              <TouchableOpacity
+                style={styles.conversationsButton}
+                onPress={() => router.push('/conversations')}
+              >
+                <MessageSquare size={20} color={colors.text.light.secondary} />
+              </TouchableOpacity>
               {homeBase && (
                 <TouchableOpacity
                   style={styles.homeButton}
@@ -517,6 +551,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  conversationsButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   homeButton: {
     width: 36,
