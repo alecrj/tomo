@@ -19,6 +19,8 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Tomo needs your location to suggest nearby destinations and provide navigation.",
         "NSCameraUsageDescription": "Tomo uses the camera to scan menus and signs for translation.",
+        "NSMicrophoneUsageDescription": "Tomo uses the microphone for voice input and questions.",
+        "NSPhotoLibraryUsageDescription": "Tomo accesses your photo library to help you share images.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -32,6 +34,9 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "CAMERA",
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
       ],
@@ -43,7 +48,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-location"
+      "expo-location",
+      [
+        "react-native-maps",
+        {
+          "googleMapsApiKey": "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY"
+        }
+      ]
     ],
     "extra": {
       "router": {},
