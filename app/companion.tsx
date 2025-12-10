@@ -126,13 +126,15 @@ export default function CompanionScreen() {
   };
 
   const handleDone = () => {
-    if (currentDestination) {
+    if (currentDestination && coordinates) {
       // Record visit
       addVisit({
         placeId: currentDestination.placeId || currentDestination.id,
         name: currentDestination.title,
         neighborhood: currentDestination.neighborhood,
-        timestamp: Date.now(),
+        city: currentDestination.neighborhood.split(',')[0]?.trim() || 'Unknown',
+        country: currentDestination.neighborhood.split(',').pop()?.trim() || 'Unknown',
+        coordinates: currentDestination.coordinates,
       });
 
       // Exit companion mode

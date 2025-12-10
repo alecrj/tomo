@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Send, Mic, Camera, Settings } from 'lucide-react-native';
+import { Send, Mic, Camera, Settings, MapPin, Plus, Home } from 'lucide-react-native';
 import { colors, spacing, typography } from '../constants/theme';
 import { chat } from '../services/claude';
 import { takePhoto, pickPhoto } from '../services/camera';
@@ -30,6 +30,7 @@ import { useLocation } from '../hooks/useLocation';
 import { useWeather } from '../hooks/useWeather';
 import { detectCurrency } from '../utils/currency';
 import type { DestinationContext, ChatMessage } from '../types';
+import LogVisitModal from '../components/LogVisitModal';
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -57,6 +58,8 @@ export default function ChatScreen() {
   const avoidCrowds = usePreferencesStore((state) => state.avoidCrowds);
   const visits = useTripStore((state) => state.visits);
   const totalWalkingMinutes = useTripStore((state) => state.totalWalkingMinutes);
+  const currentTrip = useTripStore((state) => state.currentTrip);
+  const getTripStats = useTripStore((state) => state.getTripStats);
 
   // Local state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -64,6 +67,7 @@ export default function ChatScreen() {
   const [isSending, setIsSending] = useState(false);
   const [showBudgetBar, setShowBudgetBar] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
+  const [showLogVisit, setShowLogVisit] = useState(false);
 
   // Detect currency
   const currency = coordinates ? detectCurrency(coordinates) : { code: 'USD', symbol: '$', name: 'US Dollar' };
@@ -256,6 +260,23 @@ Where should we start?`,
     }
   };
 
+  const handleTakeMeHome = () => {
+    if (!homeBase) {
+      Alert.alert(
+        'Home Base Not Set',
+        'Please set your home base in Settings first.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Go to Settings', onPress: () => router.push('/settings') },
+        ]
+      );
+      return;
+    }
+
+    // Send a message to get directions home
+    handleSendMessage(`Take me home to ${homeBase.name}`);
+  };
+
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -272,12 +293,33 @@ Where should we start?`,
                 </Text>
               )}
             </View>
-            <TouchableOpacity
-              style={styles.settingsButton}
-              onPress={() => router.push('/settings')}
-            >
-              <Settings size={22} color={colors.text.light.secondary} />
-            </TouchableOpacity>
+            <View style={styles.headerButtons}>
+              {homeBase && (
+                <TouchableOpacity
+                  style={styles.homeButton}
+                  onPress={handleTakeMeHome}
+                >
+                  <Home size={18} color="#007AFF" />
+                </TouchableOpacity>
+              )}
+              {currentTrip && (
+                <TouchableOpacity
+                  style={styles.tripButton}
+                  onPress={() => router.push('/trip-recap')}
+                >
+                  <MapPin size={18} color="#007AFF" />
+                  <Text style={styles.tripButtonText}>
+                    {currentTrip.stats.totalPlaces}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.settingsButton}
+                onPress={() => router.push('/settings')}
+              >
+                <Settings size={22} color={colors.text.light.secondary} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Collapsible Budget Bar */}
@@ -373,6 +415,14 @@ Where should we start?`,
           {/* Input Bar - iMessage Style */}
           <View style={styles.inputContainer}>
             <View style={styles.inputWrapper}>
+              {/* Log Visit Button */}
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() => setShowLogVisit(true)}
+              >
+                <Plus size={24} color={colors.text.light.secondary} />
+              </TouchableOpacity>
+
               {/* Camera Button */}
               <TouchableOpacity
                 style={styles.iconButton}
@@ -423,6 +473,9 @@ Where should we start?`,
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      {/* Log Visit Modal */}
+      <LogVisitModal visible={showLogVisit} onClose={() => setShowLogVisit(false)} />
     </View>
   );
 }
@@ -459,6 +512,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.text.light.secondary,
     marginTop: 2,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  homeButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E3F2FD',
+    borderRadius: 18,
+  },
+  tripButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E3F2FD',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: 16,
+    gap: 4,
+  },
+  tripButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#007AFF',
   },
   settingsButton: {
     padding: spacing.sm,

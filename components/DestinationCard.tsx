@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
   photo: {
     width: '100%',
     height: 180,
-    backgroundColor: colors.surface.muted,
+    backgroundColor: '#F3F4F6',
   },
   contentContainer: {
     padding: spacing.lg,

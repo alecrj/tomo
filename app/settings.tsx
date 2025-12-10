@@ -11,10 +11,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, MapPin, DollarSign, Utensils, Heart, Users, Check } from 'lucide-react-native';
+import { ArrowLeft, MapPin, DollarSign, Utensils, Heart, Users, Check, Navigation } from 'lucide-react-native';
 import { colors, spacing, typography, shadows } from '../constants/theme';
 import { usePreferencesStore } from '../stores/usePreferencesStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
+import { useLocationStore } from '../stores/useLocationStore';
+import * as Location from 'expo-location';
 
 /**
  * Settings Screen
@@ -26,10 +28,13 @@ export default function SettingsScreen() {
   // Store state
   const preferences = usePreferencesStore();
   const budget = useBudgetStore();
+  const coordinates = useLocationStore((state) => state.coordinates);
+  const neighborhood = useLocationStore((state) => state.neighborhood);
 
   // Local state for editing
   const [homeBaseName, setHomeBaseName] = useState(preferences.homeBase?.name || '');
   const [homeBaseAddress, setHomeBaseAddress] = useState(preferences.homeBase?.address || '');
+  const [homeBaseCoordinates, setHomeBaseCoordinates] = useState(preferences.homeBase?.coordinates);
   const [tripBudget, setTripBudget] = useState(budget.tripTotal?.toString() || '');
   const [tripDays, setTripDays] = useState(budget.tripDays?.toString() || '7');
   const [walkingTolerance, setWalkingTolerance] = useState(preferences.walkingTolerance);
@@ -70,6 +75,39 @@ export default function SettingsScreen() {
     setInterests(newInterests);
   };
 
+  const handleUseCurrentLocation = async () => {
+    if (!coordinates) {
+      Alert.alert('Location Not Available', 'Please enable location services and try again.');
+      return;
+    }
+
+    // Get address from current location
+    try {
+      const [geocode] = await Location.reverseGeocodeAsync(coordinates);
+      if (geocode) {
+        const address = [
+          geocode.street,
+          geocode.district || geocode.subregion,
+          geocode.city,
+        ].filter(Boolean).join(', ');
+
+        setHomeBaseName(neighborhood || 'Current Location');
+        setHomeBaseAddress(address || neighborhood || 'Current Location');
+        setHomeBaseCoordinates(coordinates);
+
+        Alert.alert('Location Set', 'Your current location has been set as your home base.');
+      }
+    } catch (error) {
+      console.error('Error geocoding:', error);
+      // Fallback to just using coordinates
+      setHomeBaseName(neighborhood || 'Current Location');
+      setHomeBaseAddress(neighborhood || 'Current Location');
+      setHomeBaseCoordinates(coordinates);
+
+      Alert.alert('Location Set', 'Your current location has been set as your home base.');
+    }
+  };
+
   const handleSave = () => {
     // Validate required fields
     if (!homeBaseName || !homeBaseAddress) {
@@ -91,7 +129,7 @@ export default function SettingsScreen() {
     preferences.setHomeBase({
       name: homeBaseName,
       address: homeBaseAddress,
-      coordinates: { latitude: 0, longitude: 0 }, // TODO: Geocode address
+      coordinates: homeBaseCoordinates || coordinates || { latitude: 0, longitude: 0 },
     });
 
     preferences.setWalkingTolerance(walkingTolerance);
@@ -171,6 +209,14 @@ export default function SettingsScreen() {
             <Text style={styles.sectionDescription}>
               Where you're staying. Used for last train warnings and "take me home" directions.
             </Text>
+
+            <TouchableOpacity
+              style={styles.currentLocationButton}
+              onPress={handleUseCurrentLocation}
+            >
+              <Navigation size={18} color="#007AFF" />
+              <Text style={styles.currentLocationButtonText}>Use Current Location</Text>
+            </TouchableOpacity>
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Location Name</Text>
@@ -423,6 +469,22 @@ const styles = StyleSheet.create({
     color: colors.text.light.secondary,
     marginBottom: spacing.lg,
     lineHeight: 20,
+  },
+  currentLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E3F2FD',
+    borderRadius: 8,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  currentLocationButtonText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: '#007AFF',
   },
   inputGroup: {
     marginBottom: spacing.lg,

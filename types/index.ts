@@ -157,8 +157,47 @@ export interface Visit {
   placeId: string;
   name: string;
   neighborhood: string;
+  city: string;
+  country: string;
+  coordinates: Coordinates;
   timestamp: number;
   rating?: 'liked' | 'neutral' | 'disliked';
+  expense?: number;
+  photos?: string[];
+}
+
+export interface CityStay {
+  name: string;
+  country: string;
+  arrivedAt: number;
+  leftAt?: number;
+  visits: Visit[];
+  totalExpenses: number;
+  homeBase?: {
+    name: string;
+    address: string;
+    coordinates: Coordinates;
+    setAt: number;
+  };
+}
+
+export interface Trip {
+  id: string;
+  name: string; // Auto-generated or user-set
+  startDate: number;
+  endDate?: number;
+  isActive: boolean;
+  countries: string[]; // Unique list
+  cities: CityStay[];
+  currentCity?: string;
+  currentCountry?: string;
+  stats: {
+    totalPlaces: number;
+    totalExpenses: number;
+    totalDays: number;
+    citiesVisited: number;
+    countriesVisited: number;
+  };
 }
 
 export interface TripMemory {
