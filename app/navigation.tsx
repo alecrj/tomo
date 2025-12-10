@@ -15,18 +15,36 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
-import { ArrowLeft, Send, Camera, Mic, Navigation as NavigationIcon } from 'lucide-react-native';
+import { ArrowLeft, Send, Camera, Mic, Navigation as NavigationIcon, CheckCircle } from 'lucide-react-native';
 import { colors, spacing, typography } from '../constants/theme';
-import { chat } from '../services/claude';
+import { chatSimple } from '../services/claude';
 import { takePhoto, pickPhoto } from '../services/camera';
 import { startRecording, stopRecording, transcribeAudio } from '../services/voice';
+import { getWalkingDirections } from '../services/routes';
 import { useNavigationStore } from '../stores/useNavigationStore';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useConversationStore } from '../stores/useConversationStore';
 import { useMemoryStore } from '../stores/useMemoryStore';
+import { useTripStore } from '../stores/useTripStore';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { detectCurrency } from '../utils/currency';
-import type { ChatMessage, DestinationContext } from '../types';
+import type { ChatMessage, DestinationContext, TransitRoute } from '../types';
+
+// Calculate distance between two coordinates in meters
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3; // Earth's radius in meters
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+  const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+    Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}
 
 export default function NavigationScreen() {
   const router = useRouter();
@@ -37,17 +55,23 @@ export default function NavigationScreen() {
   // Store state
   const currentDestination = useNavigationStore((state) => state.currentDestination);
   const currentRoute = useNavigationStore((state) => state.currentRoute);
+  const startNavigation = useNavigationStore((state) => state.startNavigation);
+  const markArrived = useNavigationStore((state) => state.markArrived);
   const coordinates = useLocationStore((state) => state.coordinates);
   const neighborhood = useLocationStore((state) => state.neighborhood);
   const conversationStore = useConversationStore();
   const getMemoryContext = useMemoryStore((state) => state.getMemoryContext);
   const currentConversation = conversationStore.getCurrentConversation();
+  const addVisit = useTripStore((state) => state.addVisit);
 
   // Local state
   const [messages, setMessages] = useState<ChatMessage[]>(currentConversation?.messages || []);
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [route, setRoute] = useState<TransitRoute | null>(currentRoute);
+  const [hasArrived, setHasArrived] = useState(false);
+  const [distanceToDestination, setDistanceToDestination] = useState<number | null>(null);
 
   const currency = coordinates ? detectCurrency(coordinates) : { code: 'USD', symbol: '$', name: 'US Dollar' };
 
@@ -79,6 +103,63 @@ export default function NavigationScreen() {
       );
     }
   }, [coordinates, currentDestination]);
+
+  // Fetch route when destination is set
+  useEffect(() => {
+    async function fetchRoute() {
+      if (coordinates && currentDestination && !route) {
+        console.log('[Navigation] Fetching route...');
+        const fetchedRoute = await getWalkingDirections(coordinates, currentDestination.coordinates);
+        if (fetchedRoute) {
+          setRoute(fetchedRoute);
+          startNavigation(currentDestination, fetchedRoute);
+        }
+      }
+    }
+    fetchRoute();
+  }, [currentDestination, coordinates]);
+
+  // Check for arrival (within 50 meters of destination)
+  useEffect(() => {
+    if (coordinates && currentDestination && !hasArrived) {
+      const distance = calculateDistance(
+        coordinates.latitude,
+        coordinates.longitude,
+        currentDestination.coordinates.latitude,
+        currentDestination.coordinates.longitude
+      );
+      setDistanceToDestination(distance);
+
+      if (distance < 50) {
+        setHasArrived(true);
+        markArrived();
+
+        // Add arrival message
+        const arrivalMessage: ChatMessage = {
+          id: `system-arrival-${Date.now()}`,
+          role: 'system',
+          content: `You've arrived at ${currentDestination.title}! Ask me anything about this place.`,
+          timestamp: Date.now(),
+        };
+        conversationStore.addMessage(arrivalMessage);
+
+        // Log visit
+        addVisit({
+          placeId: currentDestination.placeId || currentDestination.id,
+          name: currentDestination.title,
+          neighborhood: currentDestination.neighborhood,
+          city: neighborhood?.split(',')[0]?.trim() || 'Unknown',
+          country: neighborhood?.split(',').pop()?.trim() || 'Unknown',
+          coordinates: currentDestination.coordinates,
+        });
+      }
+    }
+  }, [coordinates, currentDestination, hasArrived]);
+
+  // Handle arrival action
+  const handleImDone = () => {
+    router.replace('/');
+  };
 
   const handleSendMessage = async (messageText?: string, imageBase64?: string) => {
     const text = messageText || inputText.trim();
@@ -130,7 +211,7 @@ export default function NavigationScreen() {
         totalWalkingToday: 0,
       };
 
-      const response = await chat(enhancedMessage, mockContext, messages, imageBase64);
+      const response = await chatSimple(enhancedMessage, mockContext, messages, imageBase64);
 
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
@@ -253,14 +334,40 @@ export default function NavigationScreen() {
             <Text style={styles.headerTitle} numberOfLines={1}>
               {currentDestination.title}
             </Text>
-            {currentRoute && (
+            {route && !hasArrived && (
               <Text style={styles.headerSubtitle}>
-                {currentRoute.totalDuration} min • {(currentRoute.totalDistance / 1000).toFixed(1)} km
+                {route.totalDuration} min • {(route.totalDistance / 1000).toFixed(1)} km
+                {distanceToDestination && ` • ${Math.round(distanceToDestination)}m away`}
+              </Text>
+            )}
+            {hasArrived && (
+              <Text style={[styles.headerSubtitle, { color: '#34C759' }]}>
+                You've arrived!
               </Text>
             )}
           </View>
-          <NavigationIcon size={20} color="#007AFF" />
+          {hasArrived ? (
+            <CheckCircle size={20} color="#34C759" />
+          ) : (
+            <NavigationIcon size={20} color="#007AFF" />
+          )}
         </View>
+
+        {/* Arrival Banner */}
+        {hasArrived && (
+          <View style={styles.arrivalBanner}>
+            <View style={styles.arrivalContent}>
+              <CheckCircle size={24} color="#34C759" />
+              <View style={styles.arrivalText}>
+                <Text style={styles.arrivalTitle}>You've arrived!</Text>
+                <Text style={styles.arrivalSubtitle}>Tap below when you're done exploring</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.doneButton} onPress={handleImDone}>
+              <Text style={styles.doneButtonText}>I'm done here</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Map - Top 60% */}
         <View style={styles.mapContainer}>
@@ -285,10 +392,10 @@ export default function NavigationScreen() {
             />
 
             {/* Route polyline */}
-            {currentRoute && currentRoute.polyline && (
+            {route && route.polyline && (
               <Polyline
-                coordinates={decodePolyline(currentRoute.polyline)}
-                strokeColor="#007AFF"
+                coordinates={decodePolyline(route.polyline)}
+                strokeColor={hasArrived ? '#34C759' : '#007AFF'}
                 strokeWidth={4}
               />
             )}
@@ -474,6 +581,42 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: colors.text.light.secondary,
+  },
+  arrivalBanner: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: '#C8E6C9',
+  },
+  arrivalContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  arrivalText: {
+    flex: 1,
+  },
+  arrivalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2E7D32',
+  },
+  arrivalSubtitle: {
+    fontSize: 13,
+    color: '#4CAF50',
+  },
+  doneButton: {
+    backgroundColor: '#34C759',
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  doneButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
   },
   mapContainer: {
     height: '60%',

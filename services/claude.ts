@@ -1,7 +1,83 @@
-import { Destination, DestinationContext, Coordinates, ChatMessage } from '../types';
+import { Destination, DestinationContext, Coordinates, ChatMessage, PlaceCardData, InlineMapData, MessageAction } from '../types';
 import { config } from '../constants/config';
 import { searchPlace, placeToSpot, searchNearby } from './places';
 import { getApiErrorMessage } from '../utils/setupCheck';
+
+// Structured response from Claude for place recommendations
+export interface StructuredChatResponse {
+  content: string;
+  placeCard?: PlaceCardData;
+  inlineMap?: InlineMapData;
+  actions?: MessageAction[];
+}
+
+/**
+ * Parse Claude's response for structured JSON content
+ */
+function parseStructuredResponse(responseText: string, userLocation: Coordinates): StructuredChatResponse {
+  // Try to extract JSON from the response
+  let jsonText = responseText.trim();
+
+  // Check for JSON code blocks
+  const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+  if (jsonMatch) {
+    jsonText = jsonMatch[1];
+  } else if (responseText.trim().startsWith('{')) {
+    // Direct JSON response
+    jsonText = responseText.trim();
+  } else {
+    // Plain text response
+    return { content: responseText };
+  }
+
+  try {
+    const parsed = JSON.parse(jsonText);
+
+    const result: StructuredChatResponse = {
+      content: parsed.text || responseText,
+    };
+
+    // Build place card if present
+    if (parsed.placeCard) {
+      result.placeCard = {
+        name: parsed.placeCard.name,
+        address: parsed.placeCard.address,
+        rating: parsed.placeCard.rating,
+        priceLevel: parsed.placeCard.priceLevel,
+        distance: parsed.placeCard.distance,
+        openNow: parsed.placeCard.openNow,
+        hours: parsed.placeCard.hours,
+        estimatedCost: parsed.placeCard.estimatedCost,
+        coordinates: parsed.placeCard.coordinates || userLocation,
+      };
+    }
+
+    // Build inline map if requested
+    if (parsed.showMap && parsed.placeCard?.coordinates) {
+      result.inlineMap = {
+        center: parsed.placeCard.coordinates,
+        markers: [
+          {
+            id: 'destination',
+            coordinate: parsed.placeCard.coordinates,
+            title: parsed.placeCard.name,
+          },
+        ],
+      };
+    }
+
+    // Add actions if present
+    if (parsed.actions && Array.isArray(parsed.actions)) {
+      result.actions = parsed.actions;
+    }
+
+    return result;
+  } catch (error) {
+    // If JSON parsing fails, return plain text
+    console.log('[Claude] Response is not structured JSON, returning as plain text');
+    return { content: responseText };
+  }
+}
 
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 
@@ -199,13 +275,14 @@ async function enrichDestination(
 
 /**
  * Chat with Claude (with optional image)
+ * Returns structured response with optional place card, map, and actions
  */
 export async function chat(
   message: string,
   context: DestinationContext,
   recentMessages: ChatMessage[] = [],
   image?: string
-): Promise<string> {
+): Promise<StructuredChatResponse> {
   try {
     const systemPrompt = buildChatSystemPrompt(context);
 
@@ -249,7 +326,7 @@ export async function chat(
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
+        max_tokens: 1500,
         system: systemPrompt,
         messages,
       }),
@@ -265,11 +342,27 @@ export async function chat(
       throw new Error('Unexpected response type from Claude');
     }
 
-    return content.text;
+    // Parse the response for structured content
+    return parseStructuredResponse(content.text, context.location);
   } catch (error) {
     console.error('Error in chat:', error);
-    return "Sorry, I'm having trouble responding right now. Please try again.";
+    return {
+      content: "Sorry, I'm having trouble responding right now. Please try again.",
+    };
   }
+}
+
+/**
+ * Simple chat that returns just a string (for backward compatibility)
+ */
+export async function chatSimple(
+  message: string,
+  context: DestinationContext,
+  recentMessages: ChatMessage[] = [],
+  image?: string
+): Promise<string> {
+  const response = await chat(message, context, recentMessages, image);
+  return response.content;
 }
 
 /**
@@ -287,14 +380,47 @@ CURRENT CONTEXT:
 
 Be:
 - Specific and actionable
-- Concise (2-3 sentences max)
+- Concise but helpful
 - Context-aware (refer to their location, time, budget)
 - Helpful (give directions, suggestions, warnings)
+
+IMPORTANT: When the user asks for place recommendations (food, attractions, cafes, etc.), you MUST respond with a JSON object in this exact format:
+\`\`\`json
+{
+  "text": "Your conversational response here",
+  "placeCard": {
+    "name": "Place Name",
+    "address": "Full address",
+    "rating": 4.5,
+    "priceLevel": 2,
+    "distance": "8 min walk",
+    "openNow": true,
+    "hours": "9 AM - 10 PM",
+    "estimatedCost": "฿120",
+    "coordinates": {"latitude": 0.0, "longitude": 0.0}
+  },
+  "showMap": true,
+  "actions": [
+    {"label": "Take me there", "type": "navigate"},
+    {"label": "Something else", "type": "regenerate"}
+  ]
+}
+\`\`\`
+
+For place recommendations:
+- Use REAL places that actually exist
+- Include accurate coordinates (lat/lng)
+- Estimate walking distance from their current location
+- Include estimated cost in LOCAL CURRENCY
+- Consider time of day, weather, and their budget
+- Only set showMap: true if suggesting a specific place
+
+For general conversation or questions that don't involve place recommendations, respond normally with plain text (no JSON).
 
 If they share a photo:
 - Translate any text you see
 - Explain what it is
-- Give actionable advice (e.g., "This is a menu. The tonkotsu ramen is ¥980.")`;
+- Give actionable advice (e.g., "This is a menu. The tonkotsu ramen is ฿80.")`;
 }
 
 /**

@@ -222,6 +222,45 @@ export interface Stamp {
   completedAt?: number;
 }
 
+// === INLINE PLACE CARD ===
+export interface PlaceCardData {
+  placeId?: string;
+  name: string;
+  photo?: string;
+  rating?: number;
+  priceLevel?: 1 | 2 | 3 | 4;
+  address: string;
+  distance?: string;
+  openNow?: boolean;
+  hours?: string;
+  estimatedCost?: string;
+  coordinates: Coordinates;
+}
+
+// === INLINE MAP ===
+export interface InlineMapData {
+  center: Coordinates;
+  markers?: Array<{
+    id: string;
+    coordinate: Coordinates;
+    title?: string;
+  }>;
+  route?: {
+    polyline: string;
+    duration: string;
+    distance: string;
+  };
+}
+
+// === ACTION BUTTONS ===
+export type MessageActionType = 'navigate' | 'regenerate' | 'show_photos' | 'log_expense' | 'show_recap';
+
+export interface MessageAction {
+  label: string;
+  type: MessageActionType;
+  payload?: any;
+}
+
 // === CHAT ===
 export interface ChatMessage {
   id: string;
@@ -229,6 +268,12 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   image?: string; // base64
+
+  // Rich inline content
+  placeCard?: PlaceCardData;
+  inlineMap?: InlineMapData;
+  actions?: MessageAction[];
+
   action?: {
     type: 'navigate_to_destination' | 'add_expense' | 'complete_stamp' | 'go_home';
     payload: any;

@@ -84,19 +84,46 @@ export async function cancelRecording(): Promise<void> {
 }
 
 /**
- * Transcribe audio using Whisper API (placeholder - requires backend)
- * For now, we'll just return a placeholder message
+ * Transcribe audio using Whisper API via backend
  */
 export async function transcribeAudio(audioUri: string): Promise<string | null> {
   try {
-    // TODO: Implement actual transcription
-    // This would require sending the audio file to a backend that calls OpenAI Whisper API
-    // or using Expo's speech recognition capabilities
+    const backendUrl = process.env.EXPO_PUBLIC_WHISPER_BACKEND_URL;
 
-    console.log('[Voice] Transcription not yet implemented for:', audioUri);
-    return '[Voice message recorded - transcription coming soon]';
+    if (!backendUrl) {
+      console.log('[Voice] No Whisper backend URL configured, using fallback');
+      return '[Voice message - configure WHISPER_BACKEND_URL for transcription]';
+    }
+
+    console.log('[Voice] Transcribing audio:', audioUri);
+
+    // Create form data for the audio file
+    const formData = new FormData();
+    formData.append('audio', {
+      uri: audioUri,
+      type: 'audio/m4a',
+      name: 'recording.m4a',
+    } as any);
+
+    const response = await fetch(`${backendUrl}/transcribe`, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('[Voice] Transcription failed:', response.status, errorData);
+      throw new Error(`Transcription failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('[Voice] Transcription result:', data.text);
+    return data.text;
   } catch (error) {
-    console.error('Error transcribing audio:', error);
+    console.error('[Voice] Transcription error:', error);
     return null;
   }
 }

@@ -18,7 +18,7 @@ import { useNavigationStore } from '../stores/useNavigationStore';
 import { useTripStore } from '../stores/useTripStore';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
-import { chat } from '../services/claude';
+import { chatSimple } from '../services/claude';
 import type { DestinationContext, ChatMessage } from '../types';
 
 /**
@@ -101,7 +101,7 @@ export default function CompanionScreen() {
         totalWalkingToday: 0,
       };
 
-      const response = await chat(userMessage.content, context, messages);
+      const response = await chatSimple(userMessage.content, context, messages);
 
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,

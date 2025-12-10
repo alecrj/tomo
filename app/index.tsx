@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Send, Mic, Camera, Settings, MapPin, Plus, Home, MessageSquare } from 'lucide-react-native';
 import { colors, spacing, typography } from '../constants/theme';
-import { chat } from '../services/claude';
+import { chat, StructuredChatResponse } from '../services/claude';
 import { takePhoto, pickPhoto } from '../services/camera';
 import { startRecording, stopRecording, cancelRecording, transcribeAudio } from '../services/voice';
 import { useLocationStore } from '../stores/useLocationStore';
@@ -27,12 +27,17 @@ import { usePreferencesStore } from '../stores/usePreferencesStore';
 import { useTripStore } from '../stores/useTripStore';
 import { useMemoryStore } from '../stores/useMemoryStore';
 import { useConversationStore } from '../stores/useConversationStore';
+import { useNavigationStore } from '../stores/useNavigationStore';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { useLocation } from '../hooks/useLocation';
 import { useWeather } from '../hooks/useWeather';
+import { useCityDetection, parseNeighborhood } from '../hooks/useCityDetection';
 import { detectCurrency } from '../utils/currency';
-import type { DestinationContext, ChatMessage } from '../types';
+import type { DestinationContext, ChatMessage, MessageAction, Destination } from '../types';
 import LogVisitModal from '../components/LogVisitModal';
+import { PlaceCard } from '../components/PlaceCard';
+import { InlineMap } from '../components/InlineMap';
+import { ActionButtons } from '../components/ActionButtons';
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -42,6 +47,7 @@ export default function ChatScreen() {
   // Hooks
   const { location } = useLocation();
   const { weather } = useWeather();
+  const cityChange = useCityDetection();
 
   // Store state
   const coordinates = useLocationStore((state) => state.coordinates);
@@ -68,6 +74,10 @@ export default function ChatScreen() {
   const conversationStore = useConversationStore();
   const currentConversation = conversationStore.getCurrentConversation();
 
+  // Navigation store
+  const viewDestination = useNavigationStore((state) => state.viewDestination);
+  const startNavigation = useNavigationStore((state) => state.startNavigation);
+
   // Local state
   const [messages, setMessages] = useState<ChatMessage[]>(currentConversation?.messages || []);
   const [inputText, setInputText] = useState('');
@@ -75,6 +85,7 @@ export default function ChatScreen() {
   const [showBudgetBar, setShowBudgetBar] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [showLogVisit, setShowLogVisit] = useState(false);
+  const [lastPlaceCard, setLastPlaceCard] = useState<ChatMessage['placeCard'] | null>(null);
 
   // Detect currency
   const currency = coordinates ? detectCurrency(coordinates) : { code: 'USD', symbol: '$', name: 'US Dollar' };
@@ -136,6 +147,33 @@ Where should we start?`,
     }
   }, [messages]);
 
+  // Handle city change detection
+  useEffect(() => {
+    if (cityChange && currentConversation) {
+      const cityChangeMessage: ChatMessage = {
+        id: `city-change-${Date.now()}`,
+        role: 'assistant',
+        content: `Welcome to ${cityChange.newCity}, ${cityChange.newCountry}! 🎉
+
+I can see you've arrived in a new city. ${cityChange.previousCity ? `How was ${cityChange.previousCity}?` : ''}
+
+Would you like to:
+• Set a home base (your hotel/accommodation)
+• Find something to eat
+• Explore what's nearby
+
+What would you like to do first?`,
+        timestamp: Date.now(),
+        actions: [
+          { label: 'Set home base', type: 'navigate' as const },
+          { label: 'Find food', type: 'regenerate' as const },
+        ],
+      };
+
+      conversationStore.addMessage(cityChangeMessage);
+    }
+  }, [cityChange]);
+
   const handleSendMessage = async (messageText?: string, imageBase64?: string) => {
     const text = messageText || inputText.trim();
     if ((!text && !imageBase64) || isSending) return;
@@ -195,12 +233,21 @@ Where should we start?`,
 
       const response = await chat(enhancedMessage, context, messages, imageBase64);
 
+      // Create assistant message with optional structured content
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: response,
+        content: response.content,
         timestamp: Date.now(),
+        placeCard: response.placeCard,
+        inlineMap: response.inlineMap,
+        actions: response.actions,
       };
+
+      // Store the last place card for navigation
+      if (response.placeCard) {
+        setLastPlaceCard(response.placeCard);
+      }
 
       // Add to conversation store
       conversationStore.addMessage(assistantMessage);
@@ -215,6 +262,53 @@ Where should we start?`,
       conversationStore.addMessage(errorMessage);
     } finally {
       setIsSending(false);
+    }
+  };
+
+  // Handle action button presses
+  const handleAction = (action: MessageAction, placeCard?: ChatMessage['placeCard']) => {
+    switch (action.type) {
+      case 'navigate':
+        if (placeCard) {
+          // Create a minimal destination object for navigation
+          const destination: Destination = {
+            id: `dest-${Date.now()}`,
+            title: placeCard.name,
+            description: placeCard.address,
+            whatItIs: placeCard.address,
+            whenToGo: '',
+            neighborhood: neighborhood || '',
+            category: 'food',
+            whyNow: '',
+            address: placeCard.address,
+            coordinates: placeCard.coordinates,
+            priceLevel: placeCard.priceLevel || 2,
+            transitPreview: {
+              method: 'walk',
+              totalMinutes: parseInt(placeCard.distance?.replace(/\D/g, '') || '10'),
+              description: placeCard.distance || '10 min walk',
+            },
+            spots: [],
+          };
+          viewDestination(destination);
+          router.push('/navigation');
+        }
+        break;
+
+      case 'regenerate':
+        handleSendMessage('Show me something else');
+        break;
+
+      case 'show_recap':
+        router.push('/trip-recap');
+        break;
+
+      case 'log_expense':
+        setShowLogVisit(true);
+        break;
+
+      default:
+        console.log('[Action] Unhandled action:', action.type);
     }
   };
 
@@ -402,39 +496,85 @@ Where should we start?`,
             showsVerticalScrollIndicator={false}
           >
             {messages.map((message) => (
-              <View
-                key={message.id}
-                style={[
-                  styles.messageBubble,
-                  message.role === 'user' ? styles.userBubble : styles.assistantBubble,
-                ]}
-              >
-                {message.image && (
-                  <Image
-                    source={{ uri: `data:image/jpeg;base64,${message.image}` }}
-                    style={styles.messageImage}
-                    resizeMode="cover"
-                  />
+              <View key={message.id}>
+                {/* User messages */}
+                {message.role === 'user' && (
+                  <View style={[styles.messageBubble, styles.userBubble]}>
+                    {message.image && (
+                      <Image
+                        source={{ uri: `data:image/jpeg;base64,${message.image}` }}
+                        style={styles.messageImage}
+                        resizeMode="cover"
+                      />
+                    )}
+                    <Text style={[styles.messageText, styles.userText]}>
+                      {message.content}
+                    </Text>
+                    <Text style={[styles.messageTime, styles.userTime]}>
+                      {new Date(message.timestamp).toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </Text>
+                  </View>
                 )}
-                <Text
-                  style={[
-                    styles.messageText,
-                    message.role === 'user' ? styles.userText : styles.assistantText,
-                  ]}
-                >
-                  {message.content}
-                </Text>
-                <Text
-                  style={[
-                    styles.messageTime,
-                    message.role === 'user' ? styles.userTime : styles.assistantTime,
-                  ]}
-                >
-                  {new Date(message.timestamp).toLocaleTimeString('en-US', {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  })}
-                </Text>
+
+                {/* Assistant messages with rich content */}
+                {message.role === 'assistant' && (
+                  <View style={styles.assistantMessageContainer}>
+                    {/* Text content */}
+                    <View style={[styles.messageBubble, styles.assistantBubble]}>
+                      <Text style={[styles.messageText, styles.assistantText]}>
+                        {message.content}
+                      </Text>
+                      <Text style={[styles.messageTime, styles.assistantTime]}>
+                        {new Date(message.timestamp).toLocaleTimeString('en-US', {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })}
+                      </Text>
+                    </View>
+
+                    {/* Inline Place Card */}
+                    {message.placeCard && (
+                      <PlaceCard
+                        placeCard={message.placeCard}
+                        currencySymbol={currency.symbol}
+                        onTakeMeThere={() =>
+                          handleAction({ label: 'Take me there', type: 'navigate' }, message.placeCard)
+                        }
+                        onSomethingElse={() =>
+                          handleAction({ label: 'Something else', type: 'regenerate' })
+                        }
+                      />
+                    )}
+
+                    {/* Inline Map */}
+                    {message.inlineMap && (
+                      <InlineMap
+                        mapData={message.inlineMap}
+                        onPress={() =>
+                          handleAction({ label: 'Navigate', type: 'navigate' }, message.placeCard)
+                        }
+                      />
+                    )}
+
+                    {/* Action Buttons (if no place card - place card has its own buttons) */}
+                    {message.actions && !message.placeCard && (
+                      <ActionButtons
+                        actions={message.actions}
+                        onAction={(action) => handleAction(action, message.placeCard)}
+                      />
+                    )}
+                  </View>
+                )}
+
+                {/* System messages */}
+                {message.role === 'system' && (
+                  <View style={styles.systemMessage}>
+                    <Text style={styles.systemText}>{message.content}</Text>
+                  </View>
+                )}
               </View>
             ))}
             {isSending && (
@@ -654,6 +794,23 @@ const styles = StyleSheet.create({
   },
   assistantText: {
     color: '#000000',
+  },
+  assistantMessageContainer: {
+    alignSelf: 'flex-start',
+    maxWidth: '90%',
+  },
+  systemMessage: {
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 12,
+    marginVertical: spacing.sm,
+  },
+  systemText: {
+    fontSize: 13,
+    color: colors.text.light.secondary,
+    textAlign: 'center',
   },
   messageTime: {
     fontSize: 11,

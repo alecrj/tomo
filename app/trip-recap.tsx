@@ -7,17 +7,35 @@ import {
   TouchableOpacity,
   Dimensions,
   Image,
+  Share,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import { ArrowLeft, Share2, Download, MapPin, Calendar, DollarSign } from 'lucide-react-native';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import { ArrowLeft, Share2, Download, MapPin, Calendar, DollarSign, Camera, MessageCircle } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTripStore } from '../stores/useTripStore';
+import { useConversationStore } from '../stores/useConversationStore';
 import { detectCurrency } from '../utils/currency';
+import type { ChatMessage } from '../types';
+
+// City colors for map pins
+const CITY_COLORS = [
+  '#007AFF', // Blue
+  '#34C759', // Green
+  '#FF9500', // Orange
+  '#AF52DE', // Purple
+  '#FF3B30', // Red
+  '#5AC8FA', // Teal
+  '#FFCC00', // Yellow
+  '#FF2D55', // Pink
+];
 
 const { width, height } = Dimensions.get('window');
 
 export default function TripRecapScreen() {
   const { currentTrip, pastTrips } = useTripStore();
+  const conversationStore = useConversationStore();
   const [selectedTrip, setSelectedTrip] = useState(currentTrip);
   const mapRef = useRef<MapView>(null);
 
@@ -31,6 +49,9 @@ export default function TripRecapScreen() {
       }
     }
   }, [currentTrip, pastTrips]);
+
+  // Get city color
+  const getCityColor = (index: number) => CITY_COLORS[index % CITY_COLORS.length];
 
   if (!selectedTrip) {
     return (
@@ -93,13 +114,52 @@ export default function TripRecapScreen() {
     : 'Present';
 
   const handleExportPDF = () => {
-    // TODO: Implement PDF export
-    console.log('[TripRecap] Export PDF');
+    // For MVP, show alert that PDF export is coming soon
+    Alert.alert(
+      'Export PDF',
+      'PDF export is coming soon! For now, you can share your trip summary.',
+      [{ text: 'OK' }]
+    );
   };
 
-  const handleShare = () => {
-    // TODO: Implement sharing
-    console.log('[TripRecap] Share trip');
+  const handleShare = async () => {
+    if (!selectedTrip) return;
+
+    try {
+      const placesCount = selectedTrip.stats.totalPlaces;
+      const daysCount = selectedTrip.stats.totalDays;
+      const citiesList = selectedTrip.cities.map(c => c.name).join(', ');
+      const topPlaces = selectedTrip.cities
+        .flatMap(c => c.visits)
+        .slice(0, 3)
+        .map(v => v.name)
+        .join(', ');
+
+      const message = `My ${selectedTrip.name}\n\n` +
+        `${daysCount} days • ${placesCount} places\n` +
+        `Cities: ${citiesList}\n` +
+        `Highlights: ${topPlaces}\n\n` +
+        `Tracked with Tomo - your AI travel companion`;
+
+      await Share.share({
+        message,
+        title: selectedTrip.name,
+      });
+    } catch (error) {
+      console.error('[TripRecap] Share error:', error);
+    }
+  };
+
+  const handleSendToChat = () => {
+    // Create a summary message and send it to chat
+    const summaryMessage: ChatMessage = {
+      id: `recap-${Date.now()}`,
+      role: 'user',
+      content: 'Show me a summary of my trip',
+      timestamp: Date.now(),
+    };
+    conversationStore.addMessage(summaryMessage);
+    router.push('/');
   };
 
   return (
@@ -180,17 +240,27 @@ export default function TripRecapScreen() {
                 }
               }}
             >
-              {trip.cities.map((city) =>
-                city.visits.map((visit) => (
+              {trip.cities.map((city, cityIndex) =>
+                city.visits.map((visit, visitIndex) => (
                   <Marker
-                    key={visit.placeId}
+                    key={`${visit.placeId}-${visitIndex}`}
                     coordinate={visit.coordinates}
                     title={visit.name}
                     description={`${city.name}, ${city.country}`}
+                    pinColor={getCityColor(cityIndex)}
                   />
                 ))
               )}
             </MapView>
+            {/* City legend */}
+            <View style={styles.mapLegend}>
+              {trip.cities.map((city, index) => (
+                <View key={`legend-${city.name}-${index}`} style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: getCityColor(index) }]} />
+                  <Text style={styles.legendText}>{city.name}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         )}
 
@@ -225,7 +295,7 @@ export default function TripRecapScreen() {
               <View style={styles.visitsContainer}>
                 {city.visits.map((visit, vIndex) => (
                   <View key={`${visit.placeId}-${vIndex}`} style={styles.visitRow}>
-                    <View style={styles.visitDot} />
+                    <View style={[styles.visitDot, { backgroundColor: getCityColor(index) }]} />
                     <View style={styles.visitInfo}>
                       <Text style={styles.visitName}>{visit.name}</Text>
                       <Text style={styles.visitNeighborhood}>{visit.neighborhood}</Text>
@@ -251,13 +321,17 @@ export default function TripRecapScreen() {
 
         {/* Export Actions */}
         <View style={styles.exportSection}>
+          <TouchableOpacity style={styles.exportButtonPrimary} onPress={handleShare}>
+            <Share2 size={20} color="#FFFFFF" />
+            <Text style={styles.exportButtonTextPrimary}>Share Trip</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.exportButton} onPress={handleSendToChat}>
+            <MessageCircle size={20} color="#007AFF" />
+            <Text style={styles.exportButtonText}>Chat about my trip</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.exportButton} onPress={handleExportPDF}>
             <Download size={20} color="#007AFF" />
             <Text style={styles.exportButtonText}>Export as PDF</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.exportButton} onPress={handleShare}>
-            <Share2 size={20} color="#007AFF" />
-            <Text style={styles.exportButtonText}>Share Trip</Text>
           </TouchableOpacity>
         </View>
 
@@ -412,6 +486,34 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
   },
+  mapLegend: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    maxWidth: '80%',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendText: {
+    fontSize: 12,
+    color: '#1F2937',
+    fontWeight: '500',
+  },
   citiesSection: {
     paddingHorizontal: 16,
     paddingTop: 20,
@@ -492,6 +594,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 20,
     gap: 12,
+  },
+  exportButtonPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    paddingVertical: 16,
+    gap: 8,
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  exportButtonTextPrimary: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   exportButton: {
     flexDirection: 'row',

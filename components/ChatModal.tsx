@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Send } from 'lucide-react-native';
 import { colors, spacing, typography, shadows } from '../constants/theme';
-import { chat } from '../services/claude';
+import { chatSimple } from '../services/claude';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useWeatherStore } from '../stores/useWeatherStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
@@ -136,7 +136,7 @@ export function ChatModal({ visible, onClose }: ChatModalProps) {
         ? `${userMessage.content}\n\n[CONTEXT: User is at GPS coordinates ${coordinates.latitude.toFixed(6)}, ${coordinates.longitude.toFixed(6)} in ${neighborhood || 'unknown location'}. Local currency is ${currency.name} (${currency.symbol}). Use this currency for all price references.]`
         : userMessage.content;
 
-      const response = await chat(enhancedMessage, context, messages);
+      const response = await chatSimple(enhancedMessage, context, messages);
 
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
