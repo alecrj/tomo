@@ -40,16 +40,26 @@ npx expo start --clear
 
 ### Known Items Needing Attention:
 1. **Whisper backend not deployed** - Voice transcription won't work until Railway deployment
-2. **Google Places API photo URLs** - PlaceCard photo prop needs real photo URL from Places API
-3. **Claude structured responses** - Depends on Claude following JSON format instructions
 
-### Next Session TODO:
-1. Deploy `tomo-whisper-backend/` to Railway
+### Completed Improvements:
+- [x] PlaceCard now fetches real photos from Google Places API automatically
+- [x] Claude prompt improved with clearer JSON format rules and trigger words
+- [x] Voice transcription error handling with user-friendly alerts
+- [x] FormData fix for React Native voice uploads
+
+### Next Steps:
+1. Deploy `tomo-whisper-backend/` to Railway:
+   ```bash
+   cd /Users/alec/desktop/tomo-whisper-backend
+   railway login
+   railway init
+   railway up
+   # Add OPENAI_API_KEY in Railway dashboard
+   railway domain  # Get the URL
+   ```
 2. Add `EXPO_PUBLIC_WHISPER_BACKEND_URL` to `.env`
 3. Test voice transcription end-to-end
-4. Fix PlaceCard to fetch real photos from Google Places API
-5. Improve Claude prompt reliability for structured JSON
-6. Test full app flow on device
+4. Test full app flow on device
 
 ---
 
