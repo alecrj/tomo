@@ -601,58 +601,54 @@ What would you like to do first?`,
 
           {/* Input Bar - iMessage Style */}
           <View style={styles.inputContainer}>
-            <View style={styles.inputWrapper}>
-              {/* Log Visit Button */}
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={() => setShowLogVisit(true)}
-              >
-                <Plus size={24} color={colors.text.light.secondary} />
-              </TouchableOpacity>
+            {/* Left side buttons */}
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => setShowLogVisit(true)}
+            >
+              <Plus size={22} color="#8E8E93" />
+            </TouchableOpacity>
 
-              {/* Camera Button */}
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={handleCamera}
-              >
-                <Camera size={24} color={colors.text.light.secondary} />
-              </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={handleCamera}
+            >
+              <Camera size={22} color="#8E8E93" />
+            </TouchableOpacity>
 
-              {/* Text Input */}
-              <View style={styles.textInputContainer}>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Message Tomo..."
-                  placeholderTextColor={colors.text.light.tertiary}
-                  value={inputText}
-                  onChangeText={setInputText}
-                  onSubmitEditing={() => handleSendMessage()}
-                  returnKeyType="send"
-                  multiline
-                  maxLength={1000}
-                />
-              </View>
-
-              {/* Voice or Send Button */}
+            {/* Text Input with inline mic/send */}
+            <View style={styles.textInputContainer}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Message"
+                placeholderTextColor="#8E8E93"
+                value={inputText}
+                onChangeText={setInputText}
+                onSubmitEditing={() => handleSendMessage()}
+                returnKeyType="send"
+                multiline
+                maxLength={1000}
+              />
+              {/* Mic or Send button inside input */}
               {inputText.trim() ? (
                 <TouchableOpacity
-                  style={styles.sendButton}
+                  style={styles.sendButtonInline}
                   onPress={() => handleSendMessage()}
                   disabled={isSending}
                 >
-                  <Send size={20} color="#FFFFFF" />
+                  <Send size={16} color="#FFFFFF" />
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
                   style={[
-                    styles.iconButton,
+                    styles.micButtonInline,
                     isRecording && styles.recordingButton,
                   ]}
                   onPress={handleVoicePress}
                 >
                   <Mic
-                    size={24}
-                    color={isRecording ? '#FF3B30' : colors.text.light.secondary}
+                    size={18}
+                    color={isRecording ? '#FF3B30' : '#8E8E93'}
                   />
                 </TouchableOpacity>
               )}
@@ -837,52 +833,60 @@ const styles = StyleSheet.create({
     color: 'rgba(0, 0, 0, 0.5)',
   },
   inputContainer: {
-    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 0.5,
     borderTopColor: '#E5E5EA',
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: spacing.sm,
+    gap: 4,
   },
   iconButton: {
     width: 36,
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   textInputContainer: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     minHeight: 36,
     maxHeight: 100,
-    backgroundColor: '#F9F9F9',
+    backgroundColor: '#F2F2F7',
     borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    justifyContent: 'center',
+    paddingLeft: spacing.md,
+    paddingRight: 4,
+    paddingVertical: 4,
   },
   textInput: {
+    flex: 1,
     fontSize: 16,
     color: colors.text.light.primary,
-    minHeight: 20,
+    paddingVertical: 6,
+    maxHeight: 80,
   },
-  sendButton: {
-    width: 36,
-    height: 36,
+  sendButtonInline: {
+    width: 28,
+    height: 28,
     backgroundColor: '#007AFF',
-    borderRadius: 18,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginBottom: 2,
+  },
+  micButtonInline: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
   },
   recordingButton: {
-    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    backgroundColor: 'rgba(255, 59, 48, 0.15)',
+    borderRadius: 14,
   },
   messageImage: {
     width: '100%',

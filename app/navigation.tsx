@@ -11,12 +11,12 @@ import {
   Alert,
   KeyboardAvoidingView,
   Image,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
-import { ArrowLeft, Send, Camera, Mic, Navigation as NavigationIcon, CheckCircle } from 'lucide-react-native';
-import { colors, spacing, typography } from '../constants/theme';
+import { ArrowLeft, Send, Camera, Mic, Navigation as NavigationIcon, CheckCircle, ExternalLink } from 'lucide-react-native';
+import { colors, spacing } from '../constants/theme';
 import { chatSimple } from '../services/claude';
 import { takePhoto, pickPhoto } from '../services/camera';
 import { startRecording, stopRecording, transcribeAudio } from '../services/voice';
@@ -28,11 +28,12 @@ import { useMemoryStore } from '../stores/useMemoryStore';
 import { useTripStore } from '../stores/useTripStore';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { detectCurrency } from '../utils/currency';
+import { config } from '../constants/config';
 import type { ChatMessage, DestinationContext, TransitRoute } from '../types';
 
 // Calculate distance between two coordinates in meters
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371e3; // Earth's radius in meters
+  const R = 6371e3;
   const phi1 = (lat1 * Math.PI) / 180;
   const phi2 = (lat2 * Math.PI) / 180;
   const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
@@ -49,7 +50,6 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 export default function NavigationScreen() {
   const router = useRouter();
   const timeOfDay = useTimeOfDay();
-  const mapRef = useRef<MapView>(null);
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Store state
@@ -75,6 +75,29 @@ export default function NavigationScreen() {
 
   const currency = coordinates ? detectCurrency(coordinates) : { code: 'USD', symbol: '$', name: 'US Dollar' };
 
+  // Build static map URL
+  const buildStaticMapUrl = () => {
+    if (!coordinates || !currentDestination) return null;
+
+    const apiKey = config.googlePlacesApiKey;
+    let url = `https://maps.googleapis.com/maps/api/staticmap?`;
+    url += `size=600x400&scale=2&maptype=roadmap`;
+
+    // User location (blue)
+    url += `&markers=color:blue%7C${coordinates.latitude},${coordinates.longitude}`;
+
+    // Destination (red)
+    url += `&markers=color:red%7C${currentDestination.coordinates.latitude},${currentDestination.coordinates.longitude}`;
+
+    // Route path if available
+    if (route?.polyline) {
+      url += `&path=color:0x007AFF%7Cweight:4%7Cenc:${encodeURIComponent(route.polyline)}`;
+    }
+
+    url += `&key=${apiKey}`;
+    return url;
+  };
+
   // Sync messages with conversation
   useEffect(() => {
     if (currentConversation) {
@@ -91,19 +114,6 @@ export default function NavigationScreen() {
     }
   }, [messages]);
 
-  // Fit map to show both start and destination
-  useEffect(() => {
-    if (mapRef.current && coordinates && currentDestination) {
-      mapRef.current.fitToCoordinates(
-        [coordinates, currentDestination.coordinates],
-        {
-          edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
-          animated: true,
-        }
-      );
-    }
-  }, [coordinates, currentDestination]);
-
   // Fetch route when destination is set
   useEffect(() => {
     async function fetchRoute() {
@@ -119,7 +129,7 @@ export default function NavigationScreen() {
     fetchRoute();
   }, [currentDestination, coordinates]);
 
-  // Check for arrival (within 50 meters of destination)
+  // Check for arrival
   useEffect(() => {
     if (coordinates && currentDestination && !hasArrived) {
       const distance = calculateDistance(
@@ -134,7 +144,6 @@ export default function NavigationScreen() {
         setHasArrived(true);
         markArrived();
 
-        // Add arrival message
         const arrivalMessage: ChatMessage = {
           id: `system-arrival-${Date.now()}`,
           role: 'system',
@@ -143,7 +152,6 @@ export default function NavigationScreen() {
         };
         conversationStore.addMessage(arrivalMessage);
 
-        // Log visit
         addVisit({
           placeId: currentDestination.placeId || currentDestination.id,
           name: currentDestination.title,
@@ -156,9 +164,14 @@ export default function NavigationScreen() {
     }
   }, [coordinates, currentDestination, hasArrived]);
 
-  // Handle arrival action
   const handleImDone = () => {
     router.replace('/');
+  };
+
+  const handleOpenInGoogleMaps = () => {
+    if (!currentDestination) return;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${currentDestination.coordinates.latitude},${currentDestination.coordinates.longitude}&travelmode=walking`;
+    Linking.openURL(url);
   };
 
   const handleSendMessage = async (messageText?: string, imageBase64?: string) => {
@@ -179,9 +192,8 @@ export default function NavigationScreen() {
 
     try {
       const memoryContext = getMemoryContext();
-
       const navigationContext = currentDestination
-        ? `\n\n[NAVIGATION CONTEXT: User is navigating to ${currentDestination.title} at ${currentDestination.address}. They can see the map above and are asking questions about the route or destination. Be helpful and specific about navigation.]`
+        ? `\n\n[NAVIGATION CONTEXT: User is navigating to ${currentDestination.title} at ${currentDestination.address}. Be helpful about the route or destination.]`
         : '';
 
       const systemContext = coordinates
@@ -245,43 +257,31 @@ export default function NavigationScreen() {
         async (buttonIndex) => {
           if (buttonIndex === 1) {
             const image = await takePhoto();
-            if (image) {
-              handleSendMessage('What can you tell me about this?', image);
-            }
+            if (image) handleSendMessage('What can you tell me about this?', image);
           } else if (buttonIndex === 2) {
             const image = await pickPhoto();
-            if (image) {
-              handleSendMessage('What can you tell me about this?', image);
-            }
+            if (image) handleSendMessage('What can you tell me about this?', image);
           }
         }
       );
     } else {
-      Alert.alert(
-        'Add Photo',
-        'Choose a photo source',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Take Photo',
-            onPress: async () => {
-              const image = await takePhoto();
-              if (image) {
-                handleSendMessage('What can you tell me about this?', image);
-              }
-            },
+      Alert.alert('Add Photo', 'Choose a photo source', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Take Photo',
+          onPress: async () => {
+            const image = await takePhoto();
+            if (image) handleSendMessage('What can you tell me about this?', image);
           },
-          {
-            text: 'Choose from Library',
-            onPress: async () => {
-              const image = await pickPhoto();
-              if (image) {
-                handleSendMessage('What can you tell me about this?', image);
-              }
-            },
+        },
+        {
+          text: 'Choose from Library',
+          onPress: async () => {
+            const image = await pickPhoto();
+            if (image) handleSendMessage('What can you tell me about this?', image);
           },
-        ]
-      );
+        },
+      ]);
     }
   };
 
@@ -293,12 +293,16 @@ export default function NavigationScreen() {
         const transcription = await transcribeAudio(audioUri);
         if (transcription) {
           handleSendMessage(transcription);
+        } else {
+          Alert.alert('Voice Not Available', 'Voice transcription is not configured.');
         }
       }
     } else {
       const started = await startRecording();
       if (started) {
         setIsRecording(true);
+      } else {
+        Alert.alert('Microphone Permission', 'Please allow microphone access.');
       }
     }
   };
@@ -322,6 +326,8 @@ export default function NavigationScreen() {
     );
   }
 
+  const staticMapUrl = buildStaticMapUrl();
+
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -341,9 +347,7 @@ export default function NavigationScreen() {
               </Text>
             )}
             {hasArrived && (
-              <Text style={[styles.headerSubtitle, { color: '#34C759' }]}>
-                You've arrived!
-              </Text>
+              <Text style={[styles.headerSubtitle, { color: '#34C759' }]}>You've arrived!</Text>
             )}
           </View>
           {hasArrived ? (
@@ -369,46 +373,30 @@ export default function NavigationScreen() {
           </View>
         )}
 
-        {/* Map - Top 60% */}
+        {/* Static Map Image */}
         <View style={styles.mapContainer}>
-          <MapView
-            ref={mapRef}
-            provider={PROVIDER_GOOGLE}
-            style={styles.map}
-            initialRegion={{
-              latitude: coordinates.latitude,
-              longitude: coordinates.longitude,
-              latitudeDelta: 0.05,
-              longitudeDelta: 0.05,
-            }}
-            showsUserLocation
-            showsMyLocationButton={false}
-          >
-            {/* Destination marker */}
-            <Marker
-              coordinate={currentDestination.coordinates}
-              title={currentDestination.title}
-              description={currentDestination.address}
-            />
-
-            {/* Route polyline */}
-            {route && route.polyline && (
-              <Polyline
-                coordinates={decodePolyline(route.polyline)}
-                strokeColor={hasArrived ? '#34C759' : '#007AFF'}
-                strokeWidth={4}
-              />
-            )}
-          </MapView>
+          {staticMapUrl ? (
+            <TouchableOpacity onPress={handleOpenInGoogleMaps} activeOpacity={0.9}>
+              <Image source={{ uri: staticMapUrl }} style={styles.mapImage} resizeMode="cover" />
+              <View style={styles.openInMapsButton}>
+                <ExternalLink size={16} color="#007AFF" />
+                <Text style={styles.openInMapsText}>Open in Google Maps</Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.mapPlaceholder}>
+              <NavigationIcon size={48} color="#9CA3AF" />
+              <Text style={styles.mapPlaceholderText}>Loading map...</Text>
+            </View>
+          )}
         </View>
 
-        {/* Chat Section - Bottom 40% */}
+        {/* Chat Section */}
         <KeyboardAvoidingView
           style={styles.chatContainer}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           keyboardVerticalOffset={0}
         >
-          {/* Messages */}
           <ScrollView
             ref={scrollViewRef}
             style={styles.messagesScroll}
@@ -446,30 +434,27 @@ export default function NavigationScreen() {
             )}
           </ScrollView>
 
-          {/* Input */}
+          {/* Input - iMessage style */}
           <View style={styles.inputContainer}>
-            <View style={styles.inputWrapper}>
-              <TouchableOpacity style={styles.iconButton} onPress={handleCamera}>
-                <Camera size={22} color={colors.text.light.secondary} />
-              </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton} onPress={handleCamera}>
+              <Camera size={22} color={colors.text.light.secondary} />
+            </TouchableOpacity>
 
-              <View style={styles.textInputContainer}>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Ask about the route..."
-                  placeholderTextColor={colors.text.light.tertiary}
-                  value={inputText}
-                  onChangeText={setInputText}
-                  onSubmitEditing={() => handleSendMessage()}
-                  returnKeyType="send"
-                  multiline
-                  maxLength={500}
-                />
-              </View>
-
+            <View style={styles.textInputContainer}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Ask about the route..."
+                placeholderTextColor={colors.text.light.tertiary}
+                value={inputText}
+                onChangeText={setInputText}
+                onSubmitEditing={() => handleSendMessage()}
+                returnKeyType="send"
+                multiline
+                maxLength={500}
+              />
               {inputText.trim() ? (
                 <TouchableOpacity
-                  style={styles.sendButton}
+                  style={styles.sendButtonInline}
                   onPress={() => handleSendMessage()}
                   disabled={isSending}
                 >
@@ -477,13 +462,10 @@ export default function NavigationScreen() {
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  style={[styles.iconButton, isRecording && styles.recordingButton]}
+                  style={[styles.micButtonInline, isRecording && styles.recordingButton]}
                   onPress={handleVoicePress}
                 >
-                  <Mic
-                    size={22}
-                    color={isRecording ? '#FF3B30' : colors.text.light.secondary}
-                  />
+                  <Mic size={18} color={isRecording ? '#FF3B30' : '#8E8E93'} />
                 </TouchableOpacity>
               )}
             </View>
@@ -492,48 +474,6 @@ export default function NavigationScreen() {
       </SafeAreaView>
     </View>
   );
-}
-
-// Helper to decode Google Maps polyline
-function decodePolyline(encoded: string): { latitude: number; longitude: number }[] {
-  const points: { latitude: number; longitude: number }[] = [];
-  let index = 0;
-  let lat = 0;
-  let lng = 0;
-
-  while (index < encoded.length) {
-    let b;
-    let shift = 0;
-    let result = 0;
-
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-
-    const dlat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
-    lat += dlat;
-
-    shift = 0;
-    result = 0;
-
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-
-    const dlng = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
-    lng += dlng;
-
-    points.push({
-      latitude: lat / 1e5,
-      longitude: lng / 1e5,
-    });
-  }
-
-  return points;
 }
 
 const styles = StyleSheet.create({
@@ -619,16 +559,48 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   mapContainer: {
-    height: '60%',
+    height: 220,
+    backgroundColor: '#E5E7EB',
   },
-  map: {
-    ...StyleSheet.absoluteFillObject,
+  mapImage: {
+    width: '100%',
+    height: 220,
+  },
+  mapPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapPlaceholderText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginTop: 8,
+  },
+  openInMapsButton: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  openInMapsText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#007AFF',
   },
   chatContainer: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
   },
   messagesScroll: {
     flex: 1,
@@ -642,7 +614,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: 16,
+    borderRadius: 18,
   },
   userBubble: {
     alignSelf: 'flex-end',
@@ -671,51 +643,59 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 0.5,
     borderTopColor: '#E5E5EA',
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
     gap: spacing.xs,
   },
   iconButton: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
   },
   textInputContainer: {
     flex: 1,
-    minHeight: 32,
-    maxHeight: 80,
-    backgroundColor: '#F9F9F9',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    minHeight: 36,
+    maxHeight: 100,
+    backgroundColor: '#F2F2F7',
+    borderRadius: 18,
+    paddingLeft: spacing.md,
+    paddingRight: 4,
+    paddingVertical: 4,
   },
   textInput: {
-    fontSize: 15,
+    flex: 1,
+    fontSize: 16,
     color: colors.text.light.primary,
-    minHeight: 18,
+    paddingVertical: 6,
+    maxHeight: 80,
   },
-  sendButton: {
-    width: 32,
-    height: 32,
+  sendButtonInline: {
+    width: 28,
+    height: 28,
     backgroundColor: '#007AFF',
-    borderRadius: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  micButtonInline: {
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
   },
   recordingButton: {
-    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    backgroundColor: 'rgba(255, 59, 48, 0.15)',
+    borderRadius: 14,
   },
 });
