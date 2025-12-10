@@ -4,62 +4,121 @@
 
 **The Pitch:** "Like Strava for running, but Tomo for travel" - Beautiful shareable trip recaps that drive viral growth.
 
-**Current Status:** ✅ CHAT-FIRST ARCHITECTURE COMPLETE - Ready for testing
+**Current Status:** ✅ NATIVE MAPS IMPLEMENTED - Ready for device build
 
 ---
 
-## 🎉 IMPLEMENTATION COMPLETE (December 10, 2024)
+## 🟢 SESSION COMPLETED (December 10, 2024) - NATIVE MAPS
 
-All 6 phases of the chat-first migration are complete:
+### ✅ Implemented: Real Interactive Maps
+**Changed from static Google Maps images to react-native-maps MapView**
 
-### What's Built:
-1. **Whisper Backend** (`../tomo-whisper-backend/`) - Ready for Railway deployment
-2. **Chat-First UI** - App opens to full-screen chat with inline PlaceCard, InlineMap, ActionButtons
-3. **Navigation Mode** - Map (60%) + chat (40%) with arrival detection
-4. **Trip Recap** - Colored city pins, sharing, timeline
-5. **Multi-City Detection** - Auto city change with welcome messages
-6. **Zero TypeScript Errors** - Production ready
+**Updated files:**
+- `app/navigation.tsx` - Full interactive navigation experience:
+  - Real MapView with route polyline
+  - Travel mode selector (Walk / Transit / Drive)
+  - Turn-by-turn step display
+  - Live user location tracking
+  - Chat bar at bottom for questions during navigation
+  - Step-by-step directions list (tap to expand)
 
-### Key Files Created:
-- `components/PlaceCard.tsx` - Inline place recommendations
-- `components/InlineMap.tsx` - Inline maps in chat
-- `components/ActionButtons.tsx` - Action buttons
-- `hooks/useCityDetection.ts` - City change detection
-- `../tomo-whisper-backend/server.js` - Whisper transcription backend
+- `components/InlineMap.tsx` - Interactive inline maps in chat:
+  - MapView instead of static image
+  - Route polyline display
+  - Custom markers
 
-### To Test:
+- `app/trip-recap.tsx` - Interactive trip map:
+  - Zoomable/pannable MapView
+  - City-colored numbered markers
+  - Auto-fit to show all visited places
+
+- `services/routes.ts` - Added:
+  - `getDrivingDirections()` for car routes
+  - `getDirections(origin, dest, mode)` unified function
+  - `TravelMode` type export
+
+- `app.json` - Fixed Google Maps API key configuration
+
+### Previous Session: Chat Fix + Onboarding
+- Fixed Zustand store subscription pattern
+- Created 4-step onboarding flow with permissions
+
+---
+
+## 🚀 TO BUILD FOR DEVICE
+
 ```bash
-# Start the app
-cd /Users/alec/Desktop/tomo
-npx expo start --clear
+# 1. Create development build
+npx expo prebuild --clean
 
-# For voice transcription (optional):
-# 1. Deploy tomo-whisper-backend to Railway
-# 2. Add EXPO_PUBLIC_WHISPER_BACKEND_URL to .env
+# 2. Install pods (iOS)
+cd ios && pod install && cd ..
+
+# 3. Build for device with EAS
+eas build --profile development --platform ios
+
+# Or run locally if you have Xcode
+npx expo run:ios --device
 ```
 
-### Known Items Needing Attention:
-1. **Whisper backend not deployed** - Voice transcription won't work until Railway deployment
+---
 
-### Completed Improvements:
-- [x] PlaceCard now fetches real photos from Google Places API automatically
-- [x] Claude prompt improved with clearer JSON format rules and trigger words
-- [x] Voice transcription error handling with user-friendly alerts
-- [x] FormData fix for React Native voice uploads
+## ✅ What's Working
 
-### Next Steps:
-1. Deploy `tomo-whisper-backend/` to Railway:
-   ```bash
-   cd /Users/alec/desktop/tomo-whisper-backend
-   railway login
-   railway init
-   railway up
-   # Add OPENAI_API_KEY in Railway dashboard
-   railway domain  # Get the URL
-   ```
-2. Add `EXPO_PUBLIC_WHISPER_BACKEND_URL` to `.env`
-3. Test voice transcription end-to-end
-4. Test full app flow on device
+1. **Real Interactive Maps** - react-native-maps with Google Maps provider
+2. **Turn-by-Turn Navigation** - Step-by-step directions within the app
+3. **Travel Mode Selector** - Walk / Transit / Drive options
+4. **Live Location Tracking** - User location on map during navigation
+5. **Route Polyline** - Blue line showing the path
+6. **Chat During Navigation** - Ask questions while navigating
+7. **Chat Response** - Messages work correctly (Zustand fix)
+8. **Onboarding** - 4-step flow with permissions
+9. **Whisper Backend** - Voice transcription at Railway
+10. **PlaceCard** - Real photos from Google Places API
+11. **Trip Recap** - Interactive map with city-colored pins
+12. **Multi-City Detection** - Auto-detects city changes
+13. **Zero TypeScript Errors** - All code compiles
+
+## 📁 Key Files
+
+| File | Purpose |
+|------|---------|
+| `app/index.tsx` | Main chat screen |
+| `app/onboarding.tsx` | First-launch onboarding flow |
+| `app/_layout.tsx` | Root layout with onboarding redirect |
+| `app/navigation.tsx` | Navigation with map + chat |
+| `app/trip-recap.tsx` | Trip summary with map |
+| `app/settings.tsx` | Settings + reset button |
+| `components/PlaceCard.tsx` | Place recommendation cards |
+| `components/InlineMap.tsx` | Interactive inline maps in chat |
+| `services/claude.ts` | Claude API + structured responses |
+| `services/voice.ts` | Voice recording + Whisper transcription |
+| `services/places.ts` | Google Places API |
+| `stores/useOnboardingStore.ts` | Onboarding completion state |
+| `stores/useConversationStore.ts` | Chat messages persistence |
+| `.env` | API keys (Claude, Google, Whisper backend) |
+
+## 🔑 Environment Variables (.env)
+
+```
+EXPO_PUBLIC_CLAUDE_API_KEY=sk-ant-api03-...
+EXPO_PUBLIC_WEATHER_API_KEY=fcaaea...
+EXPO_PUBLIC_GOOGLE_PLACES_API_KEY=AIzaSy...
+EXPO_PUBLIC_WHISPER_BACKEND_URL=https://tomo-production-ed80.up.railway.app
+```
+
+## 🛠️ Commands
+
+```bash
+# Start development
+npx expo start --clear
+
+# Type check
+npx tsc --noEmit
+
+# Create native build (for real maps)
+eas build --profile development --platform ios
+```
 
 ---
 

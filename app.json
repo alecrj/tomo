@@ -52,7 +52,7 @@
       [
         "react-native-maps",
         {
-          "googleMapsApiKey": "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY"
+          "googleMapsApiKey": "AIzaSyDhSPpuL57sJlIrHM-d0nxLKM3XBG_mAfk"
         }
       ]
     ],

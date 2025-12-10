@@ -16,6 +16,9 @@ import { colors, spacing, typography, shadows } from '../constants/theme';
 import { usePreferencesStore } from '../stores/usePreferencesStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
 import { useLocationStore } from '../stores/useLocationStore';
+import { useOnboardingStore } from '../stores/useOnboardingStore';
+import { useConversationStore } from '../stores/useConversationStore';
+import { useMemoryStore } from '../stores/useMemoryStore';
 import * as Location from 'expo-location';
 
 /**
@@ -419,6 +422,35 @@ export default function SettingsScreen() {
             <Text style={styles.saveButtonText}>Save Settings</Text>
           </TouchableOpacity>
 
+          {/* Developer Options */}
+          <View style={styles.devSection}>
+            <Text style={styles.devSectionTitle}>Developer Options</Text>
+            <TouchableOpacity
+              style={styles.resetButton}
+              onPress={() => {
+                Alert.alert(
+                  'Reset App',
+                  'This will clear all data and restart the onboarding flow. Are you sure?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Reset',
+                      style: 'destructive',
+                      onPress: () => {
+                        useOnboardingStore.getState().resetOnboarding();
+                        useConversationStore.getState().clearAll();
+                        useMemoryStore.getState().clearMemories();
+                        router.replace('/onboarding');
+                      },
+                    },
+                  ]
+                );
+              }}
+            >
+              <Text style={styles.resetButtonText}>Reset Onboarding & Data</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.bottomPadding} />
         </ScrollView>
       </SafeAreaView>
@@ -638,5 +670,30 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: spacing.xl,
+  },
+  devSection: {
+    marginTop: spacing.xl * 2,
+    paddingTop: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
+  },
+  devSectionTitle: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.light.tertiary,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  resetButton: {
+    backgroundColor: '#FFF1F0',
+    borderRadius: 12,
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFCCC7',
+  },
+  resetButtonText: {
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.medium,
+    color: '#FF4D4F',
   },
 });

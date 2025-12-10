@@ -71,15 +71,28 @@ export default function ChatScreen() {
 
   // Memory and conversation stores
   const getMemoryContext = useMemoryStore((state) => state.getMemoryContext);
-  const conversationStore = useConversationStore();
-  const currentConversation = conversationStore.getCurrentConversation();
+
+  // Get conversation store actions
+  const addMessage = useConversationStore((state) => state.addMessage);
+  const startNewConversation = useConversationStore((state) => state.startNewConversation);
+  const currentConversationId = useConversationStore((state) => state.currentConversationId);
+
+  // Subscribe to current conversation messages directly (proper Zustand pattern)
+  const currentConversation = useConversationStore((state) => {
+    return state.conversations.find(c => c.id === state.currentConversationId) || null;
+  });
+
+  // Get messages directly from store (this will trigger re-render when messages change)
+  const messages = useConversationStore((state) => {
+    const conv = state.conversations.find(c => c.id === state.currentConversationId);
+    return conv?.messages || [];
+  });
 
   // Navigation store
   const viewDestination = useNavigationStore((state) => state.viewDestination);
   const startNavigation = useNavigationStore((state) => state.startNavigation);
 
-  // Local state
-  const [messages, setMessages] = useState<ChatMessage[]>(currentConversation?.messages || []);
+  // Local state (messages now come directly from store via selector above)
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showBudgetBar, setShowBudgetBar] = useState(true);
@@ -99,18 +112,11 @@ export default function ChatScreen() {
 
   // Initialize conversation on first load
   useEffect(() => {
-    if (!currentConversation && coordinates) {
+    if (!currentConversationId && coordinates) {
       // Start new conversation
-      conversationStore.startNewConversation(neighborhood || undefined, currentTrip?.id);
+      startNewConversation(neighborhood || undefined, currentTrip?.id);
     }
-  }, []);
-
-  // Sync messages with current conversation
-  useEffect(() => {
-    if (currentConversation) {
-      setMessages(currentConversation.messages);
-    }
-  }, [currentConversation?.id]);
+  }, [currentConversationId, coordinates]);
 
   // Initial greeting when conversation starts
   useEffect(() => {
@@ -134,7 +140,7 @@ Where should we start?`,
         timestamp: Date.now(),
       };
 
-      conversationStore.addMessage(greeting);
+      addMessage(greeting);
     }
   }, [coordinates, neighborhood, messages.length, currentConversation]);
 
@@ -170,7 +176,7 @@ What would you like to do first?`,
         ],
       };
 
-      conversationStore.addMessage(cityChangeMessage);
+      addMessage(cityChangeMessage);
     }
   }, [cityChange]);
 
@@ -187,7 +193,7 @@ What would you like to do first?`,
     };
 
     // Add to conversation store
-    conversationStore.addMessage(userMessage);
+    addMessage(userMessage);
     setInputText('');
     setIsSending(true);
 
@@ -250,7 +256,7 @@ What would you like to do first?`,
       }
 
       // Add to conversation store
-      conversationStore.addMessage(assistantMessage);
+      addMessage(assistantMessage);
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMessage: ChatMessage = {
@@ -259,7 +265,7 @@ What would you like to do first?`,
         content: "Sorry, I'm having trouble responding. Please try again.",
         timestamp: Date.now(),
       };
-      conversationStore.addMessage(errorMessage);
+      addMessage(errorMessage);
     } finally {
       setIsSending(false);
     }

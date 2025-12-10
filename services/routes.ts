@@ -241,6 +241,103 @@ function parseTimeString(timeText: string): Date | null {
   }
 }
 
+// Travel mode type
+export type TravelMode = 'WALK' | 'TRANSIT' | 'DRIVE';
+
+/**
+ * Get directions for any travel mode
+ */
+export async function getDirections(
+  origin: Coordinates,
+  destination: Coordinates,
+  mode: TravelMode = 'WALK'
+): Promise<TransitRoute | null> {
+  switch (mode) {
+    case 'TRANSIT':
+      return getTransitDirections(origin, destination);
+    case 'DRIVE':
+      return getDrivingDirections(origin, destination);
+    case 'WALK':
+    default:
+      return getWalkingDirections(origin, destination);
+  }
+}
+
+/**
+ * Get driving directions
+ */
+export async function getDrivingDirections(
+  origin: Coordinates,
+  destination: Coordinates
+): Promise<TransitRoute | null> {
+  try {
+    const requestBody = {
+      origin: {
+        location: {
+          latLng: {
+            latitude: origin.latitude,
+            longitude: origin.longitude,
+          },
+        },
+      },
+      destination: {
+        location: {
+          latLng: {
+            latitude: destination.latitude,
+            longitude: destination.longitude,
+          },
+        },
+      },
+      travelMode: 'DRIVE',
+      routingPreference: 'TRAFFIC_AWARE',
+      languageCode: 'en-US',
+      units: 'METRIC',
+    };
+
+    const response = await fetch(ROUTES_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': config.googlePlacesApiKey,
+        'X-Goog-FieldMask': 'routes.legs,routes.distanceMeters,routes.duration,routes.polyline',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Routes API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.routes || data.routes.length === 0) {
+      return null;
+    }
+
+    const route: GoogleRoute = data.routes[0];
+
+    // Parse driving route
+    const steps: TransitStep[] = route.legs.flatMap((leg) =>
+      leg.steps.map((step) => ({
+        mode: 'taxi' as const, // Using 'taxi' for driving mode
+        instruction: step.navigationInstruction?.instructions || 'Continue driving',
+        duration: parseDuration(step.staticDuration),
+        distance: step.distanceMeters,
+      }))
+    );
+
+    return {
+      steps,
+      totalDuration: Math.round(parseDuration(route.duration)),
+      totalDistance: route.distanceMeters,
+      polyline: route.polyline.encodedPolyline,
+    };
+  } catch (error) {
+    console.error('Error getting driving directions:', error);
+    return null;
+  }
+}
+
 /**
  * Get walking directions (fallback when transit not available)
  */

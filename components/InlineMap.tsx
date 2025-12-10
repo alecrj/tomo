@@ -1,15 +1,15 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
-  Linking,
+  Platform,
 } from 'react-native';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Navigation, MapPin } from 'lucide-react-native';
 import { colors, spacing } from '../constants/theme';
-import { config } from '../constants/config';
+import { decodePolyline } from '../utils/polyline';
 import type { InlineMapData } from '../types';
 
 interface InlineMapProps {
@@ -20,60 +20,85 @@ interface InlineMapProps {
 
 /**
  * Inline Map Component
- * Uses Google Static Maps API for Expo Go compatibility
+ * Uses react-native-maps for native builds
  */
 export function InlineMap({ mapData, onPress, showExpandButton = true }: InlineMapProps) {
-  // Build Google Static Maps URL
-  const buildStaticMapUrl = () => {
-    const { center, markers, route } = mapData;
-    const apiKey = config.googlePlacesApiKey;
+  const mapRef = useRef<MapView>(null);
 
-    let url = `https://maps.googleapis.com/maps/api/staticmap?`;
-    url += `center=${center.latitude},${center.longitude}`;
-    url += `&zoom=15`;
-    url += `&size=600x300`;
-    url += `&scale=2`; // Retina
-    url += `&maptype=roadmap`;
+  // Decode route polyline if present
+  const routeCoordinates = mapData.route?.polyline
+    ? decodePolyline(mapData.route.polyline)
+    : [];
 
-    // Add markers
-    if (markers && markers.length > 0) {
-      markers.forEach(marker => {
-        url += `&markers=color:red%7C${marker.coordinate.latitude},${marker.coordinate.longitude}`;
-      });
-    } else {
-      // Default marker at center
-      url += `&markers=color:red%7C${center.latitude},${center.longitude}`;
+  // Fit map to show all markers and route
+  useEffect(() => {
+    if (mapRef.current && (mapData.markers?.length || routeCoordinates.length)) {
+      const allCoords = [
+        mapData.center,
+        ...(mapData.markers?.map(m => m.coordinate) || []),
+        ...routeCoordinates,
+      ].filter(Boolean);
+
+      if (allCoords.length > 1) {
+        mapRef.current.fitToCoordinates(allCoords, {
+          edgePadding: { top: 40, right: 40, bottom: 40, left: 40 },
+          animated: true,
+        });
+      }
     }
-
-    // Add route polyline if present
-    if (route?.polyline) {
-      url += `&path=color:0x007AFF%7Cweight:4%7Cenc:${encodeURIComponent(route.polyline)}`;
-    }
-
-    url += `&key=${apiKey}`;
-
-    return url;
-  };
-
-  const handleOpenInMaps = () => {
-    const { center } = mapData;
-    const url = `https://www.google.com/maps/search/?api=1&query=${center.latitude},${center.longitude}`;
-    Linking.openURL(url);
-  };
-
-  const staticMapUrl = buildStaticMapUrl();
+  }, [mapData, routeCoordinates]);
 
   return (
     <TouchableOpacity
       style={styles.container}
-      onPress={onPress || handleOpenInMaps}
+      onPress={onPress}
       activeOpacity={0.9}
     >
-      <Image
-        source={{ uri: staticMapUrl }}
+      <MapView
+        ref={mapRef}
         style={styles.map}
-        resizeMode="cover"
-      />
+        provider={PROVIDER_GOOGLE}
+        scrollEnabled={false}
+        zoomEnabled={false}
+        rotateEnabled={false}
+        pitchEnabled={false}
+        initialRegion={{
+          latitude: mapData.center.latitude,
+          longitude: mapData.center.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }}
+      >
+        {/* Center marker or markers */}
+        {mapData.markers && mapData.markers.length > 0 ? (
+          mapData.markers.map(marker => (
+            <Marker
+              key={marker.id}
+              coordinate={marker.coordinate}
+              title={marker.title}
+            >
+              <View style={styles.markerContainer}>
+                <MapPin size={20} color="#FFFFFF" fill="#FF3B30" />
+              </View>
+            </Marker>
+          ))
+        ) : (
+          <Marker coordinate={mapData.center}>
+            <View style={styles.markerContainer}>
+              <MapPin size={20} color="#FFFFFF" fill="#FF3B30" />
+            </View>
+          </Marker>
+        )}
+
+        {/* Route polyline */}
+        {routeCoordinates.length > 0 && (
+          <Polyline
+            coordinates={routeCoordinates}
+            strokeColor="#007AFF"
+            strokeWidth={4}
+          />
+        )}
+      </MapView>
 
       {showExpandButton && (
         <View style={styles.expandButton}>
@@ -86,7 +111,7 @@ export function InlineMap({ mapData, onPress, showExpandButton = true }: InlineM
         </View>
       )}
 
-      {/* Overlay gradient for better button visibility */}
+      {/* Gradient overlay for better button visibility */}
       <View style={styles.gradient} />
     </TouchableOpacity>
   );
@@ -103,6 +128,18 @@ const styles = StyleSheet.create({
   map: {
     width: '100%',
     height: '100%',
+  },
+  markerContainer: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 16,
+    padding: 4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   expandButton: {
     position: 'absolute',

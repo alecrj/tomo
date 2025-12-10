@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,18 +6,17 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
-  Image,
   Share,
   Alert,
 } from 'react-native';
 import { router } from 'expo-router';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { ArrowLeft, Share2, Download, MapPin, Calendar, DollarSign, MessageCircle } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTripStore } from '../stores/useTripStore';
 import { useConversationStore } from '../stores/useConversationStore';
 import { detectCurrency } from '../utils/currency';
-import { config } from '../constants/config';
-import type { ChatMessage } from '../types';
+import type { ChatMessage, Coordinates } from '../types';
 
 // City colors for map pins
 const CITY_COLORS = [
@@ -34,6 +33,7 @@ const CITY_COLORS = [
 const { width } = Dimensions.get('window');
 
 export default function TripRecapScreen() {
+  const mapRef = useRef<MapView>(null);
   const { currentTrip, pastTrips } = useTripStore();
   const conversationStore = useConversationStore();
   const [selectedTrip, setSelectedTrip] = useState(currentTrip);
@@ -50,33 +50,32 @@ export default function TripRecapScreen() {
 
   const getCityColor = (index: number) => CITY_COLORS[index % CITY_COLORS.length];
 
-  // Build static map URL with all visit markers
-  const buildStaticMapUrl = () => {
-    if (!selectedTrip) return null;
-
-    const allVisits = selectedTrip.cities.flatMap((city, cityIndex) =>
+  // Get all visit coordinates for fitting the map
+  const getAllVisits = () => {
+    if (!selectedTrip) return [];
+    return selectedTrip.cities.flatMap((city, cityIndex) =>
       city.visits.map(visit => ({
         ...visit,
         color: getCityColor(cityIndex),
+        cityName: city.name,
       }))
     );
-
-    if (allVisits.length === 0) return null;
-
-    const apiKey = config.googlePlacesApiKey;
-    let url = `https://maps.googleapis.com/maps/api/staticmap?`;
-    url += `size=600x300&scale=2&maptype=roadmap`;
-
-    // Add markers for each visit (max 15 to avoid URL length issues)
-    const markersToShow = allVisits.slice(0, 15);
-    markersToShow.forEach((visit, index) => {
-      const colorCode = visit.color.replace('#', '0x');
-      url += `&markers=color:${colorCode}%7Clabel:${index + 1}%7C${visit.coordinates.latitude},${visit.coordinates.longitude}`;
-    });
-
-    url += `&key=${apiKey}`;
-    return url;
   };
+
+  const allVisits = getAllVisits();
+
+  // Fit map to show all markers
+  useEffect(() => {
+    if (mapRef.current && allVisits.length > 0) {
+      const coordinates = allVisits.map(v => v.coordinates);
+      setTimeout(() => {
+        mapRef.current?.fitToCoordinates(coordinates, {
+          edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+          animated: true,
+        });
+      }, 500);
+    }
+  }, [allVisits]);
 
   if (!selectedTrip) {
     return (
@@ -168,7 +167,31 @@ export default function TripRecapScreen() {
     router.push('/');
   };
 
-  const staticMapUrl = buildStaticMapUrl();
+  // Calculate initial region for map
+  const getInitialRegion = () => {
+    if (allVisits.length === 0) {
+      return {
+        latitude: 0,
+        longitude: 0,
+        latitudeDelta: 50,
+        longitudeDelta: 50,
+      };
+    }
+
+    const lats = allVisits.map(v => v.coordinates.latitude);
+    const lngs = allVisits.map(v => v.coordinates.longitude);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+
+    return {
+      latitude: (minLat + maxLat) / 2,
+      longitude: (minLng + maxLng) / 2,
+      latitudeDelta: Math.max(0.05, (maxLat - minLat) * 1.5),
+      longitudeDelta: Math.max(0.05, (maxLng - minLng) * 1.5),
+    };
+  };
 
   return (
     <View style={styles.container}>
@@ -230,15 +253,33 @@ export default function TripRecapScreen() {
             <Text style={styles.countriesList}>{trip.countries.join(', ')}</Text>
           </View>
 
-          {/* Static Map */}
-          {staticMapUrl && (
+          {/* Interactive Map */}
+          {allVisits.length > 0 && (
             <View style={styles.mapSection}>
               <Text style={styles.sectionTitle}>Your Journey</Text>
-              <Image
-                source={{ uri: staticMapUrl }}
-                style={styles.mapImage}
-                resizeMode="cover"
-              />
+              <View style={styles.mapContainer}>
+                <MapView
+                  ref={mapRef}
+                  style={styles.map}
+                  provider={PROVIDER_GOOGLE}
+                  initialRegion={getInitialRegion()}
+                  scrollEnabled={true}
+                  zoomEnabled={true}
+                >
+                  {allVisits.map((visit, index) => (
+                    <Marker
+                      key={`${visit.placeId}-${index}`}
+                      coordinate={visit.coordinates}
+                      title={visit.name}
+                      description={visit.cityName}
+                    >
+                      <View style={[styles.markerContainer, { backgroundColor: visit.color }]}>
+                        <Text style={styles.markerText}>{index + 1}</Text>
+                      </View>
+                    </Marker>
+                  ))}
+                </MapView>
+              </View>
               {/* City legend */}
               <View style={styles.mapLegend}>
                 {trip.cities.map((city, index) => (
@@ -282,7 +323,9 @@ export default function TripRecapScreen() {
                 <View style={styles.visitsContainer}>
                   {city.visits.map((visit, vIndex) => (
                     <View key={`${visit.placeId}-${vIndex}`} style={styles.visitRow}>
-                      <Text style={styles.visitNumber}>{vIndex + 1}</Text>
+                      <View style={[styles.visitNumber, { backgroundColor: getCityColor(index) }]}>
+                        <Text style={styles.visitNumberText}>{vIndex + 1}</Text>
+                      </View>
                       <View style={styles.visitInfo}>
                         <Text style={styles.visitName}>{visit.name}</Text>
                         <Text style={styles.visitNeighborhood}>{visit.neighborhood}</Text>
@@ -464,11 +507,33 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     marginBottom: 12,
   },
-  mapImage: {
-    width: '100%',
-    height: 200,
+  mapContainer: {
+    height: 250,
     borderRadius: 12,
+    overflow: 'hidden',
     backgroundColor: '#E5E7EB',
+  },
+  map: {
+    flex: 1,
+  },
+  markerContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  markerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   mapLegend: {
     flexDirection: 'row',
@@ -547,13 +612,14 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#F3F4F6',
-    textAlign: 'center',
-    lineHeight: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  visitNumberText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6B7280',
-    marginRight: 12,
+    color: '#FFFFFF',
   },
   visitInfo: {
     flex: 1,

@@ -71,3 +71,4 @@ coverage/
 *.bak
 App.tsx.backup
 index.ts.backup
+ios/

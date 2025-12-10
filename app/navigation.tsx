@@ -11,16 +11,30 @@ import {
   Alert,
   KeyboardAvoidingView,
   Image,
-  Linking,
+  ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Send, Camera, Mic, Navigation as NavigationIcon, CheckCircle, ExternalLink } from 'lucide-react-native';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import {
+  ArrowLeft,
+  Send,
+  Camera,
+  Mic,
+  Navigation as NavigationIcon,
+  CheckCircle,
+  Car,
+  Train,
+  Footprints,
+  ChevronRight,
+  MapPin,
+} from 'lucide-react-native';
 import { colors, spacing } from '../constants/theme';
 import { chatSimple } from '../services/claude';
 import { takePhoto, pickPhoto } from '../services/camera';
 import { startRecording, stopRecording, transcribeAudio } from '../services/voice';
-import { getWalkingDirections } from '../services/routes';
+import { getDirections, TravelMode } from '../services/routes';
 import { useNavigationStore } from '../stores/useNavigationStore';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useConversationStore } from '../stores/useConversationStore';
@@ -28,8 +42,18 @@ import { useMemoryStore } from '../stores/useMemoryStore';
 import { useTripStore } from '../stores/useTripStore';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { detectCurrency } from '../utils/currency';
-import { config } from '../constants/config';
-import type { ChatMessage, DestinationContext, TransitRoute } from '../types';
+import { decodePolyline } from '../utils/polyline';
+import type { ChatMessage, DestinationContext, TransitRoute, Coordinates } from '../types';
+
+const { width, height } = Dimensions.get('window');
+const MAP_HEIGHT = height * 0.45;
+
+// Travel mode options
+const TRAVEL_MODES: { mode: TravelMode; label: string; icon: typeof Car }[] = [
+  { mode: 'WALK', label: 'Walk', icon: Footprints },
+  { mode: 'TRANSIT', label: 'Transit', icon: Train },
+  { mode: 'DRIVE', label: 'Drive', icon: Car },
+];
 
 // Calculate distance between two coordinates in meters
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -47,10 +71,29 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 }
 
+// Format distance for display
+function formatDistance(meters: number): string {
+  if (meters < 1000) {
+    return `${Math.round(meters)} m`;
+  }
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+// Format duration for display
+function formatDuration(minutes: number): string {
+  if (minutes < 60) {
+    return `${Math.round(minutes)} min`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const mins = Math.round(minutes % 60);
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
 export default function NavigationScreen() {
   const router = useRouter();
   const timeOfDay = useTimeOfDay();
   const scrollViewRef = useRef<ScrollView>(null);
+  const mapRef = useRef<MapView>(null);
 
   // Store state
   const currentDestination = useNavigationStore((state) => state.currentDestination);
@@ -72,31 +115,15 @@ export default function NavigationScreen() {
   const [route, setRoute] = useState<TransitRoute | null>(currentRoute);
   const [hasArrived, setHasArrived] = useState(false);
   const [distanceToDestination, setDistanceToDestination] = useState<number | null>(null);
+  const [selectedMode, setSelectedMode] = useState<TravelMode>('WALK');
+  const [isLoadingRoute, setIsLoadingRoute] = useState(false);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [showSteps, setShowSteps] = useState(false);
 
   const currency = coordinates ? detectCurrency(coordinates) : { code: 'USD', symbol: '$', name: 'US Dollar' };
 
-  // Build static map URL
-  const buildStaticMapUrl = () => {
-    if (!coordinates || !currentDestination) return null;
-
-    const apiKey = config.googlePlacesApiKey;
-    let url = `https://maps.googleapis.com/maps/api/staticmap?`;
-    url += `size=600x400&scale=2&maptype=roadmap`;
-
-    // User location (blue)
-    url += `&markers=color:blue%7C${coordinates.latitude},${coordinates.longitude}`;
-
-    // Destination (red)
-    url += `&markers=color:red%7C${currentDestination.coordinates.latitude},${currentDestination.coordinates.longitude}`;
-
-    // Route path if available
-    if (route?.polyline) {
-      url += `&path=color:0x007AFF%7Cweight:4%7Cenc:${encodeURIComponent(route.polyline)}`;
-    }
-
-    url += `&key=${apiKey}`;
-    return url;
-  };
+  // Decode polyline for map
+  const routeCoordinates = route?.polyline ? decodePolyline(route.polyline) : [];
 
   // Sync messages with conversation
   useEffect(() => {
@@ -114,22 +141,41 @@ export default function NavigationScreen() {
     }
   }, [messages]);
 
-  // Fetch route when destination is set
+  // Fetch route when destination is set or mode changes
   useEffect(() => {
     async function fetchRoute() {
-      if (coordinates && currentDestination && !route) {
-        console.log('[Navigation] Fetching route...');
-        const fetchedRoute = await getWalkingDirections(coordinates, currentDestination.coordinates);
+      if (coordinates && currentDestination) {
+        setIsLoadingRoute(true);
+        console.log('[Navigation] Fetching route with mode:', selectedMode);
+        const fetchedRoute = await getDirections(coordinates, currentDestination.coordinates, selectedMode);
         if (fetchedRoute) {
           setRoute(fetchedRoute);
           startNavigation(currentDestination, fetchedRoute);
+          setCurrentStepIndex(0);
         }
+        setIsLoadingRoute(false);
       }
     }
     fetchRoute();
-  }, [currentDestination, coordinates]);
+  }, [currentDestination, coordinates, selectedMode]);
 
-  // Check for arrival
+  // Fit map to show route
+  useEffect(() => {
+    if (mapRef.current && routeCoordinates.length > 0 && coordinates) {
+      const allCoords = [
+        coordinates,
+        ...routeCoordinates,
+        currentDestination?.coordinates,
+      ].filter(Boolean) as Coordinates[];
+
+      mapRef.current.fitToCoordinates(allCoords, {
+        edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+        animated: true,
+      });
+    }
+  }, [routeCoordinates, coordinates]);
+
+  // Check for arrival and update current step
   useEffect(() => {
     if (coordinates && currentDestination && !hasArrived) {
       const distance = calculateDistance(
@@ -140,6 +186,7 @@ export default function NavigationScreen() {
       );
       setDistanceToDestination(distance);
 
+      // Check arrival (within 50 meters)
       if (distance < 50) {
         setHasArrived(true);
         markArrived();
@@ -161,17 +208,25 @@ export default function NavigationScreen() {
           coordinates: currentDestination.coordinates,
         });
       }
+
+      // Update current step based on progress
+      if (route?.steps && route.steps.length > 0) {
+        // Simple heuristic: advance step based on distance completed
+        const totalDistance = route.totalDistance;
+        const remainingDistance = distance;
+        const completedDistance = totalDistance - remainingDistance;
+        const progressRatio = completedDistance / totalDistance;
+        const estimatedStep = Math.min(
+          Math.floor(progressRatio * route.steps.length),
+          route.steps.length - 1
+        );
+        setCurrentStepIndex(Math.max(estimatedStep, 0));
+      }
     }
-  }, [coordinates, currentDestination, hasArrived]);
+  }, [coordinates, currentDestination, hasArrived, route]);
 
   const handleImDone = () => {
     router.replace('/');
-  };
-
-  const handleOpenInGoogleMaps = () => {
-    if (!currentDestination) return;
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${currentDestination.coordinates.latitude},${currentDestination.coordinates.longitude}&travelmode=walking`;
-    Linking.openURL(url);
   };
 
   const handleSendMessage = async (messageText?: string, imageBase64?: string) => {
@@ -193,7 +248,7 @@ export default function NavigationScreen() {
     try {
       const memoryContext = getMemoryContext();
       const navigationContext = currentDestination
-        ? `\n\n[NAVIGATION CONTEXT: User is navigating to ${currentDestination.title} at ${currentDestination.address}. Be helpful about the route or destination.]`
+        ? `\n\n[NAVIGATION CONTEXT: User is navigating to ${currentDestination.title} at ${currentDestination.address}. Current step: "${route?.steps[currentStepIndex]?.instruction || 'Starting navigation'}". Distance remaining: ${distanceToDestination ? formatDistance(distanceToDestination) : 'calculating'}. Be helpful about the route or destination.]`
         : '';
 
       const systemContext = coordinates
@@ -307,6 +362,13 @@ export default function NavigationScreen() {
     }
   };
 
+  const handleModeChange = (mode: TravelMode) => {
+    if (mode !== selectedMode) {
+      setSelectedMode(mode);
+      setRoute(null); // Clear current route to trigger refetch
+    }
+  };
+
   if (!currentDestination || !coordinates) {
     return (
       <View style={styles.container}>
@@ -319,14 +381,18 @@ export default function NavigationScreen() {
             <View style={{ width: 40 }} />
           </View>
           <View style={styles.emptyState}>
+            <NavigationIcon size={48} color="#9CA3AF" />
             <Text style={styles.emptyText}>No destination set</Text>
+            <TouchableOpacity style={styles.goBackButton} onPress={() => router.back()}>
+              <Text style={styles.goBackText}>Go back to chat</Text>
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
       </View>
     );
   }
 
-  const staticMapUrl = buildStaticMapUrl();
+  const currentStep = route?.steps[currentStepIndex];
 
   return (
     <View style={styles.container}>
@@ -342,8 +408,8 @@ export default function NavigationScreen() {
             </Text>
             {route && !hasArrived && (
               <Text style={styles.headerSubtitle}>
-                {route.totalDuration} min • {(route.totalDistance / 1000).toFixed(1)} km
-                {distanceToDestination && ` • ${Math.round(distanceToDestination)}m away`}
+                {formatDuration(route.totalDuration)} • {formatDistance(route.totalDistance)}
+                {distanceToDestination && ` • ${formatDistance(distanceToDestination)} away`}
               </Text>
             )}
             {hasArrived && (
@@ -355,6 +421,33 @@ export default function NavigationScreen() {
           ) : (
             <NavigationIcon size={20} color="#007AFF" />
           )}
+        </View>
+
+        {/* Travel Mode Selector */}
+        <View style={styles.modeSelector}>
+          {TRAVEL_MODES.map(({ mode, label, icon: Icon }) => (
+            <TouchableOpacity
+              key={mode}
+              style={[
+                styles.modeButton,
+                selectedMode === mode && styles.modeButtonActive,
+              ]}
+              onPress={() => handleModeChange(mode)}
+            >
+              <Icon
+                size={18}
+                color={selectedMode === mode ? '#FFFFFF' : '#6B7280'}
+              />
+              <Text
+                style={[
+                  styles.modeButtonText,
+                  selectedMode === mode && styles.modeButtonTextActive,
+                ]}
+              >
+                {label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* Arrival Banner */}
@@ -373,104 +466,200 @@ export default function NavigationScreen() {
           </View>
         )}
 
-        {/* Static Map Image */}
+        {/* Interactive Map */}
         <View style={styles.mapContainer}>
-          {staticMapUrl ? (
-            <TouchableOpacity onPress={handleOpenInGoogleMaps} activeOpacity={0.9}>
-              <Image source={{ uri: staticMapUrl }} style={styles.mapImage} resizeMode="cover" />
-              <View style={styles.openInMapsButton}>
-                <ExternalLink size={16} color="#007AFF" />
-                <Text style={styles.openInMapsText}>Open in Google Maps</Text>
-              </View>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.mapPlaceholder}>
-              <NavigationIcon size={48} color="#9CA3AF" />
-              <Text style={styles.mapPlaceholderText}>Loading map...</Text>
+          {isLoadingRoute && (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color="#007AFF" />
+              <Text style={styles.loadingText}>Getting directions...</Text>
             </View>
           )}
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            provider={PROVIDER_GOOGLE}
+            showsUserLocation
+            showsMyLocationButton
+            followsUserLocation={!hasArrived}
+            initialRegion={{
+              latitude: coordinates.latitude,
+              longitude: coordinates.longitude,
+              latitudeDelta: 0.02,
+              longitudeDelta: 0.02,
+            }}
+          >
+            {/* Destination Marker */}
+            <Marker
+              coordinate={currentDestination.coordinates}
+              title={currentDestination.title}
+              description={currentDestination.address}
+            >
+              <View style={styles.destinationMarker}>
+                <MapPin size={24} color="#FFFFFF" fill="#FF3B30" />
+              </View>
+            </Marker>
+
+            {/* Route Polyline */}
+            {routeCoordinates.length > 0 && (
+              <Polyline
+                coordinates={routeCoordinates}
+                strokeColor="#007AFF"
+                strokeWidth={5}
+                lineDashPattern={selectedMode === 'WALK' ? [10, 5] : undefined}
+              />
+            )}
+          </MapView>
         </View>
 
-        {/* Chat Section */}
-        <KeyboardAvoidingView
-          style={styles.chatContainer}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={0}
-        >
-          <ScrollView
-            ref={scrollViewRef}
-            style={styles.messagesScroll}
-            contentContainerStyle={styles.messagesContent}
-            showsVerticalScrollIndicator={false}
+        {/* Current Step Display */}
+        {currentStep && !hasArrived && (
+          <TouchableOpacity
+            style={styles.stepCard}
+            onPress={() => setShowSteps(!showSteps)}
+            activeOpacity={0.9}
           >
-            {messages.slice(-10).map((message) => (
+            <View style={styles.stepContent}>
+              <View style={styles.stepIconContainer}>
+                {currentStep.mode === 'walk' && <Footprints size={24} color="#007AFF" />}
+                {currentStep.mode === 'train' && <Train size={24} color="#007AFF" />}
+                {currentStep.mode === 'bus' && <Train size={24} color="#FF9500" />}
+                {currentStep.mode === 'taxi' && <Car size={24} color="#34C759" />}
+              </View>
+              <View style={styles.stepDetails}>
+                <Text style={styles.stepInstruction}>{currentStep.instruction}</Text>
+                {currentStep.details && (
+                  <Text style={styles.stepExtra}>{currentStep.details}</Text>
+                )}
+                {currentStep.line && (
+                  <Text style={styles.stepLine}>
+                    {currentStep.line} {currentStep.direction && `→ ${currentStep.direction}`}
+                  </Text>
+                )}
+              </View>
+              <View style={styles.stepMeta}>
+                <Text style={styles.stepDuration}>{formatDuration(currentStep.duration)}</Text>
+                {currentStep.distance && (
+                  <Text style={styles.stepDistance}>{formatDistance(currentStep.distance)}</Text>
+                )}
+              </View>
+            </View>
+            <View style={styles.stepProgress}>
+              <Text style={styles.stepProgressText}>
+                Step {currentStepIndex + 1} of {route?.steps.length || 1}
+              </Text>
+              <ChevronRight size={16} color="#9CA3AF" />
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* Expanded Steps List */}
+        {showSteps && route?.steps && !hasArrived && (
+          <ScrollView style={styles.stepsListContainer} showsVerticalScrollIndicator={false}>
+            {route.steps.map((step, index) => (
               <View
-                key={message.id}
+                key={`step-${index}`}
                 style={[
-                  styles.messageBubble,
-                  message.role === 'user' ? styles.userBubble : styles.assistantBubble,
+                  styles.stepListItem,
+                  index === currentStepIndex && styles.stepListItemActive,
+                  index < currentStepIndex && styles.stepListItemCompleted,
                 ]}
               >
-                {message.image && (
-                  <Image
-                    source={{ uri: `data:image/jpeg;base64,${message.image}` }}
-                    style={styles.messageImage}
-                  />
-                )}
-                <Text
-                  style={[
-                    styles.messageText,
-                    message.role === 'user' ? styles.userText : styles.assistantText,
-                  ]}
-                >
-                  {message.content}
-                </Text>
+                <View style={styles.stepListNumber}>
+                  <Text style={styles.stepListNumberText}>{index + 1}</Text>
+                </View>
+                <View style={styles.stepListContent}>
+                  <Text style={styles.stepListInstruction}>{step.instruction}</Text>
+                  <Text style={styles.stepListMeta}>
+                    {formatDuration(step.duration)} • {step.distance ? formatDistance(step.distance) : ''}
+                  </Text>
+                </View>
               </View>
             ))}
-            {isSending && (
-              <View style={[styles.messageBubble, styles.assistantBubble]}>
-                <Text style={[styles.messageText, styles.assistantText]}>Thinking...</Text>
-              </View>
-            )}
           </ScrollView>
+        )}
 
-          {/* Input - iMessage style */}
-          <View style={styles.inputContainer}>
-            <TouchableOpacity style={styles.iconButton} onPress={handleCamera}>
-              <Camera size={22} color={colors.text.light.secondary} />
-            </TouchableOpacity>
-
-            <View style={styles.textInputContainer}>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Ask about the route..."
-                placeholderTextColor={colors.text.light.tertiary}
-                value={inputText}
-                onChangeText={setInputText}
-                onSubmitEditing={() => handleSendMessage()}
-                returnKeyType="send"
-                multiline
-                maxLength={500}
-              />
-              {inputText.trim() ? (
-                <TouchableOpacity
-                  style={styles.sendButtonInline}
-                  onPress={() => handleSendMessage()}
-                  disabled={isSending}
+        {/* Chat Section */}
+        {!showSteps && (
+          <KeyboardAvoidingView
+            style={styles.chatContainer}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={0}
+          >
+            <ScrollView
+              ref={scrollViewRef}
+              style={styles.messagesScroll}
+              contentContainerStyle={styles.messagesContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {messages.slice(-10).map((message) => (
+                <View
+                  key={message.id}
+                  style={[
+                    styles.messageBubble,
+                    message.role === 'user' ? styles.userBubble : styles.assistantBubble,
+                  ]}
                 >
-                  <Send size={18} color="#FFFFFF" />
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={[styles.micButtonInline, isRecording && styles.recordingButton]}
-                  onPress={handleVoicePress}
-                >
-                  <Mic size={18} color={isRecording ? '#FF3B30' : '#8E8E93'} />
-                </TouchableOpacity>
+                  {message.image && (
+                    <Image
+                      source={{ uri: `data:image/jpeg;base64,${message.image}` }}
+                      style={styles.messageImage}
+                    />
+                  )}
+                  <Text
+                    style={[
+                      styles.messageText,
+                      message.role === 'user' ? styles.userText : styles.assistantText,
+                    ]}
+                  >
+                    {message.content}
+                  </Text>
+                </View>
+              ))}
+              {isSending && (
+                <View style={[styles.messageBubble, styles.assistantBubble]}>
+                  <Text style={[styles.messageText, styles.assistantText]}>Thinking...</Text>
+                </View>
               )}
+            </ScrollView>
+
+            {/* Input - iMessage style */}
+            <View style={styles.inputContainer}>
+              <TouchableOpacity style={styles.iconButton} onPress={handleCamera}>
+                <Camera size={22} color={colors.text.light.secondary} />
+              </TouchableOpacity>
+
+              <View style={styles.textInputContainer}>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Ask about the route..."
+                  placeholderTextColor={colors.text.light.tertiary}
+                  value={inputText}
+                  onChangeText={setInputText}
+                  onSubmitEditing={() => handleSendMessage()}
+                  returnKeyType="send"
+                  multiline
+                  maxLength={500}
+                />
+                {inputText.trim() ? (
+                  <TouchableOpacity
+                    style={styles.sendButtonInline}
+                    onPress={() => handleSendMessage()}
+                    disabled={isSending}
+                  >
+                    <Send size={18} color="#FFFFFF" />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.micButtonInline, isRecording && styles.recordingButton]}
+                    onPress={handleVoicePress}
+                  >
+                    <Mic size={18} color={isRecording ? '#FF3B30' : '#8E8E93'} />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        )}
       </SafeAreaView>
     </View>
   );
@@ -517,10 +706,54 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.md,
   },
   emptyText: {
     fontSize: 16,
     color: colors.text.light.secondary,
+  },
+  goBackButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: 8,
+    marginTop: spacing.md,
+  },
+  goBackText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  modeSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    gap: 6,
+  },
+  modeButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  modeButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  modeButtonTextActive: {
+    color: '#FFFFFF',
   },
   arrivalBanner: {
     backgroundColor: '#E8F5E9',
@@ -559,44 +792,154 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   mapContainer: {
-    height: 220,
+    height: MAP_HEIGHT,
     backgroundColor: '#E5E7EB',
   },
-  mapImage: {
-    width: '100%',
-    height: 220,
-  },
-  mapPlaceholder: {
+  map: {
     flex: 1,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 10,
   },
-  mapPlaceholderText: {
+  loadingText: {
+    marginTop: spacing.sm,
     fontSize: 14,
-    color: '#9CA3AF',
-    marginTop: 8,
+    color: '#6B7280',
   },
-  openInMapsButton: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  destinationMarker: {
+    backgroundColor: '#FF3B30',
     borderRadius: 20,
-    gap: 6,
+    padding: 4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 3,
   },
-  openInMapsText: {
-    fontSize: 13,
+  stepCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+    borderRadius: 12,
+    padding: spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  stepContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  stepIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#E3F2FD',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepDetails: {
+    flex: 1,
+  },
+  stepInstruction: {
+    fontSize: 16,
     fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  stepExtra: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  stepLine: {
+    fontSize: 13,
     color: '#007AFF',
+    marginTop: 4,
+  },
+  stepMeta: {
+    alignItems: 'flex-end',
+  },
+  stepDuration: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  stepDistance: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  stepProgress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  stepProgressText: {
+    fontSize: 13,
+    color: '#9CA3AF',
+  },
+  stepsListContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    marginTop: spacing.md,
+    marginHorizontal: spacing.md,
+    borderRadius: 12,
+    padding: spacing.md,
+    maxHeight: 200,
+  },
+  stepListItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: spacing.sm,
+    gap: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  stepListItemActive: {
+    backgroundColor: '#E3F2FD',
+    marginHorizontal: -spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+  },
+  stepListItemCompleted: {
+    opacity: 0.5,
+  },
+  stepListNumber: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepListNumberText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  stepListContent: {
+    flex: 1,
+  },
+  stepListInstruction: {
+    fontSize: 14,
+    color: '#1F2937',
+  },
+  stepListMeta: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
   },
   chatContainer: {
     flex: 1,
