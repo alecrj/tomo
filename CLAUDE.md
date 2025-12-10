@@ -1,608 +1,1193 @@
-# Tomo — AI Travel Companion (Global)
+# Tomo — The Revolutionary Travel Companion
 
-## 🚀 Quick Start for New Sessions
+**The Vision:** ChatGPT that always knows where you are, can show maps, navigate you anywhere, and remembers everything about your trip.
 
-**To continue building:**
+**The Pitch:** "Like Strava for running, but Tomo for travel" - Beautiful shareable trip recaps that drive viral growth.
+
+**Current Status:** Pivoting from destination-card-first to chat-first architecture
+
+---
+
+## 🎯 The Core Insight
+
+**Everyone already uses ChatGPT for travel. The problems are:**
+
+1. ❌ You have to tell it where you are every time
+2. ❌ It can't show you maps
+3. ❌ It can't navigate you there
+4. ❌ It loses context between conversations
+
+**Tomo fixes all 4:**
+
+1. ✅ Automatically knows your exact location (GPS)
+2. ✅ Shows inline maps in chat
+3. ✅ Navigates with full-screen map + chat bar
+4. ✅ Remembers everything (preferences, budget, history, your whole trip)
+
+**This is the app that doesn't exist:**
+- Google Maps can't remember you're vegetarian
+- ChatGPT can't show you a map or navigate
+- TripAdvisor can't have a conversation
+- Tomo does all three, seamlessly
+
+---
+
+## 🚀 The Four Revolutionary Features
+
+### 1. **Location Context (Always-On)**
+
+Tomo automatically knows:
+- 📍 Your exact GPS coordinates
+- 🌆 City, neighborhood, country
+- ⏰ Local time (morning/afternoon/evening/night)
+- 🌡️ Current weather
+- 🏠 Your home base (hotel/accommodation)
+- 📏 Distance from home
+
+**You never say "I'm in Bangkok" - it already knows.**
+
+### 2. **Persistent Memory (Never Re-Explain)**
+
+Tomo remembers:
+- 🧠 Preferences (vegetarian, no spicy, budget-conscious)
+- 📍 Everywhere you've been (no duplicate suggestions)
+- 💰 Budget (daily allocation, spending, remaining)
+- ❤️ What you liked/disliked about places
+- 👥 Travel context (solo, with partner, with kids)
+- 🏠 Home base for "take me home" and last train warnings
+
+**You never say "I'm vegetarian" twice - it's in memory.**
+
+### 3. **Conversational Navigation (Seamless Modes)**
+
+**Companion Mode (Default):**
+- Full-screen chat like iMessage
+- Place cards and photos inline
+- Voice input (Whisper transcription)
+- Camera for menus/signs
+
+**Navigation Mode (When navigating):**
+- Map at top (70%) showing route
+- Chat bar at bottom (30%) for questions
+- Real-time turn-by-turn
+- Can ask "Is this the right street?" while navigating
+
+**Place Mode (When you arrive):**
+- Back to chat with place-specific context
+- Menu recommendations, cultural tips
+- Log expenses, send photos
+- "I'm done here" to complete visit
+
+**Transitions are automatic and smooth - no app switching feeling.**
+
+### 4. **Shareable Trip Recaps (Growth Mechanism)**
+
+At any time: "Show me my trip"
+
 ```
-Read CLAUDE.md. Last session completed location debugging (Dec 9).
+Your Bangkok Trip 🇹🇭
+Dec 1-5, 2024
 
-Current state: App is feature-complete and uses real GPS.
-Next: Test on real device to verify location-based suggestions work globally.
+23 places visited • ฿9,450 spent
 
-Continue from where we left off.
+[Beautiful map with all your pins]
+[Photo gallery from your camera rolls]
+[Complete conversation history]
+
+Budget: ฿550 under! 💪
+Top places: Thipsamai, Chatuchak Market, Sky Bar
+
+[Export as PDF] [Share Map Link] [Post to Instagram]
 ```
 
-**Key Files to Reference**:
-- `CLAUDE.md` (this file) - Complete project context
-- `app/index.tsx` - Main home screen
-- `services/location.ts` - GPS location tracking (NO hardcoded data)
-- `services/claude.ts` - AI destination generation
-- `constants/config.ts` - API keys and dev override (null by default)
+**Like Strava for running:**
+- Beautiful, postable
+- Shows your journey visually
+- Friends see it, want to try Tomo
+- Viral growth mechanism
 
 ---
 
-## Vision
-Replace Google Maps + ChatGPT + travel guides with one app. User opens Tomo anywhere in the world, sees what to do right now, asks questions, gets useful answers, navigates easily.
+## 📱 The Complete User Experience
 
-**Current Status**: ✅ Feature-complete MVP ready for testing
+### First Open
 
-## Core Loop (What's Built)
-1. App knows: **location, time, weather, budget, preferences, history** ✅
-2. Shows: **ONE contextual destination** (not 3 moves - singular recommendation) ✅
-3. User can: **navigate with transit, ask questions, log expenses** ✅
-4. AI is: **specific, actionable, budget-aware, contextual** ✅
+```
+┌─────────────────────────────────┐
+│  Tomo                      ⚙️   │
+├─────────────────────────────────┤
+│                                 │
+│  Hi! I see you're in Bangkok,   │
+│  Thailand. I'm Tomo, your AI    │
+│  travel companion.              │
+│                                 │
+│  I can help you:                │
+│  • Find places to eat           │
+│  • Navigate anywhere            │
+│  • Translate menus & signs      │
+│  • Track your budget            │
+│  • Remember your whole trip     │
+│                                 │
+│  What would you like to do?     │
+│                                 │
+├─────────────────────────────────┤
+│ [📷] [Type message...] [🎤]    │
+└─────────────────────────────────┘
+```
 
-## Complete Feature Set
+Settings button (top right) for:
+- Set home base
+- Trip budget
+- Dietary restrictions
+- Interests
+- View memory
 
-### ✅ AI Destination Generation
-- Claude generates one perfect destination based on full context
-- Factors: location, time, weather, budget remaining, walking done today, preferences, visit history
-- "Something else" excludes destinations for the day
-- Works in **any city globally** (not Tokyo-specific)
-- Uses Google Places API to enrich with real data (photos, hours, ratings)
+---
 
-### ✅ Smart Navigation
-- Transit directions with real train/bus lines via Google Routes API
-- Step-by-step instructions with duration and distance
-- Interactive map with route polyline overlay
-- Arrival detection (50m geofence triggers companion mode)
-- Works globally wherever Google Routes has data
+### Finding Food
 
-### ✅ Last Train Warnings (THE MOAT)
-- Extracts actual last train times from Google Routes API
-- **Proactive warnings at 90 min (info), 60 min (warning), 30 min (urgent)**
-- Prevents getting stranded late at night
-- Calculates time remaining and offers "get directions home"
-- **This is the killer feature** - expensive to build, extremely valuable
+**You:** I'm hungry
 
-### ✅ Companion Mode
-- Area-aware chat when user arrives at destination
-- Claude has full context (location, time, destination, conversation history)
-- Quick actions: Scan (camera placeholder), Add Expense, Explore Nearby
-- "I'm done here" records visit and returns to home
+**Tomo:** [Checks: location, time (7:30 PM), budget, memory (vegetarian), history]
 
-### ✅ Budget Tracking
-- Set trip budget and duration in settings
-- Automatic daily budget calculation
-- Add expense modal with categories (Food, Transport, Shopping, Activity, Other)
-- Real-time budget bar on home screen
-- Tracks spending by day
-- Soft limits (Claude suggests going over if experience is worth it)
+Great! What vibe - street food or sit-down restaurant?
 
-### ✅ Settings & Preferences
-- **Home base** - For last train warnings and "take me home"
-- **Trip budget** - Total budget and trip duration
-- **Budget level** - Budget/Moderate/Luxury (affects AI suggestions)
-- **Walking tolerance** - Low/Medium/High (affects distance suggestions)
-- **Dietary restrictions** - Vegetarian, vegan, gluten-free, halal, kosher
-- **Interests** - Food, culture, nightlife, nature, shopping, iconic
-- **Avoid crowds** - Preference for less touristy spots
-- All preferences persist via AsyncStorage
+**You:** Street food
 
-## Screens (All Built)
+**Tomo:** Perfect! I recommend:
 
-1. **Home Screen** ✅
-   - AI-generated destination card with "See more" and "Take me there"
-   - Budget bar showing daily allocation and spending
-   - Quick actions (Camera, Add Expense, Stamps)
-   - Chat input (placeholder - not wired to anything yet)
-   - Settings button in header
-   - Setup warnings if API keys missing
+```
+┌─────────────────────────────────┐
+│ [Photo of restaurant]           │
+│                                 │
+│ 🍜 Thipsamai Pad Thai           │
+│ ⭐ 4.6 • $$ • 8 min walk        │
+│                                 │
+│ Famous since 1966. Their pad    │
+│ thai is legendary (฿80-120).    │
+│ They have vegetarian options!   │
+│                                 │
+│ [Mini map showing location]     │
+│                                 │
+│ Budget: ฿1,850 left today       │
+│                                 │
+│ [Take me there] [Something else]│
+└─────────────────────────────────┘
+```
 
-2. **Destination Detail Screen** ✅
-   - Hero image, title, rating, price level, category
-   - Open/closed status badge
-   - "Why now" explanation (highlighted)
-   - "What it is" full description
-   - "When to go" timing advice
-   - Transit preview with icon
-   - Estimated cost
-   - Full hours
-   - "Spots you might like" with details
-   - "Something else" and "Take me there" actions
+---
 
-3. **Navigation Screen** ✅
-   - Interactive map with route polyline and markers
-   - Step-by-step transit instructions
-   - Real-time location tracking
-   - Urgent warning banner for last train alerts
-   - Back button to return
+### Navigation
 
-4. **Companion Mode Screen** ✅
-   - Area-aware chat with Claude
-   - Initial greeting with destination context
-   - Message history with user/assistant bubbles
-   - Quick actions: Scan, Expense, Explore Nearby
-   - "I'm done here" button to complete visit
+**You:** [Tap "Take me there"]
 
-5. **Settings Screen** ✅
-   - Home base configuration
-   - Budget setup with daily preview
-   - Walking tolerance selection
-   - Dietary restrictions (multi-select)
-   - Interests (multi-select)
-   - Avoid crowds toggle
-   - Form validation and persistence
+**Screen smoothly transitions:**
 
-6. **Add Expense Modal** ✅
-   - Amount input with ¥ symbol
-   - Category selection grid with emojis
-   - Optional note field
-   - Integrates with BudgetStore
-   - Available from home screen and companion mode
+```
+┌─────────────────────────────────┐
+│  ← Thipsamai • 8 min walk       │
+├─────────────────────────────────┤
+│                                 │
+│                                 │
+│      FULL MAP WITH ROUTE        │
+│   Blue polyline showing path    │
+│   Your location (blue dot)      │
+│   Destination (red pin)         │
+│                                 │
+│                                 │
+│                                 │
+├─────────────────────────────────┤
+│ Walk south on Sukhumvit Rd      │
+│ for 200 meters                  │
+├─────────────────────────────────┤
+│ Quick question?                 │
+│ [Type...] or [🎤]              │
+└─────────────────────────────────┘
+```
 
-## What's NOT Built Yet
+**While walking, you ask:**
 
-**Goal:** Replace ChatGPT + Google Maps + Reddit for travelers
+**You:** 🎤 [Hold button] "Is this the right street?"
 
-### 🎯 **Tier 1: MUST HAVE** (Core Experience)
+**Tomo:** [Whisper transcribes → sends to Claude with GPS context]
 
-#### 1. 🔲 General Chat Functionality (IN PROGRESS)
-**Status:** Chat input exists on home screen but not wired
+Yes! You're on Sukhumvit headed the right way. Keep going 150 meters, you'll see the BTS station on your right. The restaurant is just past that.
+
+**You:** 📷 [Send photo of sign in Thai]
+
+**Tomo:** That sign says "Massage Parlor" - you're close! The restaurant is the next building, look for the orange awning with Thai text.
+
+---
+
+### At the Place
+
+**[Geofence detects arrival - map shrinks back to chat]**
+
+**Tomo:** You're here! 🎉
+
+Menu recommendations:
+• Pad Thai Hoi Tod (฿120) - their famous version with crispy oyster omelette
+• Regular Pad Thai (฿80) - classic, ask for no fish sauce (vegetarian)
+
+Budget: ฿1,730 left today
+
+**You:** 📷 [Photo of menu in Thai]
+
+**Tomo:** Perfect! This menu shows:
+
+Line 3: ผัดไทยหอยทอด (Pad Thai Hoi Tod) - ฿120
+Line 5: ผัดไทยธรรมดา (Regular Pad Thai) - ฿80
+
+Both are great! For vegetarian, go with Line 5 and say "mai sai nam pla" (no fish sauce).
+
+**After eating:**
+
+**Tomo:** How was it? Want to log the expense?
+
+**You:** Yes ฿90
+
+**Tomo:** Logged! ฿90 for food at Thipsamai. ฿1,640 left today.
+
+What's next? More exploring or heading back?
+
+**You:** I'm done here
+
+**Tomo:** Great! Visit logged. You've been to 3 places today.
+
+Want another recommendation or taking a break?
+
+---
+
+### Multi-City Trip
+
+**[Next day, location changes to Chiang Mai]**
+
+**Tomo:** I see you're in Chiang Mai now! 🌄
+
+How was Bangkok?
+
+**You:** It was amazing
+
+**Tomo:** Awesome! Your Bangkok summary:
+• 3 days, 12 places visited
+• ฿5,200 spent (under budget!)
+• Favorites: Thipsamai, Chatuchak Market
+
+Want to set a new home base in Chiang Mai?
+
+**You:** Yes, I'm at Akyra Manor
+
+**Tomo:** Perfect! Akyra Manor set as home.
+
+Ready to explore Chiang Mai? I know great vegetarian spots here too.
+
+---
+
+### Trip Recap (The Growth Feature)
+
+**You:** Show me my trip
+
+```
+┌─────────────────────────────────┐
+│  Your Thailand Trip 🇹🇭          │
+│  Dec 1-5, 2024                  │
+├─────────────────────────────────┤
+│                                 │
+│   [BEAUTIFUL MAP]               │
+│   Bangkok pins (blue)           │
+│   Chiang Mai pins (green)       │
+│   Lines connecting journey      │
+│                                 │
+├─────────────────────────────────┤
+│ 2 cities • 23 places • ฿9,450   │
+│                                 │
+│ 📍 Bangkok (Dec 1-3)            │
+│    12 places • ฿5,200           │
+│    Thipsamai, Chatuchak, Wat Pho│
+│                                 │
+│ 📍 Chiang Mai (Dec 4-5)         │
+│    11 places • ฿4,250           │
+│    Doi Suthep, Night Market     │
+│                                 │
+│ 💰 Budget: ฿550 under! 💪       │
+│    Food: 44% | Transport: 16%   │
+│                                 │
+│ 📸 43 photos from your camera   │
+│                                 │
+├─────────────────────────────────┤
+│ [Export PDF] [Share Map] [IG]  │
+└─────────────────────────────────┘
+```
+
+**Share map generates:**
+- Public link: tomo.app/trips/abc123
+- Shows map + places + photos
+- No conversation (privacy)
+- Call to action: "Plan your trip with Tomo"
+
+**Instagram story generates:**
+- Beautiful graphic with map
+- Stats overlay
+- "Made with Tomo" branding
+- Link in bio
+
+---
+
+## 🏗️ Technical Architecture
+
+### App Modes (State Machine)
+
+```
+companion_mode (default)
+    ↓ [user taps "take me there"]
+navigation_mode
+    ↓ [geofence: arrived at destination]
+place_mode (companion_mode with place context)
+    ↓ [user says "I'm done" or asks new question]
+companion_mode
+
+recap_mode (accessible anytime: "show me my trip")
+```
+
+### Data Stores (Zustand + AsyncStorage)
+
+1. **useConversationStore**
+   - messages: ChatMessage[]
+   - currentConversation: Conversation
+   - All messages persist
+
+2. **useMemoryStore**
+   - memories: Memory[] (likes, dislikes, preferences, avoid, personal_info, feedback)
+   - getMemoryContext() → formatted string for Claude
+
+3. **useTripStore**
+   - currentTrip: Trip
+   - cities: City[] (multi-city tracking)
+   - visits: Visit[]
+   - setHomeBase()
+   - detectCityChange()
+
+4. **useBudgetStore**
+   - tripBudget, dailyBudget
+   - expenses: Expense[]
+   - remainingToday, remainingTrip
+
+5. **useLocationStore**
+   - coordinates, city, country, neighborhood
+   - homeBase, distanceFromHome
+   - isAtHomeBase
+
+6. **useNavigationStore**
+   - state: idle | navigating | at_destination
+   - currentDestination, currentRoute
+   - startNavigation(), completeVisit()
+
+7. **usePreferencesStore**
+   - budgetLevel, walkingTolerance
+   - dietaryRestrictions, interests
+   - avoidCrowds
+
+8. **useWeatherStore**
+   - condition, temperature, description
+
+9. **useStampsStore** (future: gamification)
+
+### Message Types
+
+```typescript
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: number;
+
+  // User messages
+  image?: string; // base64
+  audioUri?: string;
+
+  // Assistant messages with rich content
+  placeCard?: {
+    name: string;
+    photo: string;
+    rating: number;
+    priceLevel: number;
+    address: string;
+    distance: string;
+    openNow: boolean;
+    hours?: string;
+    estimatedCost?: string;
+  };
+
+  inlineMap?: {
+    center: Coordinates;
+    markers?: Marker[];
+    route?: {
+      polyline: string;
+      duration: string;
+      distance: string;
+    };
+  };
+
+  actions?: Array<{
+    label: string; // "Take me there", "Something else", "Show photos"
+    type: 'navigate' | 'regenerate' | 'show_photos' | 'log_expense';
+    payload?: any;
+  }>;
+}
+```
+
+### Services
+
+1. **claude.ts**
+   - chat(messages, context) → response
+   - Context includes: location, time, weather, budget, memory, history
+   - Can return structured JSON for place cards + maps
+
+2. **voice.ts**
+   - startRecording() → audioUri
+   - stopRecording() → audioUri
+   - transcribeAudio(audioUri) → text (via Whisper backend)
+
+3. **camera.ts**
+   - takePhoto() → base64
+   - pickPhoto() → base64
+   - Send to Claude vision
+
+4. **places.ts**
+   - searchPlace(name, location) → place details
+   - getPlaceDetails(placeId) → full info
+   - searchNearby(location, type) → places
+
+5. **routes.ts**
+   - getTransitDirections() → route with polyline
+   - getWalkingDirections() → route
+   - getMinutesUntilLastTrain() → number
+
+6. **tripRecap.ts** (new)
+   - generateRecapMap() → map image with pins
+   - generatePDF() → full trip journal
+   - generateShareableLink() → public URL
+   - generateIGStory() → story graphic
+
+### UI Components
+
+1. **ChatScreen** (app/index.tsx)
+   - Default screen, full-screen chat
+   - Messages with inline content
+   - Input bar with voice/camera
+   - Collapsible budget bar at top
+
+2. **MessageBubble**
+   - Renders text, images, place cards, maps, actions
+   - User bubbles: right-aligned, blue
+   - Assistant bubbles: left-aligned, white
+
+3. **PlaceCard** (inline component)
+   - Photo, name, rating, price, distance
+   - "Open now" badge
+   - Action buttons at bottom
+
+4. **InlineMap** (inline component)
+   - Small MapView (height: 200)
+   - Tappable to expand to navigation
+   - Shows center point or route
+
+5. **NavigationScreen**
+   - Full map at top (70%)
+   - Chat bar at bottom (30%)
+   - Turn-by-turn in message above chat
+
+6. **TripRecapScreen**
+   - Map with all pins colored by city
+   - Timeline of visits
+   - Stats (places, spending, photos)
+   - Export buttons
+
+7. **VoiceRecordingUI**
+   - Waveform animation
+   - Timer
+   - "Release to send" or "Slide to cancel"
+
+---
+
+## 🛠️ What's Already Built vs. What Needs Building
+
+### Already Built ✅
+
+**Stores:**
+- ✅ useMemoryStore (complete)
+- ✅ useConversationStore (complete)
+- ✅ useTripStore (visits, expenses)
+- ✅ useBudgetStore (complete)
+- ✅ useLocationStore (GPS tracking)
+- ✅ useNavigationStore (state machine)
+- ✅ usePreferencesStore (complete)
+- ✅ useWeatherStore (complete)
+
+**Services:**
+- ✅ claude.ts (chat with context)
+- ✅ places.ts (Google Places API)
+- ✅ routes.ts (Google Routes API)
+- ✅ camera.ts (photo capture + vision)
+- ✅ voice.ts (recording - needs transcription)
+- ✅ location.ts (GPS, reverse geocoding)
+- ✅ weather.ts (OpenWeatherMap)
+
+**Screens:**
+- ✅ app/index.tsx (chat interface exists but not default)
+- ✅ app/navigation.tsx (map + chat exists!)
+- ✅ app/settings.tsx (all preferences)
+- ✅ app/memory.tsx (view/manage memories)
+- ✅ app/conversations.tsx (conversation list)
 
 **Features:**
-- Modal chat from home screen (not just in companion mode)
-- Works anywhere, anytime - no need to be at destination
-- Full context awareness (location, time, weather, budget, preferences)
-- Ask anything: "What's near me?", "Good lunch spots?", "Translate this"
-- Remembers last 10 messages for conversation context
+- ✅ Memory system with 6 types
+- ✅ Conversation threading
+- ✅ Budget tracking with daily allocation
+- ✅ Trip visit logging
+- ✅ Home base system
+- ✅ Last train warnings
+- ✅ Multi-city detection (basic)
+- ✅ Camera integration with Claude vision
+- ✅ Voice recording (no transcription yet)
 
-**Why Critical:** Core value prop - AI companion that answers any question
+### Needs Building 🔨
 
----
+**1. Chat-First UI Redesign** (3-4 hours)
+- Make app/index.tsx the default screen (not destination cards)
+- Remove auto-destination generation on load
+- Start with Tomo greeting message
+- Inline place cards in messages (component)
+- Inline maps in messages (component)
+- Action buttons in messages
 
-#### 2. 📷 Camera / Vision Integration (HIGH PRIORITY)
-**The Problem:** Travelers constantly need visual help
-- "What does this menu say?" → Translate Japanese menu
-- "Is this a good price?" → Scan receipt, analyze
-- "What train do I take?" → Photo of train map
-- "What is this dish?" → Point camera at food
+**2. Whisper Voice Transcription** (2-3 hours)
+- Backend server with Whisper API
+- Deploy to Railway/Vercel
+- Update services/voice.ts to call backend
+- Integration with chat flow
 
-**Current State:** Button exists but placeholder only (companion mode + quick actions)
+**3. Trip Recap Screen** (4-5 hours)
+- Generate map with all trip pins
+- Timeline view by city/day
+- Stats visualization
+- Photo gallery from visits
+- Export to PDF
+- Shareable link generation
+- Instagram story template
 
-**Implementation:**
-- Camera component with image capture
-- Base64 encode image
-- Send to Claude `chat()` with image (already supports it - line 224-238 in claude.ts)
-- Claude responds with translation/analysis
-- "This is a tonkotsu ramen menu. The signature bowl is ¥980. I recommend it."
+**4. Multi-City Intelligence** (2-3 hours)
+- Enhance city change detection
+- Prompt for new home base on city change
+- City-based trip summaries
+- Trip data structure with cities array
 
-**Why Critical:** Massive value for travelers in foreign countries. Chat alone isn't enough.
+**5. Proactive Messaging** (2 hours)
+- System messages for city changes
+- Budget warnings in chat
+- Last train reminders in chat
+- Arrival celebrations
 
----
+**6. Polish** (2-3 hours)
+- Smooth mode transitions
+- Loading states
+- Error handling
+- Animations (subtle)
+- Testing flows
 
-#### 3. 📜 Trip History & Memory (HIGH PRIORITY)
-**The Problem:** No way to see where you've been or search past places
-
-**What's Missing:**
-- Visual trip map showing all visited places
-- List view of visit history with search
-- "Where was that ramen place from Tuesday?"
-- Timeline view by day
-- Stats: "15 places visited, 8km walked, ¥12,450 spent"
-
-**Current State:** Visits stored in useTripStore but no UI to view them
-
-**Features to Build:**
-- Trip history screen (tap on stamps/history icon)
-- Interactive map with pins for visited places
-- Search/filter by name, category, date
-- Tap visit → see details, add photo
-- Export trip summary
-
-**Why Critical:** Memory is core to travel experience - sharing & remembering
-
----
-
-#### 4. 🎭 Events & Happenings (HIGH PRIORITY)
-**The Problem:** Users still Google/Reddit "what's happening tonight?"
-
-**What Travelers Ask:**
-- "What's happening in Bangkok tonight?"
-- "Any festivals this weekend?"
-- "Where are locals going?"
-- "Is there a night market on Thursdays?"
-
-**Implementation:**
-- Integrate events API (Google Events, Eventbrite, local sources)
-- Claude includes in destination suggestions: "There's a night market at Rot Fai tonight (Thu/Fri/Sat only)"
-- Filter by: tonight, this weekend, free, paid
-- Add to chat context so Claude can suggest events
-
-**Why Critical:** Major gap vs. ChatGPT/Reddit - local knowledge
+**Total: 15-20 hours of focused work**
 
 ---
 
-### 🔧 **Tier 2: SHOULD HAVE** (Competitive Advantage)
+## 📋 Implementation Plan (Phases)
 
-#### 5. 📸 Photo Memory
-**Features:**
-- Attach photos to visited places
-- Photo diary view
-- "Camera roll" of trip organized by location
-- Share trip photos with context
+### Phase 1: Whisper Backend Setup (FIRST - 2 hours)
 
-**Why Important:** Visual memory is powerful, Instagram integration potential
+**Why first:** Voice transcription is essential for the experience.
 
----
+**Steps:**
+1. Create `tomo-whisper-backend/` repo
+2. Simple Express server with `/transcribe` endpoint
+3. Receives audio file, sends to OpenAI Whisper API
+4. Returns transcription text
+5. Deploy to Railway (free tier)
+6. Update services/voice.ts with backend URL
+7. Test: Record → Transcribe → Chat
 
-#### 6. 💬 Real User Reviews & Social Proof
-**The Problem:** Users still Google reviews
+**Files to create:**
+- Backend: server.js, package.json, vercel.json
+- Update: services/voice.ts
 
-**What's Missing:**
-- Show actual Google reviews, not just rating
-- "347 reviews" → expandable list
-- Recent visitor photos
-- Reddit-style insights: "90% said: worth it for sunset"
-- "Local vs tourist" score
-- Sentiment analysis: "Great food, slow service"
+**See WHISPER_BACKEND.md for detailed setup**
 
-**Current State:** Only shows Google rating (4.2 ⭐)
+### Phase 2: Chat-First UI (4-5 hours)
 
-**Why Important:** Trust - people want to see what others say
+**Goal:** App opens to chat, not destination cards.
 
----
+**Steps:**
+1. Redesign app/index.tsx:
+   - Remove destination card generation on load
+   - Start with Tomo greeting (references location)
+   - Full-screen chat interface
+   - Collapsible budget bar at top
 
-#### 7. 🔧 Practical Travel Helpers
-**Things Travelers Google Constantly:**
-- Currency conversion: "How much is 1000 baht?"
-- Tipping customs: "Do I tip in Japan?"
-- Local etiquette: "Can I wear shorts in temples?"
-- Emergency phrases: "How do I say 'bathroom'?"
-- SIM card/wifi: "Where to get SIM at airport?"
-- Visa info, power adapters, emergency numbers
+2. Create inline components:
+   - components/PlaceCard.tsx (inline in messages)
+   - components/InlineMap.tsx (small MapView in messages)
+   - components/ActionButtons.tsx (button array)
 
-**Implementation:**
-- Claude can answer in chat
-- Quick reference section in settings
-- "Survival guide" for current country
-- Auto currency conversion in chat
+3. Update MessageBubble rendering:
+   - Render text
+   - If message.placeCard, render PlaceCard
+   - If message.inlineMap, render InlineMap
+   - If message.actions, render ActionButtons
 
-**Why Important:** Eliminates need for Google searches
+4. Update Claude prompt:
+   - Return structured JSON when suggesting places
+   - Include place details, whether to show map, actions
 
----
+5. Handle action buttons:
+   - "Take me there" → Start navigation
+   - "Something else" → Regenerate (add to excluded)
+   - "Show photos" → Fetch more photos
 
-#### 8. 🧠 Smarter Chat Memory
-**Current Limitations:**
-- Only remembers last 10 messages (line 218 claude.ts)
-- Doesn't remember "that place you suggested yesterday"
-- Can't reference photos from earlier
-- No long-term learning
+**Files to modify:**
+- app/index.tsx (major redesign)
+- services/claude.ts (structured responses)
 
-**Improvements:**
-- Persistent conversation memory (store in AsyncStorage)
-- Reference visit history: "Remember when you suggested..."
-- Long-term preference learning: "You always skip museums"
-- Cross-session context: "Last trip you loved street food"
+**Files to create:**
+- components/PlaceCard.tsx
+- components/InlineMap.tsx
+- components/ActionButtons.tsx
 
-**Why Important:** Feels more like real companion
+### Phase 3: Navigation Polish (2-3 hours)
 
----
+**Goal:** Smooth transition from chat to map navigation.
 
-### 🎨 **Tier 3: NICE TO HAVE** (Polish & Growth)
+**Current state:** app/navigation.tsx already has map + chat!
 
-#### 9. 📅 Multi-Day Planning
-**Current Philosophy:** ONE moment at a time (which is GOOD)
+**Steps:**
+1. Test transition from "Take me there" → navigation screen
+2. Ensure chat bar at bottom works for questions
+3. Add voice input in navigation chat bar
+4. Test arrival detection → back to chat
+5. Add visual feedback for mode transitions
 
-**But Some Users Want:**
-- "Plan my whole day" → Morning/afternoon/evening
-- "What should I do tomorrow?"
-- "3-day Bangkok itinerary"
-- Book ahead for popular spots
+**Files to modify:**
+- app/navigation.tsx (minor polish)
+- app/index.tsx (handle navigation trigger)
 
-**Implementation:**
-- "Plan tomorrow" button
-- Generates rough itinerary (4-5 suggestions)
-- Still flexible, not rigid checklist
+### Phase 4: Trip Recap (4-5 hours)
 
-**Why Nice:** Power users, longer trips
+**Goal:** Beautiful shareable trip summaries.
 
----
+**Steps:**
+1. Create app/recap.tsx screen:
+   - Map with all visit pins (react-native-maps)
+   - Color pins by city
+   - Timeline breakdown by city/day
+   - Stats (places, spending, photos)
 
-#### 10. 🔲 Stamp Books / Passport System
-**Vision**: Country-based milestone tracking with photo uploads
+2. Create services/tripRecap.ts:
+   - generateRecapData() → full trip stats
+   - generateShareableLink() → public URL
+   - exportToPDF() → PDF generation
+   - generateIGStory() → story image
 
-**Proposed Structure:**
-- Country-based stamp books (not city-based):
-  - Thailand Essentials (20 milestones)
-  - Japan Essentials (20 milestones)
-  - Optional city sub-sections within country
+3. Add "Show me my trip" trigger:
+   - User can ask in chat
+   - Claude response triggers recap screen
+   - Or button in settings
 
-**Features:**
-- Browse stamp books for different countries
-- Track completed milestones
-- Upload photos for each stamp
-- Progress indicators (5/20 complete)
-- Celebratory animations when completing book
+4. Shareable link backend:
+   - Simple endpoint: GET /trips/:id
+   - Returns public trip view
+   - Shows map + places + stats (no conversation)
 
-**Why Country vs. City:**
-- Easier to curate (20 per country vs. 20 per city)
-- Encourages multi-city exploration
-- Less overwhelming
+**Files to create:**
+- app/recap.tsx
+- services/tripRecap.ts
+- Backend: share endpoint (optional for MVP)
 
-**Why Nice:** Gamification, but not core to utility
+### Phase 5: Multi-City Intelligence (2-3 hours)
 
----
+**Goal:** Seamless multi-city trip tracking.
 
-#### 11. 📤 Sharing & Social
-**Features:**
-- Share destination with friend
-- Export trip as PDF/shareable link
-- "Send my route to friend visiting Tokyo"
-- Instagram story integration
-- Collaborative trips (shared itinerary)
+**Steps:**
+1. Enhance useTripStore:
+   - cities: City[] array
+   - currentCity tracking
+   - detectCityChange() logic
 
-**Why Nice:** Growth/virality
+2. City change detection:
+   - Watch coordinates changes
+   - When new city detected:
+     - Add system message to chat
+     - Tomo responds: "I see you're in [city]! How was [old city]?"
+     - Offer to set new home base
 
----
+3. City-based summaries:
+   - When leaving city, generate mini-recap
+   - "Your Bangkok summary: 12 places, ฿5,200 spent"
 
-#### 12. 🎫 Booking & Reservations
-**What Users Still Leave App For:**
-- Book restaurant reservation
-- Buy train tickets
-- Reserve hotel
-- Book tour/activity
+4. Home base management:
+   - Allow setting new home base per city
+   - Last train warnings relative to current city's home
 
-**Implementation:**
-- Deep links to booking platforms
-- "Reserve on OpenTable" button
-- Affiliate revenue opportunity
+**Files to modify:**
+- stores/useTripStore.ts
+- app/index.tsx (handle city changes)
+- types/index.ts (Trip interface)
 
-**Why Nice:** Revenue, but complex partnerships
+### Phase 6: Polish & Testing (2-3 hours)
 
----
+**Goal:** Production-ready quality.
 
-#### 13. 📵 Offline Mode
-**The Problem:** Everything requires internet
+**Steps:**
+1. Smooth transitions between modes
+2. Loading states for all async operations
+3. Error handling (no internet, API failures)
+4. Empty states (no messages yet, no trips yet)
+5. Onboarding flow (first-time setup)
+6. Test complete flows end-to-end:
+   - Find place → Navigate → Arrive → Log expense
+   - Multi-day trip → City change → Recap
+   - Voice input → Camera → Translation
 
-**Solutions:**
-- Download area map for offline
-- Cache recent destinations/chat
-- Save directions offline
-- Last train times cached
+7. Performance optimization:
+   - Message list virtualization if needed
+   - Image compression
+   - Debounce location updates
 
-**Why Nice:** Edge case, most travelers have data
-
----
-
-#### 14. 🔲 Onboarding Flow
-**Current State:** No first-time setup wizard
-
-**Features:**
-- Guide through settings configuration
-- Explain key features (last train warnings, budget)
-- Set location permissions
-- Configure home base
-
-**Why Nice:** Better first impression, but not blocking
-
----
-
-#### 15. 🔲 Walking Directions Fallback
-**Current State:** Shows alert but no walking route
-
-**Fix:**
-- Use Google Routes API walking mode
-- When transit unavailable, show walking directions
-
-**Why Nice:** Edge case, transit usually available
+**Files to modify:**
+- All screens (polish)
+- Add loading/error states
 
 ---
 
-#### 16. 🔲 Animations & Polish
-**Missing:**
-- Micro-interactions on button presses
-- Smooth transitions between screens
-- Loading skeletons instead of text
-- Haptic feedback
-- Splash screen
+## 🎯 Success Criteria (When Is It Done?)
 
-**Why Nice:** Premium feel, but functional already
+### Must Have (Core Experience)
 
-## Tech Stack (What's Used)
+1. ✅ App opens to chat with location-aware greeting
+2. ✅ User can type or voice message with Whisper transcription
+3. ✅ Claude responses include inline place cards when suggesting places
+4. ✅ Inline maps appear when discussing locations
+5. ✅ "Take me there" button triggers navigation mode smoothly
+6. ✅ Navigation shows map + chat bar, can ask questions while navigating
+7. ✅ Arrival triggers place mode with contextual help
+8. ✅ Memory system works (never re-explain preferences)
+9. ✅ Budget tracking updates automatically
+10. ✅ "Show me my trip" generates beautiful recap with map
+11. ✅ Trip recap is shareable (link or image)
+12. ✅ Zero TypeScript errors, no crashes
 
-- **React Native** + Expo + TypeScript
-- **Expo Router** for file-based routing
-- **Zustand** for state management (7 stores)
-- **AsyncStorage** for persistence (settings, budget, visits)
-- **Claude API** (REST, not SDK for RN compatibility)
-  - Model: claude-sonnet-4-20250514
-  - Destination generation + chat
-- **Google Places API (New)** for place data enrichment
-- **Google Routes API v2** for transit directions and last train times
-- **OpenWeatherMap** for real-time weather (optional, falls back to mock)
-- **react-native-maps** for map visualization
-- **expo-location** for location tracking
-- **Lucide React Native** for icons (no emojis in UI)
+### Should Have (Enhanced Experience)
 
-## Architecture
+1. ✅ Multi-city trip tracking with automatic detection
+2. ✅ City change prompts for new home base
+3. ✅ Proactive warnings (last train, budget)
+4. ✅ Camera for menu/sign translation
+5. ✅ Photo gallery in trip recap
+6. ✅ Export to PDF
+7. ✅ Instagram story generation
 
-### State Management (Zustand Stores)
-1. **useDestinationsStore** - Current destination, loading, excluded IDs
-2. **useNavigationStore** - Navigation state machine (idle → viewing → navigating → companion)
-3. **useWarningsStore** - Proactive alerts (last train, closing times, weather)
-4. **useBudgetStore** - Trip budget, daily budget, expenses, computed getters
-5. **usePreferencesStore** - User preferences, home base, interests, dietary
-6. **useTripStore** - Visit history, walking minutes, completed destinations
-7. **useStampsStore** - Stamp completion tracking (not wired yet)
-8. **useLocationStore** - Coordinates, neighborhood, address
-9. **useWeatherStore** - Condition, temperature, description
+### Nice to Have (Polish)
 
-### Services (External APIs)
-- **claude.ts** - AI destination generation and chat
-- **places.ts** - Google Places enrichment (searchPlace, searchNearby, getPlaceDetails)
-- **routes.ts** - Transit directions (getTransitDirections, getWalkingDirections, getMinutesUntilLastTrain)
-- **weather.ts** - OpenWeatherMap integration
-
-### Hooks (Orchestration)
-- **useDestinationGeneration** - Builds full context, calls Claude, handles auto-generation
-- **useLocation** - Location tracking with permissions
-- **useWeather** - Weather fetching with fallback to mock
-- **useTimeOfDay** - Returns morning/afternoon/evening/night based on hour
-
-### Key Files
-- **types/index.ts** - All TypeScript interfaces (Destination, TransitRoute, Visit, Expense, etc.)
-- **constants/theme.ts** - Design system (colors, typography, spacing, shadows)
-- **constants/config.ts** - API keys and feature flags
-- **utils/setupCheck.ts** - API key validation
-- **utils/polyline.ts** - Google Maps polyline decoder
-
-## Location Compatibility
-
-**The app works globally, not just Tokyo:**
-- Claude can generate destinations for any location (just needs coordinates)
-- Google Places/Routes have global coverage
-- Weather API works worldwide
-- All location logic is coordinate-based, not city-hardcoded
-
-**To use in a new city:**
-1. Just open the app in that city
-2. Location automatically updates
-3. Claude generates destinations for current location
-4. Works in Bangkok, Phuket, Chiang Mai, Osaka, Kyoto, anywhere with Google Maps data
-
-**Minor Tokyo references to update:**
-- Claude prompt mentions "Tokyo" - should be dynamic based on city
-- Mock data uses Tokyo neighborhoods - not a blocker for testing
-
-## The Moat (Why This is Hard to Replicate)
-
-**Last Train Warnings** are the differentiator:
-1. Requires parsing Google Routes API transit details
-2. Extracting departure times from localizedValues
-3. Parsing time strings ("11:47 PM") to Date objects
-4. Calculating time remaining in real-time
-5. Creating proactive warnings at specific thresholds
-6. Offering contextual "get directions home"
-
-**Why this matters:**
-- Every travel app shows how to get places
-- None tell you when you need to leave to get home
-- Prevents expensive taxis or getting stranded
-- Extremely valuable, expensive to build correctly
-
-## Design Principles
-
-- **Premium aesthetic** - Airbnb/Uber quality level
-- **Contextual, not generic** - Every suggestion is specific to right now
-- **One confident recommendation** - Not 10 options to choose from
-- **Proactive, not reactive** - Warnings before problems happen
-- **Companion, not checklist** - Organic discovery over rigid itineraries
-- **Dark text on light backgrounds** - Easy to read in sunlight
-- **No emojis in UI** - Professional, clean design
-- **Lucide icons only** - Consistent, premium look
-
-## Testing & Deployment
-
-**Current Status**: ✅ Feature-complete MVP, ready for real-world testing
-
-**Setup Complete**:
-1. ✅ API keys configured in `.env`:
-   - `EXPO_PUBLIC_CLAUDE_API_KEY` (configured)
-   - `EXPO_PUBLIC_GOOGLE_PLACES_API_KEY` (configured)
-   - `EXPO_PUBLIC_WEATHER_API_KEY` (configured)
-
-2. ✅ Google APIs enabled:
-   - Places API (New)
-   - Routes API
-   - Maps SDK
-
-3. ✅ Run: `npx expo start`
-
-**Location Tracking**:
-- App uses **real GPS** by default (no hardcoded locations)
-- `expo-location` automatically gets device coordinates
-- Console logs show detected coordinates: `[Location] Got GPS coordinates: ...`
-
-**Testing Environments**:
-1. **iOS Simulator**: Defaults to San Francisco or Tokyo coordinates
-   - Change in Simulator: Features → Location → Custom Location
-   - Or use dev override in `constants/config.ts` (line 11) for testing
-2. **Real Device**: GPS works automatically, uses actual location
-3. **Dev Override**: Set `DEV_LOCATION_OVERRIDE` in config.ts for testing specific cities (null by default)
-
-**See TESTING.md for complete guide**
-
-## Last Session Summary (Dec 9, 2024)
-
-**What Was Done**:
-1. ✅ Verified API keys are configured in `.env`
-2. ✅ Investigated location tracking - confirmed app uses real GPS
-3. ✅ Added console logging to debug location detection
-4. ✅ Added dev location override feature in `constants/config.ts` (set to null by default)
-5. ✅ Updated `services/location.ts` to support dev override and log coordinates
-6. ✅ Removed all hardcoded/mock location data (removed "Lunch at Tsukiji" mock expense)
-
-**Key Discovery**:
-- App is working correctly - it uses real GPS via `expo-location`
-- "Tokyo data" appears when testing in iOS Simulator because simulator defaults to Tokyo coordinates
-- Solution: Test on real device OR change simulator location (Features → Location → Custom Location)
-
-**Current State**:
-- ✅ App runs successfully with `npx expo start`
-- ✅ All API keys configured
-- ✅ Location tracking functional (real GPS, no hardcoded data)
-- ✅ Console logs show detected coordinates
-- ✅ Ready for real-world testing on actual device
-
-**What to Test Next**:
-1. Run on real device to verify location-based destination generation
-2. Test in different cities (should work globally)
-3. Verify Claude generates contextual suggestions based on actual location
-4. Test "Something else" button to exclude and regenerate destinations
-
-**Files Modified This Session**:
-- `constants/config.ts` - Added `DEV_LOCATION_OVERRIDE` (null by default)
-- `services/location.ts` - Added dev override support and console logging
-- `app/index.tsx` - Removed mock expense data ("Lunch at Tsukiji")
-- `CLAUDE.md` - Updated with session summary and quick start guide
+1. ⭕ Smooth animations between modes
+2. ⭕ Haptic feedback
+3. ⭕ Offline mode (cached data)
+4. ⭕ Group trips (shared chat + budget)
+5. ⭕ Multi-language support
 
 ---
 
-## Context Preservation for Compaction
+## 🔑 Key Technical Details
 
-When chat compacts and you need to continue:
+### Whisper Backend
 
-**Essential Context (DON'T LOSE THIS)**:
-1. **App works globally** - Not Tokyo-specific despite initial vision
-2. **Location uses real GPS** - NO hardcoded data, `expo-location` gets device coordinates
-3. **Stamp books should be country-based** - Thailand, Japan, etc. with optional city sub-sections
-4. **Last train warnings are THE MOAT** - The killer feature that's expensive to replicate
-5. **Single destination architecture** - NOT 3 moves, ONE confident recommendation
-6. **All core features are complete** - Chat, navigation, budget tracking, settings all work
-7. **Stamps are the only major missing feature** - Everything else is nice-to-have polish
+See WHISPER_BACKEND.md for complete setup.
 
-**Current Architecture Summary**:
-- 9 Zustand stores (all complete except Stamps not wired)
-- 3 service files (claude, places, routes)
-- 6 screens (all built)
-- Navigation state machine: idle → viewing_detail → navigating → companion_mode
-- Budget tracking: set trip budget → calculate daily → log expenses → update bar
-- Location tracking: real GPS → store coordinates → pass to Claude for destination generation
+**Quick overview:**
+```javascript
+// server.js
+const express = require('express');
+const multer = require('multer');
+const FormData = require('form-data');
+const axios = require('axios');
 
-**API Structure**:
-- Claude: POST to /v1/messages with context object (location, time, weather, budget, preferences, history)
-- Google Places: searchPlace, searchNearby, getPlaceDetails for enrichment
-- Google Routes: computeRoutes with TRANSIT mode, extract lastTrain from transitDetails
+const app = express();
+const upload = multer({ storage: multer.memoryStorage() });
 
-**Location Flow**:
-1. `useLocation` hook calls `getCurrentLocation()` from `services/location.ts`
-2. `expo-location` gets real GPS coordinates (or uses dev override if set)
-3. Coordinates stored in `useLocationStore`
-4. Passed to `useDestinationGeneration` hook
-5. Sent to Claude API with full context
-6. Claude generates destination for actual current location
+app.post('/transcribe', upload.single('audio'), async (req, res) => {
+  const formData = new FormData();
+  formData.append('file', req.file.buffer, { filename: 'audio.m4a' });
+  formData.append('model', 'whisper-1');
 
-**Next Priority if Building Stamps**:
-1. Create stamp book data structure (country → cities → milestones)
-2. Build stamps screen UI (list of countries, tap to see milestones)
-3. Add photo upload for each completed milestone
-4. Show completion history and progress
-5. Wire to useStampsStore (already exists but empty)
+  const response = await axios.post(
+    'https://api.openai.com/v1/audio/transcriptions',
+    formData,
+    {
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        ...formData.getHeaders(),
+      },
+    }
+  );
 
-**If Continuing from Compacted Chat**:
-- Reference this CLAUDE.md first
-- Check README.md for complete project overview
-- Check TESTING.md for testing instructions
-- All code is production-ready, just need to add stamp books if desired
-- App uses real GPS - no hardcoded locations
+  res.json({ text: response.data.text });
+});
+
+app.listen(3000);
+```
+
+Deploy to Railway, set OPENAI_API_KEY env var.
+
+Update services/voice.ts:
+```typescript
+export async function transcribeAudio(audioUri: string): Promise<string | null> {
+  const formData = new FormData();
+  formData.append('audio', {
+    uri: audioUri,
+    type: 'audio/m4a',
+    name: 'recording.m4a',
+  });
+
+  const response = await fetch(process.env.EXPO_PUBLIC_WHISPER_BACKEND_URL + '/transcribe', {
+    method: 'POST',
+    body: formData,
+  });
+
+  const { text } = await response.json();
+  return text;
+}
+```
+
+**Cost:** ~$0.006 per minute of audio (negligible)
+
+### Claude Structured Responses
+
+Update services/claude.ts to parse structured JSON:
+
+```typescript
+// Prompt engineering
+const systemPrompt = `...
+When suggesting places, respond with JSON:
+{
+  "text": "Conversational response",
+  "placeCard": {
+    "name": "Restaurant Name",
+    "photo": "url",
+    "rating": 4.6,
+    "priceLevel": 2,
+    "distance": "8 min walk",
+    "openNow": true,
+    "hours": "9 AM - 10 PM",
+    "estimatedCost": "฿120"
+  },
+  "showMap": true,
+  "actions": [
+    {"label": "Take me there", "type": "navigate"},
+    {"label": "Something else", "type": "regenerate"}
+  ]
+}
+...`;
+
+// Parse response
+try {
+  const structured = JSON.parse(response);
+  return {
+    content: structured.text,
+    placeCard: structured.placeCard,
+    inlineMap: structured.showMap ? { /* generate map data */ } : undefined,
+    actions: structured.actions,
+  };
+} catch {
+  // Fallback to plain text
+  return { content: response };
+}
+```
+
+### Inline Map Component
+
+```typescript
+// components/InlineMap.tsx
+export function InlineMap({ center, markers, route }) {
+  return (
+    <View style={styles.mapContainer}>
+      <MapView
+        style={styles.map}
+        provider={PROVIDER_GOOGLE}
+        region={{
+          latitude: center.latitude,
+          longitude: center.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }}
+        scrollEnabled={false}
+        zoomEnabled={false}
+      >
+        {markers?.map(marker => (
+          <Marker key={marker.id} coordinate={marker.coordinate} />
+        ))}
+        {route && (
+          <Polyline
+            coordinates={decodePolyline(route.polyline)}
+            strokeColor="#007AFF"
+            strokeWidth={3}
+          />
+        )}
+      </MapView>
+      <TouchableOpacity
+        style={styles.expandButton}
+        onPress={() => router.push('/navigation')}
+      >
+        <Text>Tap to navigate</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  mapContainer: {
+    height: 200,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginVertical: 8,
+  },
+  map: {
+    flex: 1,
+  },
+  expandButton: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'white',
+    padding: 8,
+    borderRadius: 8,
+  },
+});
+```
+
+### Place Card Component
+
+```typescript
+// components/PlaceCard.tsx
+export function PlaceCard({ placeCard, onTakeMeThere, onSomethingElse }) {
+  return (
+    <View style={styles.card}>
+      <Image source={{ uri: placeCard.photo }} style={styles.photo} />
+      <View style={styles.content}>
+        <Text style={styles.name}>{placeCard.name}</Text>
+        <View style={styles.meta}>
+          <Text>⭐ {placeCard.rating}</Text>
+          <Text>{'$'.repeat(placeCard.priceLevel)}</Text>
+          <Text>{placeCard.distance}</Text>
+        </View>
+        {placeCard.openNow && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>Open now</Text>
+          </View>
+        )}
+        {placeCard.hours && (
+          <Text style={styles.hours}>{placeCard.hours}</Text>
+        )}
+        {placeCard.estimatedCost && (
+          <Text style={styles.cost}>~{placeCard.estimatedCost}</Text>
+        )}
+      </View>
+      <View style={styles.actions}>
+        <TouchableOpacity style={styles.primaryButton} onPress={onTakeMeThere}>
+          <Text style={styles.primaryButtonText}>Take me there</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={onSomethingElse}>
+          <Text style={styles.secondaryButtonText}>Something else</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+```
+
+---
+
+## 🚦 Development Workflow
+
+### For Continuation Sessions
+
+**Starting a new chat:**
+1. Read CLAUDE.md (this file) - complete context
+2. Check MIGRATION_PLAN.md for current phase
+3. Run `git status` to see uncommitted changes
+4. Continue from current phase
+
+**During development:**
+1. Make changes to files
+2. Test with `npx expo start`
+3. Commit frequently with descriptive messages
+4. Update MIGRATION_PLAN.md when phase complete
+
+**Before ending session:**
+1. Commit all changes
+2. Update MIGRATION_PLAN.md with current status
+3. Document any blockers or decisions needed
+
+### Commands Reference
+
+```bash
+# Start development server
+npx expo start --clear
+
+# Type checking
+npx tsc --noEmit
+
+# Git workflow
+git add .
+git commit -m "feat: descriptive message"
+git push origin main
+
+# EAS build (when ready)
+eas build --profile development --platform ios
+```
+
+---
+
+## 📝 Important Notes
+
+### Things That Must Not Change
+
+1. **Memory system** - Already complete, works perfectly
+2. **Conversation store** - Threading works, keep it
+3. **Budget tracking** - Solid implementation
+4. **Navigation screen** - Map + chat already built!
+5. **Service layer** - Claude, Places, Routes all work
+
+### Things That Must Change
+
+1. **Default screen** - From destination cards to chat
+2. **Message rendering** - Add inline place cards and maps
+3. **Voice transcription** - Add Whisper backend
+4. **Trip recap** - Build from scratch
+
+### Design Principles
+
+1. **Chat-first** - Everything accessible through conversation
+2. **Context-aware** - Always use location, memory, budget
+3. **Seamless transitions** - Mode changes feel natural
+4. **Visual when needed** - Maps and photos inline, not separate screens
+5. **Voice-enabled** - Whisper transcription is essential
+6. **Shareable results** - Trip recaps must be beautiful and postable
+
+### Performance Considerations
+
+1. **Message list** - Use FlatList for virtualization if >100 messages
+2. **Images** - Compress before sending to Claude
+3. **Location updates** - Debounce to avoid excessive API calls
+4. **Map rendering** - Only render when visible, unload when not
+
+### Privacy & Data
+
+1. **Conversations** - Stored locally (AsyncStorage)
+2. **Memory** - Stored locally
+3. **Trip data** - Stored locally
+4. **Shareable links** - Only include public data (no conversations)
+5. **Photos** - Not uploaded unless explicitly sent to Claude
+
+---
+
+## 🎯 The Moat (Why This Is Hard to Copy)
+
+1. **Multi-modal integration complexity**
+   - Voice (Whisper) + Vision (Claude) + Maps (Google) + Chat (Claude)
+   - Getting all APIs to work together seamlessly is hard
+   - Edge cases and error handling multiply
+
+2. **Context accumulation**
+   - Memory system that learns over time
+   - Budget tracking across days/cities
+   - Trip history that informs suggestions
+   - The more you use it, the smarter it gets
+
+3. **Mode transitions**
+   - Smooth flow between chat and navigation
+   - Inline content rendering
+   - Real-time location awareness
+   - Requires careful state management
+
+4. **Data persistence architecture**
+   - 9 Zustand stores with AsyncStorage
+   - Conversation threading
+   - Multi-city trip structure
+   - Sync between stores
+
+5. **Growth mechanism**
+   - Beautiful trip recaps that people want to share
+   - Viral coefficient from social sharing
+   - Network effects from trip recommendations
+
+---
+
+## 🚀 Go-to-Market Strategy
+
+### Phase 1: Private Beta (Week 1)
+- Test with 10-20 travelers
+- Focus on UX bugs and missing features
+- Iterate on trip recap design (must be shareable)
+
+### Phase 2: Public Beta (Week 2-4)
+- Post on Reddit (r/travel, r/solotravel)
+- Product Hunt launch
+- Focus on getting trip recaps shared on social
+
+### Phase 3: Growth (Month 2+)
+- Instagram/TikTok presence showing trip recaps
+- "Post your Tomo trip" campaign
+- Influencer partnerships (travel bloggers)
+- SEO content (city guides generated by Tomo)
+
+### Pricing
+- Free: Basic features (chat, navigation, memory)
+- Pro ($5/month): Trip recaps, PDF export, unlimited photos
+- Or: Completely free with attribution on shared trips
+
+### Metrics to Track
+- Daily active users
+- Messages sent per user
+- Trip recaps generated
+- Trip recaps shared (MOST IMPORTANT - viral coefficient)
+- Average trip length (engagement)
+- Retention (do they use it for next trip?)
+
+---
+
+## 🎬 The Vision Realized
+
+**When complete, Tomo will be:**
+
+1. **The only app you open on a trip**
+   - No more switching between Maps, ChatGPT, notes
+   - One conversation, everything happens there
+
+2. **Your smartest travel companion**
+   - Knows where you are without asking
+   - Remembers everything about your preferences
+   - Tracks your trip automatically
+   - Warns you before problems
+
+3. **The app people share**
+   - Beautiful trip recaps on Instagram
+   - "How did you make this?" → "With Tomo"
+   - Viral growth through social sharing
+
+4. **Genuinely revolutionary**
+   - Not "AI travel app" (generic)
+   - But "ChatGPT that knows where you are" (clear, unique)
+   - Solves real pain point (app switching + context loss)
+
+**This is the app that doesn't exist yet. Let's build it.**
+
+---
+
+**Last Updated:** December 10, 2024
+**Status:** Ready to pivot from destination-first to chat-first architecture
+**Next:** Create Whisper backend, redesign chat UI, build trip recap
