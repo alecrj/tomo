@@ -91,13 +91,15 @@ export async function transcribeAudio(audioUri: string): Promise<string | null> 
     const backendUrl = process.env.EXPO_PUBLIC_WHISPER_BACKEND_URL;
 
     if (!backendUrl) {
-      console.log('[Voice] No Whisper backend URL configured, using fallback');
-      return '[Voice message - configure WHISPER_BACKEND_URL for transcription]';
+      console.log('[Voice] No Whisper backend URL configured');
+      // Return a placeholder so the user knows voice worked but transcription isn't available
+      return null;
     }
 
     console.log('[Voice] Transcribing audio:', audioUri);
 
     // Create form data for the audio file
+    // Note: Don't set Content-Type header - let fetch auto-generate with boundary
     const formData = new FormData();
     formData.append('audio', {
       uri: audioUri,
@@ -108,9 +110,7 @@ export async function transcribeAudio(audioUri: string): Promise<string | null> 
     const response = await fetch(`${backendUrl}/transcribe`, {
       method: 'POST',
       body: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      // Don't set Content-Type - React Native fetch will auto-set with correct boundary
     });
 
     if (!response.ok) {

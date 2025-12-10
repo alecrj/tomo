@@ -371,6 +371,13 @@ What would you like to do first?`,
         const transcription = await transcribeAudio(audioUri);
         if (transcription) {
           handleSendMessage(transcription);
+        } else {
+          // Transcription failed or backend not configured
+          Alert.alert(
+            'Voice Not Available',
+            'Voice transcription is not configured. Please type your message instead.',
+            [{ text: 'OK' }]
+          );
         }
       }
     } else {
@@ -378,6 +385,12 @@ What would you like to do first?`,
       const started = await startRecording();
       if (started) {
         setIsRecording(true);
+      } else {
+        Alert.alert(
+          'Microphone Permission',
+          'Please allow microphone access to use voice input.',
+          [{ text: 'OK' }]
+        );
       }
     }
   };

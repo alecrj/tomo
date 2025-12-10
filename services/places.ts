@@ -194,3 +194,31 @@ export async function searchPlace(
     return null;
   }
 }
+
+/**
+ * Get photo URL for a place by searching for it
+ * Returns the first photo URL or null if not found
+ */
+export async function getPlacePhotoUrl(
+  placeName: string,
+  coords: Coordinates,
+  maxWidth: number = 400
+): Promise<string | null> {
+  try {
+    const place = await searchPlace(placeName, coords);
+    if (place?.photos && place.photos.length > 0) {
+      return getPhotoUrl(place.photos[0].name, maxWidth);
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting place photo:', error);
+    return null;
+  }
+}
+
+/**
+ * Public accessor for photo URL construction
+ */
+export function buildPhotoUrl(photoName: string, maxWidth: number = 400): string {
+  return getPhotoUrl(photoName, maxWidth);
+}

@@ -1,6 +1,6 @@
 import { Destination, DestinationContext, Coordinates, ChatMessage, PlaceCardData, InlineMapData, MessageAction } from '../types';
 import { config } from '../constants/config';
-import { searchPlace, placeToSpot, searchNearby } from './places';
+import { searchPlace, placeToSpot, searchNearby, getPlacePhotoUrl } from './places';
 import { getApiErrorMessage } from '../utils/setupCheck';
 
 // Structured response from Claude for place recommendations
@@ -343,7 +343,30 @@ export async function chat(
     }
 
     // Parse the response for structured content
-    return parseStructuredResponse(content.text, context.location);
+    const response = parseStructuredResponse(content.text, context.location);
+
+    // Enrich placeCard with real photo from Google Places if present
+    if (response.placeCard && response.placeCard.name) {
+      try {
+        console.log('[Claude] Fetching real photo for:', response.placeCard.name);
+        const photoUrl = await getPlacePhotoUrl(
+          response.placeCard.name,
+          context.location,
+          600 // Higher res for card display
+        );
+        if (photoUrl) {
+          response.placeCard.photo = photoUrl;
+          console.log('[Claude] Photo URL fetched successfully');
+        } else {
+          console.log('[Claude] No photo found for place');
+        }
+      } catch (photoError) {
+        console.error('[Claude] Error fetching place photo:', photoError);
+        // Continue without photo - not critical
+      }
+    }
+
+    return response;
   } catch (error) {
     console.error('Error in chat:', error);
     return {
@@ -374,53 +397,65 @@ function buildChatSystemPrompt(context: DestinationContext): string {
 CURRENT CONTEXT:
 - Location: ${context.neighborhood || 'Unknown'}
 - Time: ${context.timeOfDay}
-- Weather: ${context.weather?.condition}, ${context.weather?.temperature}°C
-- Budget remaining: ¥${context.budgetRemaining}
+- Weather: ${context.weather?.condition || 'unknown'}, ${context.weather?.temperature || '?'}°C
+- Budget remaining today: ${context.budgetRemaining}
 - Walking today: ${context.totalWalkingToday} minutes
 
-Be:
-- Specific and actionable
-- Concise but helpful
-- Context-aware (refer to their location, time, budget)
-- Helpful (give directions, suggestions, warnings)
+YOUR PERSONALITY:
+- Friendly, helpful, concise
+- Local expert who knows hidden gems
+- Practical (considers budget, time, weather)
+- Proactive about useful context
 
-IMPORTANT: When the user asks for place recommendations (food, attractions, cafes, etc.), you MUST respond with a JSON object in this exact format:
-\`\`\`json
-{
-  "text": "Your conversational response here",
-  "placeCard": {
-    "name": "Place Name",
-    "address": "Full address",
-    "rating": 4.5,
-    "priceLevel": 2,
-    "distance": "8 min walk",
-    "openNow": true,
-    "hours": "9 AM - 10 PM",
-    "estimatedCost": "฿120",
-    "coordinates": {"latitude": 0.0, "longitude": 0.0}
-  },
-  "showMap": true,
-  "actions": [
-    {"label": "Take me there", "type": "navigate"},
-    {"label": "Something else", "type": "regenerate"}
-  ]
-}
-\`\`\`
+RESPONSE FORMAT RULES:
 
-For place recommendations:
-- Use REAL places that actually exist
-- Include accurate coordinates (lat/lng)
-- Estimate walking distance from their current location
-- Include estimated cost in LOCAL CURRENCY
-- Consider time of day, weather, and their budget
-- Only set showMap: true if suggesting a specific place
+1. FOR PLACE RECOMMENDATIONS (restaurants, cafes, bars, attractions, shops, etc.):
+   You MUST respond with ONLY a JSON object wrapped in \`\`\`json markers. No text before or after.
 
-For general conversation or questions that don't involve place recommendations, respond normally with plain text (no JSON).
+   Example:
+   \`\`\`json
+   {
+     "text": "I know a perfect spot! This tiny ramen shop is legendary among locals.",
+     "placeCard": {
+       "name": "Ichiran Ramen Shibuya",
+       "address": "1-22-7 Jinnan, Shibuya",
+       "rating": 4.5,
+       "priceLevel": 2,
+       "distance": "8 min walk",
+       "openNow": true,
+       "hours": "11 AM - 2 AM",
+       "estimatedCost": "¥1,200",
+       "coordinates": {"latitude": 35.6614, "longitude": 139.6993}
+     },
+     "showMap": true,
+     "actions": [
+       {"label": "Take me there", "type": "navigate"},
+       {"label": "Something else", "type": "regenerate"}
+     ]
+   }
+   \`\`\`
 
-If they share a photo:
-- Translate any text you see
-- Explain what it is
-- Give actionable advice (e.g., "This is a menu. The tonkotsu ramen is ฿80.")`;
+2. FOR GENERAL QUESTIONS (directions, tips, "what should I know", translation, etc.):
+   Respond with plain text only. No JSON, no code blocks.
+
+3. FOR PHOTO ANALYSIS:
+   - Translate any text you see
+   - Explain what it is
+   - Give actionable advice
+   - Use plain text response
+
+PLACE RECOMMENDATION REQUIREMENTS:
+- Use REAL places that actually exist in ${context.neighborhood || 'the area'}
+- Include accurate GPS coordinates (latitude/longitude)
+- Estimate walking distance from user's current location
+- Use LOCAL CURRENCY for estimatedCost
+- Consider: time of day, weather, their budget, walking tolerance
+- priceLevel: 1=cheap, 2=moderate, 3=expensive, 4=luxury
+- Always include both "Take me there" and "Something else" actions
+
+TRIGGER WORDS for JSON response: "find me", "recommend", "where can I", "I want to eat", "hungry", "thirsty", "coffee", "food", "restaurant", "bar", "cafe", "shop", "attraction", "things to do", "what's nearby"
+
+Remember: For place recommendations, your ENTIRE response must be the JSON block. Nothing else.`;
 }
 
 /**
