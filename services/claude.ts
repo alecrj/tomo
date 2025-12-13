@@ -284,6 +284,15 @@ export async function chat(
   image?: string
 ): Promise<StructuredChatResponse> {
   try {
+    // Debug: Check if API key is loaded
+    const apiKeyPresent = config.claudeApiKey && config.claudeApiKey.length > 0;
+    console.log('[Claude] API key present:', apiKeyPresent, 'Length:', config.claudeApiKey?.length || 0);
+
+    if (!apiKeyPresent) {
+      console.error('[Claude] No API key configured!');
+      return { content: "Claude API key is not configured. Please check your .env file." };
+    }
+
     const systemPrompt = buildChatSystemPrompt(context);
 
     const messages: Array<{
@@ -333,7 +342,9 @@ export async function chat(
     });
 
     if (!chatResponse.ok) {
-      throw new Error(`Claude API error: ${chatResponse.status}`);
+      const errorBody = await chatResponse.text();
+      console.error('[Claude] API error:', chatResponse.status, errorBody);
+      throw new Error(`Claude API error: ${chatResponse.status} - ${errorBody}`);
     }
 
     const chatMessage: any = await chatResponse.json();
@@ -368,9 +379,10 @@ export async function chat(
 
     return response;
   } catch (error) {
-    console.error('Error in chat:', error);
+    console.error('[Claude] Chat error:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return {
-      content: "Sorry, I'm having trouble responding right now. Please try again.",
+      content: `Sorry, I'm having trouble responding: ${errorMessage}`,
     };
   }
 }
