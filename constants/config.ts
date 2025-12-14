@@ -20,6 +20,7 @@ const DEV_LOCATION_OVERRIDE = __DEV__ ? null : null;
 
 export const config = {
   // API Keys
+  openaiApiKey: process.env.EXPO_PUBLIC_OPENAI_API_KEY || '',
   claudeApiKey: process.env.EXPO_PUBLIC_CLAUDE_API_KEY || '',
   weatherApiKey: process.env.EXPO_PUBLIC_WEATHER_API_KEY || '',
   googlePlacesApiKey: process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || '',

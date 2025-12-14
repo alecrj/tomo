@@ -82,7 +82,6 @@ export async function getTransitDirections(
         },
       },
       travelMode: 'TRANSIT',
-      routingPreference: 'TRAFFIC_AWARE',
       computeAlternativeRoutes: false,
       transitPreferences: {
         allowedTravelModes: ['TRAIN', 'SUBWAY', 'BUS'],
@@ -400,12 +399,21 @@ export async function getWalkingDirections(
       }))
     );
 
-    return {
+    const result = {
       steps,
       totalDuration: Math.round(parseDuration(route.duration)),
       totalDistance: route.distanceMeters,
       polyline: route.polyline.encodedPolyline,
     };
+
+    console.log('[Routes] Walking directions fetched:', {
+      steps: result.steps.length,
+      duration: result.totalDuration,
+      distance: result.totalDistance,
+      hasPolyline: !!result.polyline,
+    });
+
+    return result;
   } catch (error) {
     console.error('Error getting walking directions:', error);
     return null;

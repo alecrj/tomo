@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Send, Mic, Camera, Settings, MapPin, Plus, Home, MessageSquare } from 'lucide-react-native';
 import { colors, spacing, typography } from '../constants/theme';
-import { chat, StructuredChatResponse } from '../services/claude';
+import { chat, StructuredChatResponse } from '../services/openai';
 import { takePhoto, pickPhoto } from '../services/camera';
 import { startRecording, stopRecording, cancelRecording, transcribeAudio } from '../services/voice';
 import { useLocationStore } from '../stores/useLocationStore';
@@ -77,16 +77,17 @@ export default function ChatScreen() {
   const startNewConversation = useConversationStore((state) => state.startNewConversation);
   const currentConversationId = useConversationStore((state) => state.currentConversationId);
 
-  // Subscribe to current conversation messages directly (proper Zustand pattern)
-  const currentConversation = useConversationStore((state) => {
-    return state.conversations.find(c => c.id === state.currentConversationId) || null;
-  });
+  // Get conversations array
+  const conversations = useConversationStore((state) => state.conversations);
 
-  // Get messages directly from store (this will trigger re-render when messages change)
-  const messages = useConversationStore((state) => {
-    const conv = state.conversations.find(c => c.id === state.currentConversationId);
-    return conv?.messages || [];
-  });
+  // Derive current conversation and messages with useMemo to avoid infinite loops
+  const currentConversation = useMemo(() => {
+    return conversations.find(c => c.id === currentConversationId) || null;
+  }, [conversations, currentConversationId]);
+
+  const messages = useMemo(() => {
+    return currentConversation?.messages || [];
+  }, [currentConversation]);
 
   // Navigation store
   const viewDestination = useNavigationStore((state) => state.viewDestination);
