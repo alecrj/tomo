@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   Image,
   Dimensions,
   StatusBar,
+  TextInput,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -26,13 +28,22 @@ import {
   Navigation,
   X,
   Star,
+  Search,
+  Send,
+  MessageCircle,
 } from 'lucide-react-native';
 import { colors, spacing, typography, borders, shadows, mapStyle } from '../constants/theme';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useNavigationStore } from '../stores/useNavigationStore';
-import { searchNearby, buildPhotoUrl } from '../services/places';
+import { searchNearby, buildPhotoUrl, searchPlace } from '../services/places';
+import { chat } from '../services/openai';
 import { detectCurrency } from '../utils/currency';
-import type { Coordinates, Destination } from '../types';
+import { useWeatherStore } from '../stores/useWeatherStore';
+import { useBudgetStore } from '../stores/useBudgetStore';
+import { usePreferencesStore } from '../stores/usePreferencesStore';
+import { useTripStore } from '../stores/useTripStore';
+import { useTimeOfDay } from '../hooks/useTimeOfDay';
+import type { Coordinates, Destination, DestinationContext } from '../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -63,11 +74,31 @@ export default function MapExploreScreen() {
   const coordinates = useLocationStore((state) => state.coordinates);
   const neighborhood = useLocationStore((state) => state.neighborhood);
   const viewDestination = useNavigationStore((state) => state.viewDestination);
+  const timeOfDay = useTimeOfDay();
+
+  // Weather and budget for chat context
+  const weatherCondition = useWeatherStore((state) => state.condition);
+  const weatherTemperature = useWeatherStore((state) => state.temperature);
+  const budgetStore = useBudgetStore();
+  const dailyBudget = budgetStore.dailyBudget;
+  const budgetRemaining = budgetStore.remainingToday();
+  const preferences = usePreferencesStore();
+  const visits = useTripStore((state) => state.visits);
+  const totalWalkingMinutes = useTripStore((state) => state.totalWalkingMinutes);
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [places, setPlaces] = useState<PlaceResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Chat state
+  const [chatInput, setChatInput] = useState('');
+  const [isChatting, setIsChatting] = useState(false);
+  const [chatResponse, setChatResponse] = useState<string | null>(null);
 
   const currency = coordinates ? detectCurrency(coordinates) : { symbol: '$' };
 
@@ -184,6 +215,130 @@ export default function MapExploreScreen() {
     }
   };
 
+  // Handle search for places
+  const handleSearch = useCallback(async () => {
+    if (!searchQuery.trim() || !coordinates) return;
+
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
+    Keyboard.dismiss();
+    setIsSearching(true);
+    setSelectedCategory(null);
+    setSelectedPlace(null);
+
+    try {
+      // Search for the place using Google Places API
+      const result = await searchPlace(searchQuery, coordinates);
+
+      if (result) {
+        const mappedPlace: PlaceResult = {
+          id: result.id,
+          name: result.displayName.text,
+          address: result.formattedAddress,
+          coordinates: {
+            latitude: result.location.latitude,
+            longitude: result.location.longitude,
+          },
+          rating: result.rating,
+          priceLevel: result.priceLevel ? getPriceLevelNumber(result.priceLevel) : undefined,
+          isOpen: result.regularOpeningHours?.openNow,
+          photo: result.photos?.[0]?.name ? buildPhotoUrl(result.photos[0].name, 400) : undefined,
+        };
+
+        setPlaces([mappedPlace]);
+        setSelectedPlace(mappedPlace);
+
+        // Animate to the place
+        mapRef.current?.animateToRegion({
+          latitude: mappedPlace.coordinates.latitude,
+          longitude: mappedPlace.coordinates.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }, 500);
+      } else {
+        setPlaces([]);
+        setChatResponse('No places found for "' + searchQuery + '". Try a different search.');
+      }
+    } catch (error) {
+      console.error('[Map] Search error:', error);
+      setChatResponse('Error searching for places. Please try again.');
+    } finally {
+      setIsSearching(false);
+    }
+  }, [searchQuery, coordinates]);
+
+  // Handle chat with Tomo about this area
+  const handleChatSubmit = useCallback(async () => {
+    if (!chatInput.trim() || !coordinates) return;
+
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
+    Keyboard.dismiss();
+    setIsChatting(true);
+    setChatResponse(null);
+
+    try {
+      const context: DestinationContext = {
+        location: coordinates,
+        neighborhood: neighborhood || 'unknown location',
+        timeOfDay,
+        weather: weatherCondition && weatherTemperature ? {
+          condition: weatherCondition,
+          temperature: weatherTemperature,
+          description: `${weatherCondition}, ${weatherTemperature}°C`,
+          humidity: 0,
+        } : null,
+        budgetRemaining,
+        dailyBudget,
+        preferences: {
+          homeBase: preferences.homeBase,
+          walkingTolerance: preferences.walkingTolerance === 'medium' ? 'moderate' : preferences.walkingTolerance,
+          budget: preferences.budgetLevel,
+          dietary: preferences.dietary,
+          interests: preferences.interests,
+          avoidCrowds: preferences.avoidCrowds,
+        },
+        visitedPlaces: visits.slice(-10),
+        completedStamps: [],
+        excludedToday: [],
+        totalWalkingToday: totalWalkingMinutes,
+      };
+
+      const response = await chat(chatInput, context, []);
+
+      setChatResponse(response.content);
+
+      // If the response includes a place, show it on the map
+      if (response.placeCard && response.placeCard.coordinates) {
+        const mappedPlace: PlaceResult = {
+          id: `chat-${Date.now()}`,
+          name: response.placeCard.name,
+          address: response.placeCard.address,
+          coordinates: response.placeCard.coordinates,
+          rating: response.placeCard.rating,
+          priceLevel: response.placeCard.priceLevel,
+          isOpen: response.placeCard.openNow,
+          photo: response.placeCard.photo,
+        };
+
+        setPlaces([mappedPlace]);
+        setSelectedPlace(mappedPlace);
+
+        mapRef.current?.animateToRegion({
+          latitude: mappedPlace.coordinates.latitude,
+          longitude: mappedPlace.coordinates.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }, 500);
+      }
+
+      setChatInput('');
+    } catch (error) {
+      console.error('[Map] Chat error:', error);
+      setChatResponse('Sorry, I had trouble responding. Please try again.');
+    } finally {
+      setIsChatting(false);
+    }
+  }, [chatInput, coordinates, neighborhood, timeOfDay, weatherCondition, weatherTemperature, budgetRemaining, dailyBudget, preferences, visits, totalWalkingMinutes]);
+
   const renderPriceLevel = (level?: number) => {
     if (!level) return null;
     return currency.symbol.repeat(level);
@@ -254,6 +409,37 @@ export default function MapExploreScreen() {
             <Text style={styles.headerSubtitle}>{neighborhood || 'Nearby'}</Text>
           </View>
           <View style={styles.headerSpacer} />
+        </View>
+
+        {/* Search bar */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputContainer}>
+            <Search size={18} color={colors.text.tertiary} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search places..."
+              placeholderTextColor={colors.text.tertiary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onSubmitEditing={handleSearch}
+              returnKeyType="search"
+              keyboardAppearance="dark"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => {
+                  setSearchQuery('');
+                  setPlaces([]);
+                  setSelectedPlace(null);
+                }}
+              >
+                <X size={18} color={colors.text.tertiary} />
+              </TouchableOpacity>
+            )}
+          </View>
+          {isSearching && (
+            <ActivityIndicator size="small" color={colors.accent.primary} style={styles.searchSpinner} />
+          )}
         </View>
 
         {/* Category pills */}
@@ -362,17 +548,72 @@ export default function MapExploreScreen() {
         </View>
       )}
 
-      {/* Empty state */}
-      {!selectedCategory && !isLoading && (
+      {/* Empty state - only show when no search, no category, no chat response */}
+      {!selectedCategory && !isLoading && !selectedPlace && !chatResponse && places.length === 0 && (
         <View style={styles.emptyStateContainer}>
           <View style={styles.emptyState}>
             <MapPin size={24} color={colors.text.secondary} />
             <Text style={styles.emptyStateText}>
-              Select a category above to explore nearby places
+              Search for places or ask Tomo about this area
             </Text>
           </View>
         </View>
       )}
+
+      {/* Chat response bubble */}
+      {chatResponse && !selectedPlace && (
+        <View style={styles.chatResponseContainer}>
+          <View style={styles.chatResponseBubble}>
+            <TouchableOpacity
+              style={styles.chatResponseClose}
+              onPress={() => setChatResponse(null)}
+            >
+              <X size={16} color={colors.text.secondary} />
+            </TouchableOpacity>
+            <View style={styles.chatResponseHeader}>
+              <MessageCircle size={16} color={colors.accent.primary} />
+              <Text style={styles.chatResponseLabel}>Tomo</Text>
+            </View>
+            <Text style={styles.chatResponseText}>{chatResponse}</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Chat input bar at bottom */}
+      <SafeAreaView style={styles.chatInputSafeArea} edges={['bottom']}>
+        <View style={styles.chatInputContainer}>
+          <View style={styles.chatInputWrapper}>
+            <TextInput
+              style={styles.chatInput}
+              placeholder="Ask Tomo about this area..."
+              placeholderTextColor={colors.text.tertiary}
+              value={chatInput}
+              onChangeText={setChatInput}
+              onSubmitEditing={handleChatSubmit}
+              returnKeyType="send"
+              keyboardAppearance="dark"
+              multiline={false}
+            />
+            {chatInput.trim() ? (
+              <TouchableOpacity
+                style={styles.chatSendButton}
+                onPress={handleChatSubmit}
+                disabled={isChatting}
+              >
+                {isChatting ? (
+                  <ActivityIndicator size="small" color={colors.text.inverse} />
+                ) : (
+                  <Send size={16} color={colors.text.inverse} />
+                )}
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.chatSendButtonDisabled}>
+                <Send size={16} color={colors.text.tertiary} />
+              </View>
+            )}
+          </View>
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
@@ -497,11 +738,11 @@ const styles = StyleSheet.create({
   },
   placeCardContainer: {
     position: 'absolute',
-    bottom: 0,
+    bottom: 80, // Above chat input bar
     left: 0,
     right: 0,
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.md,
   },
   placeCard: {
     backgroundColor: colors.background.secondary,
@@ -593,7 +834,7 @@ const styles = StyleSheet.create({
   },
   emptyStateContainer: {
     position: 'absolute',
-    bottom: spacing.xl * 2,
+    bottom: 100, // Above chat input bar
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -612,5 +853,120 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     color: colors.text.secondary,
     maxWidth: 200,
+  },
+  // Search styles
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.secondary,
+    borderRadius: borders.radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    ...shadows.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: typography.sizes.base,
+    color: colors.text.primary,
+    paddingVertical: spacing.xs,
+  },
+  searchSpinner: {
+    marginLeft: spacing.sm,
+  },
+  // Chat input styles
+  chatInputSafeArea: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  chatInputContainer: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.background.secondary,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.muted,
+  },
+  chatInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface.input,
+    borderRadius: borders.radius.xl,
+    borderWidth: 1,
+    borderColor: colors.surface.inputBorder,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  chatInput: {
+    flex: 1,
+    fontSize: typography.sizes.base,
+    color: colors.text.primary,
+    paddingVertical: spacing.sm,
+  },
+  chatSendButton: {
+    width: 32,
+    height: 32,
+    backgroundColor: colors.accent.primary,
+    borderRadius: borders.radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatSendButtonDisabled: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Chat response styles
+  chatResponseContainer: {
+    position: 'absolute',
+    bottom: 100,
+    left: 0,
+    right: 0,
+    paddingHorizontal: spacing.md,
+  },
+  chatResponseBubble: {
+    backgroundColor: colors.background.secondary,
+    borderRadius: borders.radius.xl,
+    padding: spacing.lg,
+    ...shadows.lg,
+  },
+  chatResponseClose: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background.tertiary,
+    borderRadius: borders.radius.full,
+    zIndex: 1,
+  },
+  chatResponseHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  chatResponseLabel: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.accent.primary,
+  },
+  chatResponseText: {
+    fontSize: typography.sizes.base,
+    color: colors.text.primary,
+    lineHeight: 22,
+    paddingRight: spacing.lg,
   },
 });

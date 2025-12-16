@@ -1,11 +1,33 @@
 import { DestinationContext, ChatMessage, PlaceCardData, InlineMapData, MessageAction, Coordinates } from '../types';
-import { getPlacePhotoUrl } from './places';
+import { getPlacePhotoUrl, searchPlace } from './places';
 import { getWalkingDirections } from './routes';
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
 // Get API key from environment
 const getApiKey = () => process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
+
+/**
+ * Verify if a place is currently open using Google Places API
+ */
+async function verifyPlaceOpen(
+  placeName: string,
+  location: Coordinates
+): Promise<{ isOpen: boolean; hours?: string } | null> {
+  try {
+    const place = await searchPlace(placeName, location);
+    if (place) {
+      return {
+        isOpen: place.regularOpeningHours?.openNow ?? true, // Default to true if unknown
+        hours: place.regularOpeningHours?.weekdayDescriptions?.[0],
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('[OpenAI] Error verifying place open status:', error);
+    return null;
+  }
+}
 
 // Structured response from OpenAI for place recommendations
 export interface StructuredChatResponse {
@@ -19,14 +41,47 @@ export interface StructuredChatResponse {
  * Build system prompt for chat
  */
 function buildSystemPrompt(context: DestinationContext): string {
-  return `You are Tomo, a friendly AI travel companion helping a user explore ${context.neighborhood || 'their current location'}.
+  // Get actual local time
+  const now = new Date();
+  const localTime = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const localDate = now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+
+  // Build dietary restrictions string (CRITICAL - must emphasize)
+  const dietaryRestrictions = context.preferences.dietary?.length
+    ? context.preferences.dietary.join(', ').toUpperCase()
+    : null;
+
+  // Build interests string
+  const userInterests = context.preferences.interests?.length
+    ? context.preferences.interests.join(', ')
+    : null;
+
+  return `You are Tomo, a friendly AI assistant that can help with ANYTHING - but you have travel superpowers.
+
+WHO YOU ARE:
+- A general-purpose AI assistant (like ChatGPT) that can answer ANY question
+- BUT with special awareness of the user's location, time, weather, and budget
+- Like having a knowledgeable local friend who can also discuss philosophy, translate text, explain history, give advice, etc.
 
 CURRENT CONTEXT:
-- Location: ${context.neighborhood || 'Unknown'}
-- Time: ${context.timeOfDay}
-- Weather: ${context.weather?.condition || 'unknown'}, ${context.weather?.temperature || '?'}°C
+- Location: ${context.neighborhood || 'Unknown location'}
+- Local time: ${localTime} (${context.timeOfDay}) on ${localDate}
+- Weather: ${context.weather?.condition || 'unknown'}, ${context.weather?.temperature || '?'}°
 - Budget remaining today: ${context.budgetRemaining}
 - Walking today: ${context.totalWalkingToday} minutes
+${dietaryRestrictions ? `\n⚠️ DIETARY RESTRICTIONS: ${dietaryRestrictions} - YOU MUST respect these when suggesting food!` : ''}
+${userInterests ? `- Interests: ${userInterests}` : ''}
+${context.preferences.avoidCrowds ? '- Prefers: Less crowded, off-the-beaten-path places' : ''}
+${context.preferences.budget ? `- Budget level: ${context.preferences.budget}` : ''}
+
+CRITICAL RULES:
+1. You can answer ANY question - travel, general knowledge, translations, advice, coding, anything
+2. When suggesting places: ONLY suggest places that are OPEN right now (it's ${localTime})
+3. Do NOT use markdown formatting (no **bold**, no *italic*, no bullet points with -)
+4. Use plain text with line breaks for formatting
+5. Use LOCAL CURRENCY for all prices (user is in ${context.neighborhood || 'their location'})
+6. Be conversational, warm, and helpful like a knowledgeable friend
+${dietaryRestrictions ? `7. DIETARY: User is ${dietaryRestrictions} - NEVER suggest places that cannot accommodate this` : ''}
 
 YOUR PERSONALITY:
 - Friendly, helpful, concise like a knowledgeable local friend
@@ -37,7 +92,7 @@ YOUR PERSONALITY:
 RESPONSE FORMAT (ALWAYS respond with valid JSON):
 
 {
-  "text": "Your conversational response here",
+  "text": "Your conversational response here (NO markdown, just plain text)",
   "placeCard": null OR {
     "name": "Place Name",
     "address": "Full address",
@@ -58,14 +113,12 @@ RESPONSE FORMAT (ALWAYS respond with valid JSON):
 
 WHEN TO INCLUDE placeCard:
 - Restaurant, cafe, bar, attraction recommendations: Include placeCard with real place data
-- General questions, tips, translations: Set placeCard to null
+- General questions, tips, translations, advice: Set placeCard to null
 
-IMPORTANT RULES:
-- ALWAYS respond with valid JSON in the format above
+PLACE RULES:
+- ONLY suggest places that are OPEN at ${localTime}
 - Use REAL places that actually exist in ${context.neighborhood || 'the area'}
-- Include accurate GPS coordinates for places (critical for navigation)
-- Use LOCAL CURRENCY for prices
-- Consider: time of day, weather, user's budget
+- Include accurate GPS coordinates (critical for navigation)
 - priceLevel: 1=cheap, 2=moderate, 3=expensive, 4=luxury`;
 }
 
@@ -226,6 +279,26 @@ export async function chat(
 
     // Enrich placeCard with real data from Google APIs
     if (result.placeCard && result.placeCard.name && result.placeCard.coordinates) {
+      // Verify place is open using Google Places API
+      try {
+        console.log('[OpenAI] Verifying open status for:', result.placeCard.name);
+        const openStatus = await verifyPlaceOpen(result.placeCard.name, context.location);
+        if (openStatus) {
+          result.placeCard.openNow = openStatus.isOpen;
+          if (openStatus.hours) {
+            result.placeCard.hours = openStatus.hours;
+          }
+          console.log('[OpenAI] Place open status:', openStatus.isOpen ? 'OPEN' : 'CLOSED');
+
+          // If place is closed, add a warning to the response
+          if (!openStatus.isOpen) {
+            result.content = `Note: ${result.placeCard.name} appears to be closed right now.\n\n${result.content}`;
+          }
+        }
+      } catch (openError) {
+        console.error('[OpenAI] Error verifying open status:', openError);
+      }
+
       // Fetch real walking distance/time from Routes API (fixes distance mismatch!)
       try {
         const gptGuessedDistance = result.placeCard.distance;

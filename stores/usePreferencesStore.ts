@@ -10,6 +10,7 @@ interface PreferencesState {
   dietary: string[];
   interests: string[];
   avoidCrowds: boolean;
+  temperatureUnit: 'C' | 'F';
 
   // Actions
   setHomeBase: (homeBase: HomeBase) => void;
@@ -20,6 +21,7 @@ interface PreferencesState {
   addInterest: (interest: string) => void;
   removeInterest: (interest: string) => void;
   setAvoidCrowds: (avoid: boolean) => void;
+  setTemperatureUnit: (unit: 'C' | 'F') => void;
   reset: () => void;
 }
 
@@ -30,6 +32,7 @@ const initialState = {
   dietary: [] as string[],
   interests: [] as string[],
   avoidCrowds: false,
+  temperatureUnit: 'C' as const,
 };
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -62,6 +65,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         })),
 
       setAvoidCrowds: (avoid) => set({ avoidCrowds: avoid }),
+      setTemperatureUnit: (unit) => set({ temperatureUnit: unit }),
       reset: () => set(initialState),
     }),
     {

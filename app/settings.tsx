@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
-import { ArrowLeft, MapPin, DollarSign, Utensils, Heart, Users, Check, Navigation, Brain } from 'lucide-react-native';
+import { ArrowLeft, MapPin, DollarSign, Utensils, Heart, Users, Check, Navigation, Brain, Thermometer } from 'lucide-react-native';
 import { colors, spacing, typography, shadows, borders } from '../constants/theme';
 import { usePreferencesStore } from '../stores/usePreferencesStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
@@ -50,6 +50,7 @@ export default function SettingsScreen() {
 
   const [dietary, setDietary] = useState<Set<string>>(new Set(preferences.dietary));
   const dietaryOptions = ['vegetarian', 'vegan', 'gluten-free', 'halal', 'kosher', 'none'];
+  const [temperatureUnit, setTemperatureUnit] = useState<'C' | 'F'>(preferences.temperatureUnit);
 
   const [interests, setInterests] = useState<Set<string>>(new Set(preferences.interests));
   const interestOptions = ['food', 'culture', 'nightlife', 'nature', 'shopping', 'iconic'];
@@ -142,6 +143,7 @@ export default function SettingsScreen() {
     preferences.setWalkingTolerance(walkingTolerance);
     preferences.setBudgetLevel(budgetLevel);
     preferences.setAvoidCrowds(avoidCrowds);
+    preferences.setTemperatureUnit(temperatureUnit);
 
     const currentDietary = preferences.dietary;
     const newDietary = Array.from(dietary).filter(d => d !== 'none');
@@ -416,7 +418,28 @@ export default function SettingsScreen() {
 
           {/* Other Preferences Section */}
           <View style={styles.section}>
-            <View style={styles.settingRow}>
+            <View style={styles.sectionHeader}>
+              <Thermometer size={20} color={colors.accent.primary} />
+              <Text style={styles.sectionTitle}>Temperature Unit</Text>
+            </View>
+            <View style={styles.chipGroup}>
+              {(['C', 'F'] as const).map((unit) => (
+                <TouchableOpacity
+                  key={unit}
+                  style={[styles.chip, temperatureUnit === unit && styles.chipSelected]}
+                  onPress={() => {
+                    safeHaptics.selection();
+                    setTemperatureUnit(unit);
+                  }}
+                >
+                  <Text style={[styles.chipText, temperatureUnit === unit && styles.chipTextSelected]}>
+                    {unit === 'C' ? '°C (Celsius)' : '°F (Fahrenheit)'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={[styles.settingRow, { marginTop: spacing.lg }]}>
               <View style={styles.settingInfo}>
                 <Text style={styles.settingLabel}>Avoid Crowds</Text>
                 <Text style={styles.settingDescription}>

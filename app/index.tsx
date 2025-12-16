@@ -80,6 +80,7 @@ export default function ChatScreen() {
   const dietary = usePreferencesStore((state) => state.dietary);
   const interests = usePreferencesStore((state) => state.interests);
   const avoidCrowds = usePreferencesStore((state) => state.avoidCrowds);
+  const temperatureUnit = usePreferencesStore((state) => state.temperatureUnit);
   const visits = useTripStore((state) => state.visits);
   const totalWalkingMinutes = useTripStore((state) => state.totalWalkingMinutes);
   const currentTrip = useTripStore((state) => state.currentTrip);
@@ -111,6 +112,13 @@ export default function ChatScreen() {
   const currency = coordinates
     ? detectCurrency(coordinates)
     : { code: 'USD', symbol: '$', name: 'US Dollar' };
+
+  // Convert temperature based on user preference
+  const displayTemperature = weatherTemperature
+    ? temperatureUnit === 'F'
+      ? Math.round((weatherTemperature * 9) / 5 + 32)
+      : weatherTemperature
+    : null;
 
   // Initialize budget
   useEffect(() => {
@@ -398,10 +406,10 @@ export default function ChatScreen() {
                 {neighborhood || 'Loading...'}
               </Text>
               <View style={styles.contextRow}>
-                {weatherTemperature && (
-                  <Text style={styles.contextText}>{weatherTemperature}°</Text>
+                {displayTemperature !== null && (
+                  <Text style={styles.contextText}>{displayTemperature}°{temperatureUnit}</Text>
                 )}
-                {weatherTemperature && dailyBudget > 0 && (
+                {displayTemperature !== null && dailyBudget > 0 && (
                   <Text style={styles.contextDot}>•</Text>
                 )}
                 {dailyBudget > 0 && (
