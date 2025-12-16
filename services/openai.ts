@@ -1,5 +1,6 @@
 import { DestinationContext, ChatMessage, PlaceCardData, InlineMapData, MessageAction, Coordinates } from '../types';
 import { getPlacePhotoUrl } from './places';
+import { getWalkingDirections } from './routes';
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
@@ -223,8 +224,23 @@ export async function chat(
     // Parse the response for structured content
     const result = parseStructuredResponse(content, context.location);
 
-    // Enrich placeCard with real photo from Google Places if present
-    if (result.placeCard && result.placeCard.name) {
+    // Enrich placeCard with real data from Google APIs
+    if (result.placeCard && result.placeCard.name && result.placeCard.coordinates) {
+      // Fetch real walking distance/time from Routes API (fixes distance mismatch!)
+      try {
+        const gptGuessedDistance = result.placeCard.distance;
+        console.log('[OpenAI] Fetching real walking distance for:', result.placeCard.name);
+        const route = await getWalkingDirections(context.location, result.placeCard.coordinates);
+        if (route) {
+          const walkMins = Math.round(route.totalDuration);
+          result.placeCard.distance = `${walkMins} min walk`;
+          console.log('[OpenAI] Real walking time:', walkMins, 'min (GPT guessed:', gptGuessedDistance, ')');
+        }
+      } catch (routeError) {
+        console.error('[OpenAI] Error fetching walking distance:', routeError);
+      }
+
+      // Fetch real photo from Google Places
       try {
         console.log('[OpenAI] Fetching real photo for:', result.placeCard.name);
         const photoUrl = await getPlacePhotoUrl(

@@ -8,10 +8,12 @@ import {
   ActivityIndicator,
   Image,
   Dimensions,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import {
   ArrowLeft,
   MapPin,
@@ -25,7 +27,7 @@ import {
   X,
   Star,
 } from 'lucide-react-native';
-import { colors, spacing, typography } from '../constants/theme';
+import { colors, spacing, typography, borders, shadows, mapStyle } from '../constants/theme';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useNavigationStore } from '../stores/useNavigationStore';
 import { searchNearby, buildPhotoUrl } from '../services/places';
@@ -79,8 +81,9 @@ export default function MapExploreScreen() {
   const handleCategoryPress = useCallback(async (categoryId: string, categoryType: string) => {
     if (!coordinates) return;
 
+    safeHaptics.selection();
+
     if (selectedCategory === categoryId) {
-      // Deselect
       setSelectedCategory(null);
       setPlaces([]);
       setSelectedPlace(null);
@@ -110,7 +113,6 @@ export default function MapExploreScreen() {
 
       setPlaces(mappedPlaces);
 
-      // Fit map to show all places
       if (mappedPlaces.length > 0 && mapRef.current) {
         const allCoords = [coordinates, ...mappedPlaces.map(p => p.coordinates)];
         mapRef.current.fitToCoordinates(allCoords, {
@@ -126,9 +128,9 @@ export default function MapExploreScreen() {
   }, [coordinates, selectedCategory]);
 
   const handleMarkerPress = useCallback((place: PlaceResult) => {
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
     setSelectedPlace(place);
 
-    // Center on the selected place
     mapRef.current?.animateToRegion({
       latitude: place.coordinates.latitude,
       longitude: place.coordinates.longitude,
@@ -139,6 +141,8 @@ export default function MapExploreScreen() {
 
   const handleNavigateToPlace = useCallback(() => {
     if (!selectedPlace) return;
+
+    safeHaptics.impact(ImpactFeedbackStyle.Heavy);
 
     const destination: Destination = {
       id: selectedPlace.id,
@@ -188,9 +192,10 @@ export default function MapExploreScreen() {
   if (!coordinates) {
     return (
       <View style={styles.container}>
+        <StatusBar barStyle="light-content" />
         <SafeAreaView style={styles.content}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#007AFF" />
+            <ActivityIndicator size="large" color={colors.accent.primary} />
             <Text style={styles.loadingText}>Getting your location...</Text>
           </View>
         </SafeAreaView>
@@ -200,11 +205,14 @@ export default function MapExploreScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Full screen map */}
+      <StatusBar barStyle="light-content" />
+
+      {/* Full screen map with dark style */}
       <MapView
         ref={mapRef}
         style={styles.map}
         provider={PROVIDER_GOOGLE}
+        customMapStyle={mapStyle}
         initialRegion={initialRegion}
         showsUserLocation
         showsMyLocationButton={false}
@@ -221,9 +229,8 @@ export default function MapExploreScreen() {
               selectedPlace?.id === place.id && styles.markerSelected,
             ]}>
               <MapPin
-                size={20}
-                color="#FFFFFF"
-                fill={selectedPlace?.id === place.id ? '#007AFF' : '#FF3B30'}
+                size={18}
+                color={selectedPlace?.id === place.id ? colors.text.inverse : colors.text.primary}
               />
             </View>
           </Marker>
@@ -233,8 +240,14 @@ export default function MapExploreScreen() {
       {/* Header overlay */}
       <SafeAreaView style={styles.headerOverlay} edges={['top']}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <ArrowLeft size={24} color={colors.text.light.primary} />
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => {
+              safeHaptics.impact(ImpactFeedbackStyle.Light);
+              router.back();
+            }}
+          >
+            <ArrowLeft size={24} color={colors.text.primary} />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle}>Explore</Text>
@@ -261,7 +274,7 @@ export default function MapExploreScreen() {
               >
                 <IconComponent
                   size={16}
-                  color={isSelected ? '#FFFFFF' : '#007AFF'}
+                  color={isSelected ? colors.text.inverse : colors.accent.primary}
                 />
                 <Text style={[
                   styles.categoryText,
@@ -276,7 +289,7 @@ export default function MapExploreScreen() {
 
         {isLoading && (
           <View style={styles.loadingIndicator}>
-            <ActivityIndicator size="small" color="#007AFF" />
+            <ActivityIndicator size="small" color={colors.accent.primary} />
             <Text style={styles.loadingIndicatorText}>Searching...</Text>
           </View>
         )}
@@ -288,9 +301,12 @@ export default function MapExploreScreen() {
           <View style={styles.placeCard}>
             <TouchableOpacity
               style={styles.closeButton}
-              onPress={() => setSelectedPlace(null)}
+              onPress={() => {
+                safeHaptics.impact(ImpactFeedbackStyle.Light);
+                setSelectedPlace(null);
+              }}
             >
-              <X size={20} color={colors.text.light.secondary} />
+              <X size={20} color={colors.text.secondary} />
             </TouchableOpacity>
 
             <View style={styles.placeCardContent}>
@@ -310,7 +326,7 @@ export default function MapExploreScreen() {
                 <View style={styles.placeDetails}>
                   {selectedPlace.rating && (
                     <View style={styles.ratingContainer}>
-                      <Star size={14} color="#FFB800" fill="#FFB800" />
+                      <Star size={14} color={colors.status.warning} fill={colors.status.warning} />
                       <Text style={styles.ratingText}>{selectedPlace.rating.toFixed(1)}</Text>
                     </View>
                   )}
@@ -339,7 +355,7 @@ export default function MapExploreScreen() {
               style={styles.navigateButton}
               onPress={handleNavigateToPlace}
             >
-              <Navigation size={18} color="#FFFFFF" />
+              <Navigation size={18} color={colors.text.inverse} />
               <Text style={styles.navigateButtonText}>Take me there</Text>
             </TouchableOpacity>
           </View>
@@ -350,7 +366,7 @@ export default function MapExploreScreen() {
       {!selectedCategory && !isLoading && (
         <View style={styles.emptyStateContainer}>
           <View style={styles.emptyState}>
-            <MapPin size={24} color={colors.text.light.secondary} />
+            <MapPin size={24} color={colors.text.secondary} />
             <Text style={styles.emptyStateText}>
               Select a category above to explore nearby places
             </Text>
@@ -364,7 +380,7 @@ export default function MapExploreScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background.primary,
   },
   content: {
     flex: 1,
@@ -384,15 +400,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: colors.background.secondary,
     marginHorizontal: spacing.md,
     marginTop: spacing.sm,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    borderRadius: borders.radius.lg,
+    ...shadows.md,
   },
   backButton: {
     width: 40,
@@ -406,11 +418,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
-    color: colors.text.light.primary,
+    color: colors.text.primary,
   },
   headerSubtitle: {
     fontSize: typography.sizes.sm,
-    color: colors.text.light.secondary,
+    color: colors.text.secondary,
     marginTop: 2,
   },
   headerSpacer: {
@@ -424,44 +436,41 @@ const styles = StyleSheet.create({
   categoryPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: colors.background.secondary,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderRadius: 24,
+    borderRadius: borders.radius.full,
     marginRight: spacing.sm,
     gap: spacing.xs,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...shadows.sm,
   },
   categoryPillSelected: {
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.accent.primary,
   },
   categoryText: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.semibold,
-    color: '#007AFF',
+    color: colors.accent.primary,
   },
   categoryTextSelected: {
-    color: '#FFFFFF',
+    color: colors.text.inverse,
   },
   loadingIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: colors.background.secondary,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    borderRadius: 20,
+    borderRadius: borders.radius.full,
     marginHorizontal: spacing.md,
     alignSelf: 'center',
     gap: spacing.sm,
+    ...shadows.sm,
   },
   loadingIndicatorText: {
     fontSize: typography.sizes.sm,
-    color: colors.text.light.secondary,
+    color: colors.text.secondary,
   },
   loadingContainer: {
     flex: 1,
@@ -471,22 +480,19 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: typography.sizes.base,
-    color: colors.text.light.secondary,
+    color: colors.text.secondary,
   },
   markerContainer: {
-    backgroundColor: '#FF3B30',
-    borderRadius: 20,
-    padding: 6,
+    backgroundColor: colors.map.marker,
+    borderRadius: borders.radius.full,
+    padding: 8,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
+    borderColor: colors.text.primary,
+    ...shadows.sm,
   },
   markerSelected: {
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.accent.primary,
+    borderColor: colors.accent.primary,
     transform: [{ scale: 1.2 }],
   },
   placeCardContainer: {
@@ -498,14 +504,10 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   placeCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    backgroundColor: colors.background.secondary,
+    borderRadius: borders.radius.xl,
     padding: spacing.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    ...shadows.lg,
   },
   closeButton: {
     position: 'absolute',
@@ -515,8 +517,8 @@ const styles = StyleSheet.create({
     height: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F2F2F7',
-    borderRadius: 16,
+    backgroundColor: colors.background.tertiary,
+    borderRadius: borders.radius.full,
     zIndex: 1,
   },
   placeCardContent: {
@@ -526,8 +528,8 @@ const styles = StyleSheet.create({
   placePhoto: {
     width: 80,
     height: 80,
-    borderRadius: 12,
-    backgroundColor: '#F2F2F7',
+    borderRadius: borders.radius.md,
+    backgroundColor: colors.background.tertiary,
   },
   placeInfo: {
     flex: 1,
@@ -537,7 +539,7 @@ const styles = StyleSheet.create({
   placeName: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
-    color: colors.text.light.primary,
+    color: colors.text.primary,
     marginBottom: spacing.xs,
   },
   placeDetails: {
@@ -554,11 +556,11 @@ const styles = StyleSheet.create({
   ratingText: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.medium,
-    color: colors.text.light.primary,
+    color: colors.text.primary,
   },
   priceText: {
     fontSize: typography.sizes.sm,
-    color: colors.text.light.secondary,
+    color: colors.text.secondary,
   },
   openStatus: {
     fontSize: typography.sizes.sm,
@@ -572,22 +574,22 @@ const styles = StyleSheet.create({
   },
   placeAddress: {
     fontSize: typography.sizes.sm,
-    color: colors.text.light.secondary,
+    color: colors.text.secondary,
     lineHeight: 18,
   },
   navigateButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.accent.primary,
     paddingVertical: spacing.lg,
-    borderRadius: 14,
+    borderRadius: borders.radius.md,
     gap: spacing.sm,
   },
   navigateButtonText: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.semibold,
-    color: '#FFFFFF',
+    color: colors.text.inverse,
   },
   emptyStateContainer: {
     position: 'absolute',
@@ -599,20 +601,16 @@ const styles = StyleSheet.create({
   emptyState: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: colors.background.secondary,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.lg,
-    borderRadius: 16,
+    borderRadius: borders.radius.lg,
     gap: spacing.sm,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    ...shadows.md,
   },
   emptyStateText: {
     fontSize: typography.sizes.sm,
-    color: colors.text.light.secondary,
+    color: colors.text.secondary,
     maxWidth: 200,
   },
 });

@@ -13,21 +13,23 @@ import { router } from 'expo-router';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { ArrowLeft, Share2, Download, MapPin, Calendar, DollarSign, MessageCircle } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
+import { colors, spacing, borders, shadows, mapStyle } from '../constants/theme';
 import { useTripStore } from '../stores/useTripStore';
 import { useConversationStore } from '../stores/useConversationStore';
 import { detectCurrency } from '../utils/currency';
-import type { ChatMessage, Coordinates } from '../types';
+import type { ChatMessage } from '../types';
 
 // City colors for map pins
 const CITY_COLORS = [
-  '#007AFF', // Blue
-  '#34C759', // Green
-  '#FF9500', // Orange
-  '#AF52DE', // Purple
-  '#FF3B30', // Red
-  '#5AC8FA', // Teal
-  '#FFCC00', // Yellow
-  '#FF2D55', // Pink
+  colors.accent.primary,   // Teal
+  colors.accent.secondary, // Blue
+  colors.status.success,   // Green
+  colors.status.warning,   // Orange
+  colors.status.error,     // Red
+  '#AF52DE',               // Purple
+  '#FF2D55',               // Pink
+  '#FFCC00',               // Yellow
 ];
 
 const { width } = Dimensions.get('window');
@@ -83,13 +85,13 @@ export default function TripRecapScreen() {
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <View style={styles.header}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <ArrowLeft size={24} color="#000" />
+              <ArrowLeft size={24} color={colors.text.primary} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Trip Recap</Text>
             <View style={{ width: 40 }} />
           </View>
           <View style={styles.emptyState}>
-            <MapPin size={64} color="#D1D5DB" />
+            <MapPin size={64} color={colors.text.tertiary} />
             <Text style={styles.emptyTitle}>No trips yet</Text>
             <Text style={styles.emptySubtitle}>
               Start exploring and your trip will be tracked automatically
@@ -123,6 +125,7 @@ export default function TripRecapScreen() {
     : 'Present';
 
   const handleExportPDF = () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
     Alert.alert(
       'Export PDF',
       'PDF export is coming soon! For now, you can share your trip summary.',
@@ -131,6 +134,7 @@ export default function TripRecapScreen() {
   };
 
   const handleShare = async () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
     try {
       const placesCount = trip.stats.totalPlaces;
       const daysCount = trip.stats.totalDays;
@@ -157,6 +161,7 @@ export default function TripRecapScreen() {
   };
 
   const handleSendToChat = () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
     const summaryMessage: ChatMessage = {
       id: `recap-${Date.now()}`,
       role: 'user',
@@ -199,11 +204,11 @@ export default function TripRecapScreen() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#000" />
+            <ArrowLeft size={24} color={colors.text.primary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Trip Recap</Text>
           <TouchableOpacity onPress={handleShare} style={styles.shareButton}>
-            <Share2 size={22} color="#007AFF" />
+            <Share2 size={22} color={colors.accent.primary} />
           </TouchableOpacity>
         </View>
 
@@ -224,17 +229,17 @@ export default function TripRecapScreen() {
           {/* Stats Grid */}
           <View style={styles.statsGrid}>
             <View style={styles.statCard}>
-              <Calendar size={24} color="#007AFF" />
+              <Calendar size={24} color={colors.accent.secondary} />
               <Text style={styles.statValue}>{trip.stats.totalDays}</Text>
               <Text style={styles.statLabel}>Days</Text>
             </View>
             <View style={styles.statCard}>
-              <MapPin size={24} color="#34C759" />
+              <MapPin size={24} color={colors.status.success} />
               <Text style={styles.statValue}>{trip.stats.totalPlaces}</Text>
               <Text style={styles.statLabel}>Places</Text>
             </View>
             <View style={styles.statCard}>
-              <DollarSign size={24} color="#FF9500" />
+              <DollarSign size={24} color={colors.status.warning} />
               <Text style={styles.statValue}>
                 {currency.symbol}
                 {trip.stats.totalExpenses.toLocaleString()}
@@ -262,6 +267,7 @@ export default function TripRecapScreen() {
                   ref={mapRef}
                   style={styles.map}
                   provider={PROVIDER_GOOGLE}
+                  customMapStyle={mapStyle}
                   initialRegion={getInitialRegion()}
                   scrollEnabled={true}
                   zoomEnabled={true}
@@ -345,15 +351,15 @@ export default function TripRecapScreen() {
           {/* Export Actions */}
           <View style={styles.exportSection}>
             <TouchableOpacity style={styles.exportButtonPrimary} onPress={handleShare}>
-              <Share2 size={20} color="#FFFFFF" />
+              <Share2 size={20} color={colors.text.inverse} />
               <Text style={styles.exportButtonTextPrimary}>Share Trip</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.exportButton} onPress={handleSendToChat}>
-              <MessageCircle size={20} color="#007AFF" />
+              <MessageCircle size={20} color={colors.accent.primary} />
               <Text style={styles.exportButtonText}>Chat about my trip</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.exportButton} onPress={handleExportPDF}>
-              <Download size={20} color="#007AFF" />
+              <Download size={20} color={colors.accent.primary} />
               <Text style={styles.exportButtonText}>Export as PDF</Text>
             </TouchableOpacity>
           </View>
@@ -368,7 +374,7 @@ export default function TripRecapScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background.primary,
   },
   safeArea: {
     flex: 1,
@@ -377,11 +383,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.background.secondary,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border.default,
   },
   backButton: {
     width: 40,
@@ -392,7 +398,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#000000',
+    color: colors.text.primary,
   },
   shareButton: {
     width: 40,
@@ -407,111 +413,111 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: spacing['3xl'],
   },
   emptyTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1F2937',
-    marginTop: 16,
-    marginBottom: 8,
+    color: colors.text.primary,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   emptySubtitle: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
   },
   titleSection: {
-    padding: 20,
-    backgroundColor: '#FFFFFF',
+    padding: spacing.xl,
+    backgroundColor: colors.background.secondary,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border.default,
   },
   tripTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 8,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
   },
   tripDates: {
     fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 8,
+    color: colors.text.secondary,
+    marginBottom: spacing.sm,
   },
   activeBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#34C759',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.status.success,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borders.radius.lg,
   },
   activeBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: colors.text.inverse,
   },
   statsGrid: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    gap: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+    gap: spacing.md,
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: colors.background.secondary,
+    borderRadius: borders.radius.lg,
+    padding: spacing.lg,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: colors.border.muted,
+    ...shadows.sm,
   },
   statValue: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1F2937',
-    marginTop: 8,
-    marginBottom: 4,
+    color: colors.text.primary,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   statLabel: {
     fontSize: 13,
-    color: '#6B7280',
+    color: colors.text.secondary,
   },
   summarySection: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    backgroundColor: colors.background.secondary,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border.default,
   },
   summaryText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 4,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
   },
   countriesList: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.text.secondary,
   },
   mapSection: {
-    paddingHorizontal: 16,
-    paddingVertical: 20,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 12,
+    color: colors.text.primary,
+    marginBottom: spacing.md,
   },
   mapContainer: {
     height: 250,
-    borderRadius: 12,
+    borderRadius: borders.radius.lg,
     overflow: 'hidden',
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.background.secondary,
+    borderWidth: 1,
+    borderColor: colors.border.default,
   },
   map: {
     flex: 1,
@@ -523,28 +529,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    borderColor: colors.text.primary,
+    ...shadows.sm,
   },
   markerText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.text.inverse,
   },
   mapLegend: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 12,
-    gap: 12,
+    marginTop: spacing.md,
+    gap: spacing.md,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: spacing.xs,
   },
   legendDot: {
     width: 10,
@@ -553,60 +555,58 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: 12,
-    color: '#1F2937',
+    color: colors.text.primary,
     fontWeight: '500',
   },
   citiesSection: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
   },
   cityCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: colors.background.secondary,
+    borderRadius: borders.radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border.muted,
+    ...shadows.sm,
   },
   cityHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   cityDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   cityName: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1F2937',
+    color: colors.text.primary,
     flex: 1,
   },
   cityStats: {
     fontSize: 14,
-    color: '#6B7280',
-    marginLeft: 20,
+    color: colors.text.secondary,
+    marginLeft: spacing.xl,
   },
   cityDates: {
     fontSize: 14,
-    color: '#9CA3AF',
-    marginLeft: 20,
-    marginBottom: 12,
+    color: colors.text.tertiary,
+    marginLeft: spacing.xl,
+    marginBottom: spacing.md,
   },
   visitsContainer: {
-    marginTop: 8,
-    marginLeft: 20,
+    marginTop: spacing.sm,
+    marginLeft: spacing.xl,
   },
   visitRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   visitNumber: {
     width: 24,
@@ -614,12 +614,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   visitNumberText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: colors.text.inverse,
   },
   visitInfo: {
     flex: 1,
@@ -627,60 +627,53 @@ const styles = StyleSheet.create({
   visitName: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1F2937',
+    color: colors.text.primary,
     marginBottom: 2,
   },
   visitNeighborhood: {
     fontSize: 13,
-    color: '#6B7280',
+    color: colors.text.secondary,
   },
   visitExpense: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FF9500',
-    marginLeft: 12,
+    color: colors.status.warning,
+    marginLeft: spacing.md,
   },
   exportSection: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    gap: 12,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    gap: spacing.md,
   },
   exportButtonPrimary: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
-    paddingVertical: 16,
-    gap: 8,
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    backgroundColor: colors.accent.primary,
+    borderRadius: borders.radius.lg,
+    paddingVertical: spacing.lg,
+    gap: spacing.sm,
+    ...shadows.glow,
   },
   exportButtonTextPrimary: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: colors.text.inverse,
   },
   exportButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: 16,
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: colors.background.secondary,
+    borderRadius: borders.radius.lg,
+    paddingVertical: spacing.lg,
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border.default,
   },
   exportButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#007AFF',
+    color: colors.accent.primary,
   },
 });

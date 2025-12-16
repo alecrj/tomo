@@ -10,7 +10,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, MessageCircle, Trash2, Plus } from 'lucide-react-native';
-import { colors, spacing } from '../constants/theme';
+import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
+import { colors, spacing, borders, shadows } from '../constants/theme';
 import { useConversationStore } from '../stores/useConversationStore';
 
 export default function ConversationsScreen() {
@@ -20,16 +21,19 @@ export default function ConversationsScreen() {
   const currentConversationId = conversationStore.currentConversationId;
 
   const handleSelectConversation = (conversationId: string) => {
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
     conversationStore.switchConversation(conversationId);
     router.back();
   };
 
   const handleNewConversation = () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
     conversationStore.startNewConversation();
     router.back();
   };
 
   const handleDeleteConversation = (conversationId: string, title: string) => {
+    safeHaptics.notification(NotificationFeedbackType.Warning);
     Alert.alert(
       'Delete Conversation',
       `Are you sure you want to delete "${title}"?`,
@@ -38,7 +42,10 @@ export default function ConversationsScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => conversationStore.deleteConversation(conversationId),
+          onPress: () => {
+            safeHaptics.notification(NotificationFeedbackType.Success);
+            conversationStore.deleteConversation(conversationId);
+          },
         },
       ]
     );
@@ -50,14 +57,14 @@ export default function ConversationsScreen() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <ArrowLeft size={24} color={colors.text.light.primary} />
+            <ArrowLeft size={24} color={colors.text.primary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Conversations</Text>
           <TouchableOpacity
             style={styles.newButton}
             onPress={handleNewConversation}
           >
-            <Plus size={24} color="#007AFF" />
+            <Plus size={24} color={colors.accent.primary} />
           </TouchableOpacity>
         </View>
 
@@ -69,7 +76,7 @@ export default function ConversationsScreen() {
         >
           {conversations.length === 0 ? (
             <View style={styles.emptyState}>
-              <MessageCircle size={48} color={colors.text.light.tertiary} />
+              <MessageCircle size={48} color={colors.text.tertiary} />
               <Text style={styles.emptyTitle}>No conversations yet</Text>
               <Text style={styles.emptySubtitle}>
                 Start chatting with Tomo to create your first conversation
@@ -86,10 +93,13 @@ export default function ConversationsScreen() {
                 onPress={() => handleSelectConversation(conv.id)}
                 activeOpacity={0.7}
               >
-                <View style={styles.conversationIcon}>
+                <View style={[
+                  styles.conversationIcon,
+                  conv.id === currentConversationId && styles.activeIcon,
+                ]}>
                   <MessageCircle
                     size={20}
-                    color={conv.id === currentConversationId ? '#007AFF' : colors.text.light.secondary}
+                    color={conv.id === currentConversationId ? colors.accent.primary : colors.text.secondary}
                   />
                 </View>
 
@@ -130,7 +140,7 @@ export default function ConversationsScreen() {
                   onPress={() => handleDeleteConversation(conv.id, conv.title)}
                   hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                 >
-                  <Trash2 size={18} color={colors.text.light.tertiary} />
+                  <Trash2 size={18} color={colors.status.error} />
                 </TouchableOpacity>
               </TouchableOpacity>
             ))
@@ -164,7 +174,7 @@ function formatDate(timestamp: number): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background.primary,
   },
   safeArea: {
     flex: 1,
@@ -175,9 +185,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background.secondary,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border.default,
   },
   backButton: {
     width: 40,
@@ -188,7 +198,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: colors.text.light.primary,
+    color: colors.text.primary,
   },
   newButton: {
     width: 40,
@@ -211,41 +221,42 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: colors.text.light.primary,
+    color: colors.text.primary,
     marginTop: spacing.lg,
     marginBottom: spacing.xs,
   },
   emptySubtitle: {
     fontSize: 15,
-    color: colors.text.light.secondary,
+    color: colors.text.secondary,
     textAlign: 'center',
     paddingHorizontal: spacing['2xl'],
     lineHeight: 22,
   },
   conversationCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: colors.background.secondary,
+    borderRadius: borders.radius.lg,
     padding: spacing.lg,
     marginBottom: spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    borderWidth: 1,
+    borderColor: colors.border.muted,
+    ...shadows.sm,
   },
   activeConversation: {
     borderWidth: 2,
-    borderColor: '#007AFF',
+    borderColor: colors.accent.primary,
   },
   conversationIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.background.tertiary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.md,
+  },
+  activeIcon: {
+    backgroundColor: colors.accent.muted,
   },
   conversationInfo: {
     flex: 1,
@@ -253,11 +264,11 @@ const styles = StyleSheet.create({
   conversationTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.text.light.primary,
+    color: colors.text.primary,
     marginBottom: 4,
   },
   activeTitle: {
-    color: '#007AFF',
+    color: colors.accent.primary,
   },
   conversationMeta: {
     flexDirection: 'row',
@@ -267,11 +278,11 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 13,
-    color: colors.text.light.secondary,
+    color: colors.text.secondary,
   },
   conversationSummary: {
     fontSize: 14,
-    color: colors.text.light.secondary,
+    color: colors.text.secondary,
     lineHeight: 20,
     marginTop: spacing.xs,
   },

@@ -6,7 +6,8 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Navigation, RefreshCw, Image, Receipt, Map } from 'lucide-react-native';
-import { colors, spacing } from '../constants/theme';
+import { safeHaptics, ImpactFeedbackStyle } from '../utils/haptics';
+import { colors, spacing, borders } from '../constants/theme';
 import type { MessageAction, MessageActionType } from '../types';
 
 interface ActionButtonsProps {
@@ -34,6 +35,11 @@ const getActionIcon = (type: MessageActionType) => {
 export function ActionButtons({ actions, onAction }: ActionButtonsProps) {
   if (!actions || actions.length === 0) return null;
 
+  const handleAction = (action: MessageAction) => {
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
+    onAction(action);
+  };
+
   return (
     <View style={styles.container}>
       {actions.map((action, index) => {
@@ -44,12 +50,12 @@ export function ActionButtons({ actions, onAction }: ActionButtonsProps) {
           <TouchableOpacity
             key={`${action.type}-${index}`}
             style={[styles.button, isPrimary ? styles.primaryButton : styles.secondaryButton]}
-            onPress={() => onAction(action)}
+            onPress={() => handleAction(action)}
           >
             {Icon && (
               <Icon
                 size={16}
-                color={isPrimary ? '#FFFFFF' : '#007AFF'}
+                color={isPrimary ? colors.text.inverse : colors.accent.primary}
               />
             )}
             <Text style={[styles.buttonText, isPrimary ? styles.primaryText : styles.secondaryText]}>
@@ -74,23 +80,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: 20,
+    borderRadius: borders.radius.full,
     gap: spacing.xs,
   },
   primaryButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.accent.primary,
   },
   secondaryButton: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: colors.background.tertiary,
+    borderWidth: 1,
+    borderColor: colors.border.default,
   },
   buttonText: {
     fontSize: 14,
     fontWeight: '600',
   },
   primaryText: {
-    color: '#FFFFFF',
+    color: colors.text.inverse,
   },
   secondaryText: {
-    color: '#007AFF',
+    color: colors.accent.primary,
   },
 });

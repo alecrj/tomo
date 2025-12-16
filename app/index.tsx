@@ -8,18 +8,32 @@ import {
   Text,
   TouchableOpacity,
   TextInput,
-  Pressable,
   Image,
   ActionSheetIOS,
   Alert,
+  StatusBar,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Send, Mic, Camera, Settings, MapPin, Plus, Home, MessageSquare, Map } from 'lucide-react-native';
-import { colors, spacing, typography } from '../constants/theme';
-import { chat, StructuredChatResponse } from '../services/openai';
+import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
+import {
+  Send,
+  Mic,
+  Camera,
+  Settings,
+  MapPin,
+  Plus,
+  Home,
+  MessageSquare,
+  Map,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react-native';
+import { colors, spacing, typography, borders, shadows } from '../constants/theme';
+import { chat } from '../services/openai';
 import { takePhoto, pickPhoto } from '../services/camera';
-import { startRecording, stopRecording, cancelRecording, transcribeAudio } from '../services/voice';
+import { startRecording, stopRecording, transcribeAudio } from '../services/voice';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useWeatherStore } from '../stores/useWeatherStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
@@ -31,13 +45,15 @@ import { useNavigationStore } from '../stores/useNavigationStore';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { useLocation } from '../hooks/useLocation';
 import { useWeather } from '../hooks/useWeather';
-import { useCityDetection, parseNeighborhood } from '../hooks/useCityDetection';
+import { useCityDetection } from '../hooks/useCityDetection';
 import { detectCurrency } from '../utils/currency';
-import type { DestinationContext, ChatMessage, MessageAction, Destination } from '../types';
-import LogVisitModal from '../components/LogVisitModal';
+import { TypingIndicator } from '../components/TypingIndicator';
+import { MiniMap } from '../components/MiniMap';
 import { PlaceCard } from '../components/PlaceCard';
 import { InlineMap } from '../components/InlineMap';
 import { ActionButtons } from '../components/ActionButtons';
+import LogVisitModal from '../components/LogVisitModal';
+import type { DestinationContext, ChatMessage, MessageAction, Destination } from '../types';
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -67,85 +83,64 @@ export default function ChatScreen() {
   const visits = useTripStore((state) => state.visits);
   const totalWalkingMinutes = useTripStore((state) => state.totalWalkingMinutes);
   const currentTrip = useTripStore((state) => state.currentTrip);
-  const getTripStats = useTripStore((state) => state.getTripStats);
 
-  // Memory and conversation stores
   const getMemoryContext = useMemoryStore((state) => state.getMemoryContext);
-
-  // Get conversation store actions
   const addMessage = useConversationStore((state) => state.addMessage);
   const startNewConversation = useConversationStore((state) => state.startNewConversation);
   const currentConversationId = useConversationStore((state) => state.currentConversationId);
-
-  // Get conversations array
   const conversations = useConversationStore((state) => state.conversations);
 
-  // Derive current conversation and messages with useMemo to avoid infinite loops
   const currentConversation = useMemo(() => {
-    return conversations.find(c => c.id === currentConversationId) || null;
+    return conversations.find((c) => c.id === currentConversationId) || null;
   }, [conversations, currentConversationId]);
 
   const messages = useMemo(() => {
     return currentConversation?.messages || [];
   }, [currentConversation]);
 
-  // Navigation store
   const viewDestination = useNavigationStore((state) => state.viewDestination);
-  const startNavigation = useNavigationStore((state) => state.startNavigation);
 
-  // Local state (messages now come directly from store via selector above)
+  // Local state
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [showBudgetBar, setShowBudgetBar] = useState(true);
+  const [showContextBar, setShowContextBar] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [showLogVisit, setShowLogVisit] = useState(false);
   const [lastPlaceCard, setLastPlaceCard] = useState<ChatMessage['placeCard'] | null>(null);
 
-  // Detect currency
-  const currency = coordinates ? detectCurrency(coordinates) : { code: 'USD', symbol: '$', name: 'US Dollar' };
+  const currency = coordinates
+    ? detectCurrency(coordinates)
+    : { code: 'USD', symbol: '$', name: 'US Dollar' };
 
-  // Initialize budget if not set
+  // Initialize budget
   useEffect(() => {
     if (dailyBudget === 0) {
-      budgetStore.setTripBudget(10000, 5); // Default: 5-day trip, 10,000 in local currency
+      budgetStore.setTripBudget(10000, 5);
     }
   }, [dailyBudget]);
 
-  // Initialize conversation on first load
+  // Initialize conversation
   useEffect(() => {
     if (!currentConversationId && coordinates) {
-      // Start new conversation
       startNewConversation(neighborhood || undefined, currentTrip?.id);
     }
   }, [currentConversationId, coordinates]);
 
-  // Initial greeting when conversation starts
+  // Initial greeting
   useEffect(() => {
     if (messages.length === 0 && coordinates && currentConversation) {
       const cityCountry = neighborhood || 'your current location';
       const greeting: ChatMessage = {
         id: `greeting-${Date.now()}`,
         role: 'assistant',
-        content: `Hi! I'm Tomo, your AI travel companion.
-
-I can see you're in ${cityCountry}.
-
-I know your exact location, the time, weather, and your budget. Just talk to me naturally!
-
-What would you like to do? You can:
-• Type or ask anything
-• 🎤 Tap microphone to record voice
-• 📷 Send photos for me to analyze
-
-Where should we start?`,
+        content: `Hey! I'm Tomo, your AI travel companion.\n\nI can see you're in ${cityCountry}. I know your location, time, weather, and budget.\n\nAsk me anything or tell me what you're looking for!`,
         timestamp: Date.now(),
       };
-
       addMessage(greeting);
     }
   }, [coordinates, neighborhood, messages.length, currentConversation]);
 
-  // Auto-scroll to bottom
+  // Auto-scroll
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => {
@@ -154,29 +149,19 @@ Where should we start?`,
     }
   }, [messages]);
 
-  // Handle city change detection
+  // City change detection
   useEffect(() => {
     if (cityChange && currentConversation) {
       const cityChangeMessage: ChatMessage = {
         id: `city-change-${Date.now()}`,
         role: 'assistant',
-        content: `Welcome to ${cityChange.newCity}, ${cityChange.newCountry}! 🎉
-
-I can see you've arrived in a new city. ${cityChange.previousCity ? `How was ${cityChange.previousCity}?` : ''}
-
-Would you like to:
-• Set a home base (your hotel/accommodation)
-• Find something to eat
-• Explore what's nearby
-
-What would you like to do first?`,
+        content: `Welcome to ${cityChange.newCity}, ${cityChange.newCountry}!\n\nWhat would you like to explore first?`,
         timestamp: Date.now(),
         actions: [
-          { label: 'Set home base', type: 'navigate' as const },
-          { label: 'Find food', type: 'regenerate' as const },
+          { label: 'Find food nearby', type: 'regenerate' as const },
+          { label: 'Show me around', type: 'regenerate' as const },
         ],
       };
-
       addMessage(cityChangeMessage);
     }
   }, [cityChange]);
@@ -184,6 +169,10 @@ What would you like to do first?`,
   const handleSendMessage = async (messageText?: string, imageBase64?: string) => {
     const text = messageText || inputText.trim();
     if ((!text && !imageBase64) || isSending) return;
+
+    // Haptic feedback + dismiss keyboard (like ChatGPT)
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
+    Keyboard.dismiss();
 
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -193,25 +182,24 @@ What would you like to do first?`,
       image: imageBase64,
     };
 
-    // Add to conversation store
     addMessage(userMessage);
     setInputText('');
     setIsSending(true);
 
     try {
-      // Build full context
       const context: DestinationContext = {
         location: coordinates || { latitude: 0, longitude: 0 },
         neighborhood: neighborhood || 'unknown location',
         timeOfDay,
-        weather: weatherCondition && weatherTemperature
-          ? {
-              condition: weatherCondition,
-              temperature: weatherTemperature,
-              description: `${weatherCondition}, ${weatherTemperature}°C`,
-              humidity: 0,
-            }
-          : null,
+        weather:
+          weatherCondition && weatherTemperature
+            ? {
+                condition: weatherCondition,
+                temperature: weatherTemperature,
+                description: `${weatherCondition}, ${weatherTemperature}°C`,
+                humidity: 0,
+              }
+            : null,
         budgetRemaining,
         dailyBudget,
         preferences: {
@@ -228,19 +216,14 @@ What would you like to do first?`,
         totalWalkingToday: totalWalkingMinutes,
       };
 
-      // Get memory context
       const memoryContext = getMemoryContext();
-
-      // Enhanced message with location, currency, and memory context
       const systemContext = coordinates
         ? `\n\n[SYSTEM CONTEXT: User is at GPS ${coordinates.latitude.toFixed(6)}, ${coordinates.longitude.toFixed(6)} in ${neighborhood || 'unknown'}. Local currency: ${currency.name} (${currency.symbol}). Current time: ${timeOfDay}. Weather: ${weatherCondition || 'unknown'}. Budget remaining today: ${currency.symbol}${budgetRemaining}. Use local currency for ALL prices. Be conversational, helpful, and specific. Include exact places with addresses when relevant.]${memoryContext}`
         : '';
 
       const enhancedMessage = text + systemContext;
-
       const response = await chat(enhancedMessage, context, messages, imageBase64);
 
-      // Create assistant message with optional structured content
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
@@ -251,12 +234,12 @@ What would you like to do first?`,
         actions: response.actions,
       };
 
-      // Store the last place card for navigation
       if (response.placeCard) {
         setLastPlaceCard(response.placeCard);
       }
 
-      // Add to conversation store
+      // Haptic on response
+      safeHaptics.notification(NotificationFeedbackType.Success);
       addMessage(assistantMessage);
     } catch (error) {
       console.error('Error sending message:', error);
@@ -272,12 +255,12 @@ What would you like to do first?`,
     }
   };
 
-  // Handle action button presses
   const handleAction = (action: MessageAction, placeCard?: ChatMessage['placeCard']) => {
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
+
     switch (action.type) {
       case 'navigate':
         if (placeCard) {
-          // Create a minimal destination object for navigation
           const destination: Destination = {
             id: `dest-${Date.now()}`,
             title: placeCard.name,
@@ -301,25 +284,21 @@ What would you like to do first?`,
           router.push('/navigation');
         }
         break;
-
       case 'regenerate':
         handleSendMessage('Show me something else');
         break;
-
       case 'show_recap':
         router.push('/trip-recap');
         break;
-
       case 'log_expense':
         setShowLogVisit(true);
         break;
-
-      default:
-        console.log('[Action] Unhandled action:', action.type);
     }
   };
 
   const handleCamera = () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
+
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
@@ -329,49 +308,38 @@ What would you like to do first?`,
         async (buttonIndex) => {
           if (buttonIndex === 1) {
             const image = await takePhoto();
-            if (image) {
-              handleSendMessage('What can you tell me about this?', image);
-            }
+            if (image) handleSendMessage('What can you tell me about this?', image);
           } else if (buttonIndex === 2) {
             const image = await pickPhoto();
-            if (image) {
-              handleSendMessage('What can you tell me about this?', image);
-            }
+            if (image) handleSendMessage('What can you tell me about this?', image);
           }
         }
       );
     } else {
-      Alert.alert(
-        'Add Photo',
-        'Choose an option',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Take Photo',
-            onPress: async () => {
-              const image = await takePhoto();
-              if (image) {
-                handleSendMessage('What can you tell me about this?', image);
-              }
-            },
+      Alert.alert('Add Photo', 'Choose an option', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Take Photo',
+          onPress: async () => {
+            const image = await takePhoto();
+            if (image) handleSendMessage('What can you tell me about this?', image);
           },
-          {
-            text: 'Choose from Library',
-            onPress: async () => {
-              const image = await pickPhoto();
-              if (image) {
-                handleSendMessage('What can you tell me about this?', image);
-              }
-            },
+        },
+        {
+          text: 'Choose from Library',
+          onPress: async () => {
+            const image = await pickPhoto();
+            if (image) handleSendMessage('What can you tell me about this?', image);
           },
-        ]
-      );
+        },
+      ]);
     }
   };
 
   const handleVoicePress = async () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
+
     if (isRecording) {
-      // Stop recording
       setIsRecording(false);
       const audioUri = await stopRecording();
       if (audioUri) {
@@ -379,133 +347,106 @@ What would you like to do first?`,
         if (transcription) {
           handleSendMessage(transcription);
         } else {
-          // Transcription failed or backend not configured
-          Alert.alert(
-            'Voice Not Available',
-            'Voice transcription is not configured. Please type your message instead.',
-            [{ text: 'OK' }]
-          );
+          Alert.alert('Voice Not Available', 'Voice transcription is not configured.');
         }
       }
     } else {
-      // Start recording
       const started = await startRecording();
       if (started) {
         setIsRecording(true);
       } else {
-        Alert.alert(
-          'Microphone Permission',
-          'Please allow microphone access to use voice input.',
-          [{ text: 'OK' }]
-        );
+        Alert.alert('Microphone Permission', 'Please allow microphone access.');
       }
     }
   };
 
   const handleTakeMeHome = () => {
     if (!homeBase) {
-      Alert.alert(
-        'Home Base Not Set',
-        'Please set your home base in Settings first.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Go to Settings', onPress: () => router.push('/settings') },
-        ]
-      );
+      Alert.alert('Home Base Not Set', 'Please set your home base in Settings first.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Go to Settings', onPress: () => router.push('/settings') },
+      ]);
       return;
     }
-
-    // Send a message to get directions home
     handleSendMessage(`Take me home to ${homeBase.name}`);
   };
 
+  const budgetPercentUsed = dailyBudget > 0 ? (spentToday / dailyBudget) * 100 : 0;
+
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        {/* Header with Budget Bar */}
+        {/* Compact Header - ChatGPT Style */}
         <View style={styles.header}>
           <View style={styles.headerTop}>
-            <View style={styles.locationInfo}>
-              <Text style={styles.locationText}>
-                {neighborhood || 'Loading location...'}
+            {/* Left: Conversations Button */}
+            <TouchableOpacity
+              style={styles.headerIconButton}
+              onPress={() => router.push('/conversations')}
+            >
+              <MessageSquare size={22} color={colors.text.secondary} />
+            </TouchableOpacity>
+
+            {/* Center: Location & Context */}
+            <TouchableOpacity
+              style={styles.contextInfo}
+              onPress={() => setShowContextBar(!showContextBar)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.locationText} numberOfLines={1}>
+                {neighborhood || 'Loading...'}
               </Text>
-              {weatherTemperature && (
-                <Text style={styles.weatherText}>
-                  {weatherTemperature}°C • {timeOfDay}
-                </Text>
-              )}
-            </View>
-            <View style={styles.headerButtons}>
-              <TouchableOpacity
-                style={styles.conversationsButton}
-                onPress={() => router.push('/conversations')}
-              >
-                <MessageSquare size={20} color={colors.text.light.secondary} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.exploreMapButton}
-                onPress={() => router.push('/map')}
-              >
-                <Map size={18} color="#007AFF" />
-              </TouchableOpacity>
-              {homeBase && (
-                <TouchableOpacity
-                  style={styles.homeButton}
-                  onPress={handleTakeMeHome}
-                >
-                  <Home size={18} color="#007AFF" />
-                </TouchableOpacity>
-              )}
-              {currentTrip && (
-                <TouchableOpacity
-                  style={styles.tripButton}
-                  onPress={() => router.push('/trip-recap')}
-                >
-                  <MapPin size={18} color="#007AFF" />
-                  <Text style={styles.tripButtonText}>
-                    {currentTrip.stats.totalPlaces}
+              <View style={styles.contextRow}>
+                {weatherTemperature && (
+                  <Text style={styles.contextText}>{weatherTemperature}°</Text>
+                )}
+                {weatherTemperature && dailyBudget > 0 && (
+                  <Text style={styles.contextDot}>•</Text>
+                )}
+                {dailyBudget > 0 && (
+                  <Text style={styles.contextText}>
+                    {currency.symbol}{budgetRemaining.toFixed(0)}
                   </Text>
-                </TouchableOpacity>
-              )}
+                )}
+              </View>
+            </TouchableOpacity>
+
+            {/* Right: Settings + Mini Map */}
+            <View style={styles.headerRight}>
               <TouchableOpacity
-                style={styles.settingsButton}
+                style={styles.headerIconButton}
                 onPress={() => router.push('/settings')}
               >
-                <Settings size={22} color={colors.text.light.secondary} />
+                <Settings size={22} color={colors.text.secondary} />
               </TouchableOpacity>
+              <MiniMap
+                size="small"
+                onExpand={() => router.push('/map')}
+              />
             </View>
           </View>
 
-          {/* Collapsible Budget Bar */}
-          {showBudgetBar && dailyBudget > 0 && (
-            <Pressable
-              style={styles.budgetBar}
-              onPress={() => setShowBudgetBar(!showBudgetBar)}
-            >
-              <View style={styles.budgetInfo}>
-                <Text style={styles.budgetLabel}>Today's Budget</Text>
-                <Text style={styles.budgetAmount}>
-                  {currency.symbol}{budgetRemaining.toFixed(0)} / {currency.symbol}{dailyBudget.toFixed(0)}
-                </Text>
-              </View>
-              <View style={styles.budgetBarContainer}>
-                <View style={styles.budgetBarBackground} />
+          {/* Budget Bar - Always visible when budget set */}
+          {dailyBudget > 0 && (
+            <View style={styles.budgetBar}>
+              <View style={styles.budgetTrack}>
                 <View
                   style={[
-                    styles.budgetBarFill,
+                    styles.budgetFill,
                     {
-                      width: `${Math.min((spentToday / dailyBudget) * 100, 100)}%`,
+                      width: `${Math.min(budgetPercentUsed, 100)}%`,
                       backgroundColor:
-                        spentToday > dailyBudget
-                          ? colors.status.error
-                          : spentToday > dailyBudget * 0.8
-                          ? colors.status.warning
-                          : colors.status.success,
+                        budgetPercentUsed > 100
+                          ? colors.budget.over
+                          : budgetPercentUsed > 80
+                            ? colors.budget.warning
+                            : colors.budget.onTrack,
                     },
                   ]}
                 />
               </View>
-            </Pressable>
+            </View>
           )}
         </View>
 
@@ -545,23 +486,19 @@ What would you like to do first?`,
                   </View>
                 )}
 
-                {/* Assistant messages with rich content */}
+                {/* Assistant messages - Full width, no bubble (ChatGPT style) */}
                 {message.role === 'assistant' && (
                   <View style={styles.assistantMessageContainer}>
-                    {/* Text content */}
-                    <View style={[styles.messageBubble, styles.assistantBubble]}>
-                      <Text style={[styles.messageText, styles.assistantText]}>
-                        {message.content}
-                      </Text>
-                      <Text style={[styles.messageTime, styles.assistantTime]}>
-                        {new Date(message.timestamp).toLocaleTimeString('en-US', {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                        })}
-                      </Text>
-                    </View>
+                    <Text style={styles.assistantText}>
+                      {message.content}
+                    </Text>
+                    <Text style={styles.assistantTime}>
+                      {new Date(message.timestamp).toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </Text>
 
-                    {/* Inline Place Card */}
                     {message.placeCard && (
                       <PlaceCard
                         placeCard={message.placeCard}
@@ -575,7 +512,6 @@ What would you like to do first?`,
                       />
                     )}
 
-                    {/* Inline Map */}
                     {message.inlineMap && (
                       <InlineMap
                         mapData={message.inlineMap}
@@ -585,7 +521,6 @@ What would you like to do first?`,
                       />
                     )}
 
-                    {/* Action Buttons (if no place card - place card has its own buttons) */}
                     {message.actions && !message.placeCard && (
                       <ActionButtons
                         actions={message.actions}
@@ -603,66 +538,49 @@ What would you like to do first?`,
                 )}
               </View>
             ))}
-            {isSending && (
-              <View style={[styles.messageBubble, styles.assistantBubble]}>
-                <Text style={[styles.messageText, styles.assistantText]}>
-                  Thinking...
-                </Text>
-              </View>
-            )}
+
+            {/* Typing indicator */}
+            {isSending && <TypingIndicator />}
           </ScrollView>
 
-          {/* Input Bar - iMessage Style */}
+          {/* Input Bar */}
           <View style={styles.inputContainer}>
-            {/* Left side buttons */}
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={() => setShowLogVisit(true)}
-            >
-              <Plus size={22} color="#8E8E93" />
+            <TouchableOpacity style={styles.inputIconButton} onPress={() => setShowLogVisit(true)}>
+              <Plus size={22} color={colors.text.secondary} />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={handleCamera}
-            >
-              <Camera size={22} color="#8E8E93" />
+            <TouchableOpacity style={styles.inputIconButton} onPress={handleCamera}>
+              <Camera size={22} color={colors.text.secondary} />
             </TouchableOpacity>
 
-            {/* Text Input with inline mic/send */}
             <View style={styles.textInputContainer}>
               <TextInput
                 style={styles.textInput}
-                placeholder="Message"
-                placeholderTextColor="#8E8E93"
+                placeholder="Message Tomo..."
+                placeholderTextColor={colors.text.tertiary}
                 value={inputText}
                 onChangeText={setInputText}
                 onSubmitEditing={() => handleSendMessage()}
                 returnKeyType="send"
                 multiline
                 maxLength={1000}
+                keyboardAppearance="dark"
               />
-              {/* Mic or Send button inside input */}
+
               {inputText.trim() ? (
                 <TouchableOpacity
-                  style={styles.sendButtonInline}
+                  style={styles.sendButton}
                   onPress={() => handleSendMessage()}
                   disabled={isSending}
                 >
-                  <Send size={16} color="#FFFFFF" />
+                  <Send size={16} color={colors.text.inverse} />
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  style={[
-                    styles.micButtonInline,
-                    isRecording && styles.recordingButton,
-                  ]}
+                  style={[styles.micButton, isRecording && styles.micButtonRecording]}
                   onPress={handleVoicePress}
                 >
-                  <Mic
-                    size={18}
-                    color={isRecording ? '#FF3B30' : '#8E8E93'}
-                  />
+                  <Mic size={18} color={isRecording ? colors.status.error : colors.text.secondary} />
                 </TouchableOpacity>
               )}
             </View>
@@ -670,7 +588,6 @@ What would you like to do first?`,
         </KeyboardAvoidingView>
       </SafeAreaView>
 
-      {/* Log Visit Modal */}
       <LogVisitModal visible={showLogVisit} onClose={() => setShowLogVisit(false)} />
     </View>
   );
@@ -679,115 +596,74 @@ What would you like to do first?`,
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background.primary,
   },
   safeArea: {
     flex: 1,
   },
+  // === COMPACT HEADER ===
   header: {
-    backgroundColor: '#F9F9F9',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#E5E5EA',
+    backgroundColor: colors.background.secondary,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.muted,
+    paddingBottom: spacing.xs,
   },
   headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  locationInfo: {
-    flex: 1,
-  },
-  locationText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.text.light.primary,
-  },
-  weatherText: {
-    fontSize: 13,
-    color: colors.text.light.secondary,
-    marginTop: 2,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.xs,
     gap: spacing.sm,
   },
-  conversationsButton: {
+  headerIconButton: {
     width: 36,
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: borders.radius.md,
   },
-  exploreMapButton: {
-    width: 36,
-    height: 36,
+  contextInfo: {
+    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#E3F2FD',
-    borderRadius: 18,
   },
-  homeButton: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#E3F2FD',
-    borderRadius: 18,
+  locationText: {
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+    color: colors.text.primary,
   },
-  tripButton: {
+  contextRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E3F2FD',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: 16,
-    gap: 4,
+    gap: spacing.xs,
   },
-  tripButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#007AFF',
+  contextText: {
+    fontSize: typography.sizes.xs,
+    color: colors.text.secondary,
   },
-  settingsButton: {
-    padding: spacing.sm,
+  contextDot: {
+    fontSize: typography.sizes.xs,
+    color: colors.text.tertiary,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   budgetBar: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
   },
-  budgetInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
+  budgetTrack: {
+    height: 3,
+    backgroundColor: colors.budget.track,
+    borderRadius: 2,
+    overflow: 'hidden',
   },
-  budgetLabel: {
-    fontSize: 13,
-    color: colors.text.light.secondary,
-  },
-  budgetAmount: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text.light.primary,
-  },
-  budgetBarContainer: {
-    height: 4,
-    position: 'relative',
-  },
-  budgetBarBackground: {
-    position: 'absolute',
-    width: '100%',
-    height: 4,
-    backgroundColor: '#E5E5EA',
+  budgetFill: {
+    height: '100%',
     borderRadius: 2,
   },
-  budgetBarFill: {
-    position: 'absolute',
-    height: 4,
-    borderRadius: 2,
-  },
+  // === MESSAGES ===
   keyboardView: {
     flex: 1,
   },
@@ -798,74 +674,79 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingBottom: spacing.xl,
   },
+  // === USER BUBBLE (keep bubbles for user) ===
   messageBubble: {
-    maxWidth: '75%',
+    maxWidth: '85%',
     marginBottom: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderRadius: 18,
+    borderRadius: borders.radius.xl,
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: '#007AFF',
-    borderBottomRightRadius: 4,
-  },
-  assistantBubble: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#E9E9EB',
-    borderBottomLeftRadius: 4,
+    backgroundColor: colors.chat.userBubble,
+    borderBottomRightRadius: borders.radius.xs,
   },
   messageText: {
-    fontSize: 16,
-    lineHeight: 21,
+    fontSize: typography.sizes.lg, // 17px - bigger font
+    lineHeight: 26,
   },
   userText: {
-    color: '#FFFFFF',
+    color: colors.chat.userText,
+    fontSize: typography.sizes.lg,
+    lineHeight: 26,
+  },
+  // === ASSISTANT - FULL WIDTH, NO BUBBLE (ChatGPT style) ===
+  assistantMessageContainer: {
+    width: '100%',
+    marginBottom: spacing.lg,
+    paddingRight: spacing.xl, // Some right padding for breathing room
   },
   assistantText: {
-    color: '#000000',
+    color: colors.text.primary,
+    fontSize: typography.sizes.lg, // 17px - bigger font
+    lineHeight: 26,
   },
-  assistantMessageContainer: {
-    alignSelf: 'flex-start',
-    maxWidth: '90%',
+  assistantTime: {
+    color: colors.text.tertiary,
+    fontSize: typography.sizes.xs,
+    marginTop: spacing.sm,
   },
+  // === SYSTEM MESSAGES ===
   systemMessage: {
     alignSelf: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    backgroundColor: colors.surface.card,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: 12,
+    borderRadius: borders.radius.md,
     marginVertical: spacing.sm,
   },
   systemText: {
-    fontSize: 13,
-    color: colors.text.light.secondary,
+    fontSize: typography.sizes.sm,
+    color: colors.text.secondary,
     textAlign: 'center',
   },
   messageTime: {
-    fontSize: 11,
-    marginTop: 4,
+    fontSize: typography.sizes.xs,
+    marginTop: spacing.xs,
   },
   userTime: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(13, 17, 23, 0.6)',
     textAlign: 'right',
-  },
-  assistantTime: {
-    color: 'rgba(0, 0, 0, 0.5)',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 0.5,
-    borderTopColor: '#E5E5EA',
-    gap: 4,
+    backgroundColor: colors.background.secondary,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.muted,
+    gap: spacing.xs,
   },
-  iconButton: {
-    width: 36,
-    height: 36,
+  inputIconButton: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
@@ -874,45 +755,47 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    minHeight: 36,
-    maxHeight: 100,
-    backgroundColor: '#F2F2F7',
-    borderRadius: 18,
+    minHeight: 40,
+    maxHeight: 120,
+    backgroundColor: colors.surface.input,
+    borderRadius: borders.radius.xl,
+    borderWidth: 1,
+    borderColor: colors.surface.inputBorder,
     paddingLeft: spacing.md,
-    paddingRight: 4,
-    paddingVertical: 4,
+    paddingRight: spacing.xs,
+    paddingVertical: spacing.xs,
   },
   textInput: {
     flex: 1,
-    fontSize: 16,
-    color: colors.text.light.primary,
-    paddingVertical: 6,
-    maxHeight: 80,
+    fontSize: typography.sizes.base,
+    color: colors.text.primary,
+    paddingVertical: spacing.sm,
+    maxHeight: 100,
   },
-  sendButtonInline: {
-    width: 28,
-    height: 28,
-    backgroundColor: '#007AFF',
-    borderRadius: 14,
+  sendButton: {
+    width: 32,
+    height: 32,
+    backgroundColor: colors.accent.primary,
+    borderRadius: borders.radius.full,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
   },
-  micButtonInline: {
-    width: 28,
-    height: 28,
+  micButton: {
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
   },
-  recordingButton: {
-    backgroundColor: 'rgba(255, 59, 48, 0.15)',
-    borderRadius: 14,
+  micButtonRecording: {
+    backgroundColor: colors.status.errorMuted,
+    borderRadius: borders.radius.full,
   },
   messageImage: {
     width: '100%',
     height: 200,
-    borderRadius: 12,
+    borderRadius: borders.radius.md,
     marginBottom: spacing.sm,
   },
 });

@@ -37,7 +37,7 @@ export function BudgetBar({ timeOfDay }: BudgetBarProps) {
         </Text>
       </View>
 
-      <View style={[styles.trackContainer, { backgroundColor: isLight ? colors.budget.trackBg.light : colors.budget.trackBg.dark }]}>
+      <View style={[styles.trackContainer, { backgroundColor: colors.budget.trackBg }]}>
         <View
           style={[
             styles.progress,

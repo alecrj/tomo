@@ -1,21 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Animated,
-  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MapPin, Mic, ArrowRight, Globe, Compass, MessageSquare } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { Audio } from 'expo-av';
-import { colors, spacing } from '../constants/theme';
+import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
+import { colors, spacing, borders, shadows } from '../constants/theme';
 import { useOnboardingStore } from '../stores/useOnboardingStore';
-
-const { width } = Dimensions.get('window');
 
 interface OnboardingStep {
   icon: React.ReactNode;
@@ -39,9 +37,13 @@ export default function OnboardingScreen() {
 
   const requestLocation = async () => {
     setIsLoading(true);
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       setLocationPermission(status === 'granted');
+      if (status === 'granted') {
+        safeHaptics.notification(NotificationFeedbackType.Success);
+      }
     } catch (error) {
       console.error('Location permission error:', error);
     }
@@ -51,9 +53,13 @@ export default function OnboardingScreen() {
 
   const requestMicrophone = async () => {
     setIsLoading(true);
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
     try {
       const { status } = await Audio.requestPermissionsAsync();
       setMicrophonePermission(status === 'granted');
+      if (status === 'granted') {
+        safeHaptics.notification(NotificationFeedbackType.Success);
+      }
     } catch (error) {
       console.error('Microphone permission error:', error);
     }
@@ -62,11 +68,13 @@ export default function OnboardingScreen() {
   };
 
   const finishOnboarding = async () => {
+    safeHaptics.notification(NotificationFeedbackType.Success);
     completeOnboarding();
     router.replace('/');
   };
 
   const goToNextStep = () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
     Animated.sequence([
       Animated.timing(fadeAnim, {
         toValue: 0,
@@ -87,7 +95,7 @@ export default function OnboardingScreen() {
 
   const steps: OnboardingStep[] = [
     {
-      icon: <Globe size={64} color="#007AFF" />,
+      icon: <Globe size={64} color={colors.accent.primary} />,
       title: 'Welcome to Tomo',
       description:
         "Your AI travel companion that knows where you are, shows maps, navigates you anywhere, and remembers everything about your trip.",
@@ -95,7 +103,7 @@ export default function OnboardingScreen() {
       action: async () => goToNextStep(),
     },
     {
-      icon: <MapPin size={64} color="#34C759" />,
+      icon: <MapPin size={64} color={colors.status.success} />,
       title: 'Location Access',
       description:
         "Tomo needs to know where you are to give you relevant recommendations. We'll never share your location data.",
@@ -103,7 +111,7 @@ export default function OnboardingScreen() {
       action: requestLocation,
     },
     {
-      icon: <Mic size={64} color="#FF9500" />,
+      icon: <Mic size={64} color={colors.status.warning} />,
       title: 'Voice Input',
       description:
         'Talk to Tomo naturally! Voice input makes it easy to ask questions while exploring.',
@@ -111,7 +119,7 @@ export default function OnboardingScreen() {
       action: requestMicrophone,
     },
     {
-      icon: <MessageSquare size={64} color="#007AFF" />,
+      icon: <MessageSquare size={64} color={colors.accent.primary} />,
       title: "You're All Set!",
       description:
         "Start chatting with Tomo. Ask for food recommendations, directions, or anything about your trip!",
@@ -151,15 +159,15 @@ export default function OnboardingScreen() {
         {currentStep === 0 && (
           <View style={styles.featuresContainer}>
             <View style={styles.featureRow}>
-              <MapPin size={20} color="#34C759" />
+              <MapPin size={20} color={colors.status.success} />
               <Text style={styles.featureText}>Always knows your location</Text>
             </View>
             <View style={styles.featureRow}>
-              <Compass size={20} color="#007AFF" />
+              <Compass size={20} color={colors.accent.secondary} />
               <Text style={styles.featureText}>Navigate anywhere with maps</Text>
             </View>
             <View style={styles.featureRow}>
-              <MessageSquare size={20} color="#FF9500" />
+              <MessageSquare size={20} color={colors.status.warning} />
               <Text style={styles.featureText}>Remembers your preferences</Text>
             </View>
           </View>
@@ -176,7 +184,7 @@ export default function OnboardingScreen() {
               {isLoading ? 'Please wait...' : currentStepData.buttonText}
             </Text>
             {!isLoading && currentStep < steps.length - 1 && (
-              <ArrowRight size={20} color="#FFFFFF" style={styles.buttonIcon} />
+              <ArrowRight size={20} color={colors.text.inverse} style={styles.buttonIcon} />
             )}
           </TouchableOpacity>
 
@@ -199,7 +207,7 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background.primary,
   },
   content: {
     flex: 1,
@@ -217,14 +225,14 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#E5E5EA',
+    backgroundColor: colors.background.elevated,
   },
   progressDotActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.accent.primary,
     width: 24,
   },
   progressDotCompleted: {
-    backgroundColor: '#34C759',
+    backgroundColor: colors.status.success,
   },
   stepContent: {
     flex: 1,
@@ -236,22 +244,24 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: colors.background.secondary,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.xl,
+    borderWidth: 2,
+    borderColor: colors.border.default,
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: colors.text.light.primary,
+    color: colors.text.primary,
     textAlign: 'center',
     marginBottom: spacing.md,
   },
   description: {
     fontSize: 16,
     lineHeight: 24,
-    color: colors.text.light.secondary,
+    color: colors.text.secondary,
     textAlign: 'center',
     maxWidth: 300,
   },
@@ -263,34 +273,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: '#F9F9F9',
+    backgroundColor: colors.background.secondary,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderRadius: 12,
+    borderRadius: borders.radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.muted,
   },
   featureText: {
     fontSize: 15,
-    color: colors.text.light.primary,
+    color: colors.text.primary,
     flex: 1,
   },
   buttonContainer: {
     gap: spacing.md,
   },
   button: {
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.accent.primary,
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.xl,
-    borderRadius: 14,
+    borderRadius: borders.radius.lg,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: spacing.sm,
+    ...shadows.glow,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
-    color: '#FFFFFF',
+    color: colors.text.inverse,
     fontSize: 17,
     fontWeight: '600',
   },
@@ -302,7 +315,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   skipText: {
-    color: colors.text.light.secondary,
+    color: colors.text.secondary,
     fontSize: 15,
   },
 });

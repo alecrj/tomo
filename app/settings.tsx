@@ -8,11 +8,13 @@ import {
   TextInput,
   Switch,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import { ArrowLeft, MapPin, DollarSign, Utensils, Heart, Users, Check, Navigation, Brain } from 'lucide-react-native';
-import { colors, spacing, typography, shadows } from '../constants/theme';
+import { colors, spacing, typography, shadows, borders } from '../constants/theme';
 import { usePreferencesStore } from '../stores/usePreferencesStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
 import { useLocationStore } from '../stores/useLocationStore';
@@ -22,20 +24,14 @@ import { useMemoryStore } from '../stores/useMemoryStore';
 import { detectCurrency } from '../utils/currency';
 import * as Location from 'expo-location';
 
-/**
- * Settings Screen
- * Configure preferences, budget, dietary restrictions, interests
- */
 export default function SettingsScreen() {
   const router = useRouter();
 
-  // Store state
   const preferences = usePreferencesStore();
   const budget = useBudgetStore();
   const coordinates = useLocationStore((state) => state.coordinates);
   const neighborhood = useLocationStore((state) => state.neighborhood);
 
-  // Detect currency from GPS location
   const currency = useMemo(() => {
     if (coordinates) {
       return detectCurrency(coordinates);
@@ -43,7 +39,6 @@ export default function SettingsScreen() {
     return { code: 'USD', symbol: '$', name: 'US Dollar' };
   }, [coordinates]);
 
-  // Local state for editing
   const [homeBaseName, setHomeBaseName] = useState(preferences.homeBase?.name || '');
   const [homeBaseAddress, setHomeBaseAddress] = useState(preferences.homeBase?.address || '');
   const [homeBaseCoordinates, setHomeBaseCoordinates] = useState(preferences.homeBase?.coordinates);
@@ -53,15 +48,14 @@ export default function SettingsScreen() {
   const [budgetLevel, setBudgetLevel] = useState(preferences.budgetLevel);
   const [avoidCrowds, setAvoidCrowds] = useState(preferences.avoidCrowds);
 
-  // Dietary restrictions (multi-select)
   const [dietary, setDietary] = useState<Set<string>>(new Set(preferences.dietary));
   const dietaryOptions = ['vegetarian', 'vegan', 'gluten-free', 'halal', 'kosher', 'none'];
 
-  // Interests (multi-select)
   const [interests, setInterests] = useState<Set<string>>(new Set(preferences.interests));
   const interestOptions = ['food', 'culture', 'nightlife', 'nature', 'shopping', 'iconic'];
 
   const toggleDietary = (option: string) => {
+    safeHaptics.selection();
     const newDietary = new Set(dietary);
     if (option === 'none') {
       newDietary.clear();
@@ -78,6 +72,7 @@ export default function SettingsScreen() {
   };
 
   const toggleInterest = (option: string) => {
+    safeHaptics.selection();
     const newInterests = new Set(interests);
     if (newInterests.has(option)) {
       newInterests.delete(option);
@@ -88,12 +83,13 @@ export default function SettingsScreen() {
   };
 
   const handleUseCurrentLocation = async () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
+
     if (!coordinates) {
       Alert.alert('Location Not Available', 'Please enable location services and try again.');
       return;
     }
 
-    // Get address from current location
     try {
       const [geocode] = await Location.reverseGeocodeAsync(coordinates);
       if (geocode) {
@@ -111,7 +107,6 @@ export default function SettingsScreen() {
       }
     } catch (error) {
       console.error('Error geocoding:', error);
-      // Fallback to just using coordinates
       setHomeBaseName(neighborhood || 'Current Location');
       setHomeBaseAddress(neighborhood || 'Current Location');
       setHomeBaseCoordinates(coordinates);
@@ -121,7 +116,8 @@ export default function SettingsScreen() {
   };
 
   const handleSave = () => {
-    // Validate required fields
+    safeHaptics.impact(ImpactFeedbackStyle.Heavy);
+
     if (!homeBaseName || !homeBaseAddress) {
       Alert.alert('Missing Information', 'Please set your home base location.');
       return;
@@ -137,7 +133,6 @@ export default function SettingsScreen() {
       return;
     }
 
-    // Save to stores
     preferences.setHomeBase({
       name: homeBaseName,
       address: homeBaseAddress,
@@ -148,36 +143,30 @@ export default function SettingsScreen() {
     preferences.setBudgetLevel(budgetLevel);
     preferences.setAvoidCrowds(avoidCrowds);
 
-    // Update dietary restrictions
     const currentDietary = preferences.dietary;
     const newDietary = Array.from(dietary).filter(d => d !== 'none');
 
-    // Remove old restrictions not in new set
     currentDietary.forEach(restriction => {
       if (!newDietary.includes(restriction)) {
         preferences.removeDietaryRestriction(restriction);
       }
     });
 
-    // Add new restrictions not in current set
     newDietary.forEach(restriction => {
       if (!currentDietary.includes(restriction)) {
         preferences.addDietaryRestriction(restriction);
       }
     });
 
-    // Update interests
     const currentInterests = preferences.interests;
     const newInterests = Array.from(interests);
 
-    // Remove old interests not in new set
     currentInterests.forEach(interest => {
       if (!newInterests.includes(interest)) {
         preferences.removeInterest(interest);
       }
     });
 
-    // Add new interests not in current set
     newInterests.forEach(interest => {
       if (!currentInterests.includes(interest)) {
         preferences.addInterest(interest);
@@ -186,6 +175,7 @@ export default function SettingsScreen() {
 
     budget.setTripBudget(parseInt(tripBudget, 10), parseInt(tripDays, 10));
 
+    safeHaptics.notification(NotificationFeedbackType.Success);
     Alert.alert('Settings Saved', 'Your preferences have been updated.', [
       {
         text: 'OK',
@@ -196,11 +186,18 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.content} edges={['top']}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <ArrowLeft size={24} color={colors.text.light.primary} />
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => {
+              safeHaptics.impact(ImpactFeedbackStyle.Light);
+              router.back();
+            }}
+          >
+            <ArrowLeft size={24} color={colors.text.primary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Settings</Text>
           <View style={styles.headerSpacer} />
@@ -215,10 +212,13 @@ export default function SettingsScreen() {
           {/* Memory Link */}
           <TouchableOpacity
             style={styles.memoryLink}
-            onPress={() => router.push('/memory')}
+            onPress={() => {
+              safeHaptics.impact(ImpactFeedbackStyle.Light);
+              router.push('/memory');
+            }}
           >
             <View style={styles.memoryLinkContent}>
-              <Brain size={24} color="#007AFF" />
+              <Brain size={24} color={colors.accent.primary} />
               <View style={styles.memoryLinkText}>
                 <Text style={styles.memoryLinkTitle}>Memory</Text>
                 <Text style={styles.memoryLinkDescription}>
@@ -232,7 +232,7 @@ export default function SettingsScreen() {
           {/* Home Base Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <MapPin size={20} color={colors.text.light.primary} />
+              <MapPin size={20} color={colors.accent.primary} />
               <Text style={styles.sectionTitle}>Home Base</Text>
             </View>
             <Text style={styles.sectionDescription}>
@@ -243,7 +243,7 @@ export default function SettingsScreen() {
               style={styles.currentLocationButton}
               onPress={handleUseCurrentLocation}
             >
-              <Navigation size={18} color="#007AFF" />
+              <Navigation size={18} color={colors.accent.primary} />
               <Text style={styles.currentLocationButtonText}>Use Current Location</Text>
             </TouchableOpacity>
 
@@ -252,7 +252,7 @@ export default function SettingsScreen() {
               <TextInput
                 style={styles.textInput}
                 placeholder="e.g., Shinjuku Station Hotel"
-                placeholderTextColor={colors.text.light.tertiary}
+                placeholderTextColor={colors.text.tertiary}
                 value={homeBaseName}
                 onChangeText={setHomeBaseName}
               />
@@ -263,7 +263,7 @@ export default function SettingsScreen() {
               <TextInput
                 style={styles.textInput}
                 placeholder="e.g., 3-38-1 Shinjuku, Tokyo"
-                placeholderTextColor={colors.text.light.tertiary}
+                placeholderTextColor={colors.text.tertiary}
                 value={homeBaseAddress}
                 onChangeText={setHomeBaseAddress}
               />
@@ -273,7 +273,7 @@ export default function SettingsScreen() {
           {/* Budget Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <DollarSign size={20} color={colors.text.light.primary} />
+              <DollarSign size={20} color={colors.accent.primary} />
               <Text style={styles.sectionTitle}>Budget</Text>
             </View>
             <Text style={styles.sectionDescription}>
@@ -286,7 +286,7 @@ export default function SettingsScreen() {
                 <TextInput
                   style={styles.textInput}
                   placeholder="70000"
-                  placeholderTextColor={colors.text.light.tertiary}
+                  placeholderTextColor={colors.text.tertiary}
                   value={tripBudget}
                   onChangeText={setTripBudget}
                   keyboardType="number-pad"
@@ -298,7 +298,7 @@ export default function SettingsScreen() {
                 <TextInput
                   style={styles.textInput}
                   placeholder="7"
-                  placeholderTextColor={colors.text.light.tertiary}
+                  placeholderTextColor={colors.text.tertiary}
                   value={tripDays}
                   onChangeText={setTripDays}
                   keyboardType="number-pad"
@@ -320,7 +320,10 @@ export default function SettingsScreen() {
                 <TouchableOpacity
                   key={level}
                   style={[styles.chip, budgetLevel === level && styles.chipSelected]}
-                  onPress={() => setBudgetLevel(level)}
+                  onPress={() => {
+                    safeHaptics.selection();
+                    setBudgetLevel(level);
+                  }}
                 >
                   <Text style={[styles.chipText, budgetLevel === level && styles.chipTextSelected]}>
                     {level.charAt(0).toUpperCase() + level.slice(1)}
@@ -333,7 +336,7 @@ export default function SettingsScreen() {
           {/* Walking Tolerance Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Users size={20} color={colors.text.light.primary} />
+              <Users size={20} color={colors.accent.primary} />
               <Text style={styles.sectionTitle}>Walking Tolerance</Text>
             </View>
             <Text style={styles.sectionDescription}>
@@ -345,7 +348,10 @@ export default function SettingsScreen() {
                 <TouchableOpacity
                   key={level}
                   style={[styles.chip, walkingTolerance === level && styles.chipSelected]}
-                  onPress={() => setWalkingTolerance(level)}
+                  onPress={() => {
+                    safeHaptics.selection();
+                    setWalkingTolerance(level);
+                  }}
                 >
                   <Text style={[styles.chipText, walkingTolerance === level && styles.chipTextSelected]}>
                     {level === 'low' ? '< 10 min' : level === 'medium' ? '10-20 min' : '> 20 min'}
@@ -358,7 +364,7 @@ export default function SettingsScreen() {
           {/* Dietary Restrictions Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Utensils size={20} color={colors.text.light.primary} />
+              <Utensils size={20} color={colors.accent.primary} />
               <Text style={styles.sectionTitle}>Dietary Restrictions</Text>
             </View>
 
@@ -370,7 +376,7 @@ export default function SettingsScreen() {
                   onPress={() => toggleDietary(option)}
                 >
                   {dietary.has(option) && (
-                    <Check size={16} color={colors.surface.card} style={styles.chipIcon} />
+                    <Check size={16} color={colors.text.inverse} style={styles.chipIcon} />
                   )}
                   <Text style={[styles.chipText, dietary.has(option) && styles.chipTextSelected]}>
                     {option.charAt(0).toUpperCase() + option.slice(1)}
@@ -383,7 +389,7 @@ export default function SettingsScreen() {
           {/* Interests Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Heart size={20} color={colors.text.light.primary} />
+              <Heart size={20} color={colors.accent.primary} />
               <Text style={styles.sectionTitle}>Interests</Text>
             </View>
             <Text style={styles.sectionDescription}>
@@ -398,7 +404,7 @@ export default function SettingsScreen() {
                   onPress={() => toggleInterest(option)}
                 >
                   {interests.has(option) && (
-                    <Check size={16} color={colors.surface.card} style={styles.chipIcon} />
+                    <Check size={16} color={colors.text.inverse} style={styles.chipIcon} />
                   )}
                   <Text style={[styles.chipText, interests.has(option) && styles.chipTextSelected]}>
                     {option.charAt(0).toUpperCase() + option.slice(1)}
@@ -419,9 +425,12 @@ export default function SettingsScreen() {
               </View>
               <Switch
                 value={avoidCrowds}
-                onValueChange={setAvoidCrowds}
-                trackColor={{ false: colors.surface.input, true: colors.interactive.primary }}
-                thumbColor={colors.surface.card}
+                onValueChange={(value) => {
+                  safeHaptics.selection();
+                  setAvoidCrowds(value);
+                }}
+                trackColor={{ false: colors.background.tertiary, true: colors.accent.primary }}
+                thumbColor={colors.text.primary}
               />
             </View>
           </View>
@@ -437,6 +446,7 @@ export default function SettingsScreen() {
             <TouchableOpacity
               style={styles.resetButton}
               onPress={() => {
+                safeHaptics.impact(ImpactFeedbackStyle.Heavy);
                 Alert.alert(
                   'Reset App',
                   'This will clear all data and restart the onboarding flow. Are you sure?',
@@ -470,7 +480,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background.primary,
   },
   content: {
     flex: 1,
@@ -481,8 +491,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.lg,
-    backgroundColor: colors.surface.card,
-    ...shadows.sm,
+    backgroundColor: colors.background.secondary,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.muted,
   },
   backButton: {
     width: 40,
@@ -493,7 +504,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: typography.sizes.xl,
     fontWeight: typography.weights.semibold,
-    color: colors.text.light.primary,
+    color: colors.text.primary,
   },
   headerSpacer: {
     width: 40,
@@ -502,17 +513,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: spacing.xl,
+    padding: spacing.lg,
   },
   memoryLink: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.surface.card,
-    borderRadius: 12,
-    padding: spacing.xl,
+    backgroundColor: colors.background.secondary,
+    borderRadius: borders.radius.lg,
+    padding: spacing.lg,
     marginBottom: spacing.lg,
-    ...shadows.sm,
+    borderWidth: 1,
+    borderColor: colors.border.muted,
   },
   memoryLinkContent: {
     flexDirection: 'row',
@@ -526,25 +538,26 @@ const styles = StyleSheet.create({
   memoryLinkTitle: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.semibold,
-    color: colors.text.light.primary,
+    color: colors.text.primary,
     marginBottom: 4,
   },
   memoryLinkDescription: {
     fontSize: typography.sizes.sm,
-    color: colors.text.light.secondary,
+    color: colors.text.secondary,
     lineHeight: 18,
   },
   memoryLinkArrow: {
     fontSize: 28,
-    color: colors.text.light.tertiary,
+    color: colors.text.tertiary,
     marginLeft: spacing.sm,
   },
   section: {
-    backgroundColor: colors.surface.card,
-    borderRadius: 12,
-    padding: spacing.xl,
+    backgroundColor: colors.background.secondary,
+    borderRadius: borders.radius.lg,
+    padding: spacing.lg,
     marginBottom: spacing.lg,
-    ...shadows.sm,
+    borderWidth: 1,
+    borderColor: colors.border.muted,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -554,12 +567,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
-    color: colors.text.light.primary,
+    color: colors.text.primary,
     marginLeft: spacing.sm,
   },
   sectionDescription: {
     fontSize: typography.sizes.sm,
-    color: colors.text.light.secondary,
+    color: colors.text.secondary,
     marginBottom: spacing.lg,
     lineHeight: 20,
   },
@@ -567,8 +580,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E3F2FD',
-    borderRadius: 8,
+    backgroundColor: colors.accent.muted,
+    borderRadius: borders.radius.md,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.lg,
@@ -577,7 +590,7 @@ const styles = StyleSheet.create({
   currentLocationButtonText: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.semibold,
-    color: '#007AFF',
+    color: colors.accent.primary,
   },
   inputGroup: {
     marginBottom: spacing.lg,
@@ -592,27 +605,29 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.medium,
-    color: colors.text.light.primary,
+    color: colors.text.primary,
     marginBottom: spacing.sm,
   },
   textInput: {
-    backgroundColor: colors.surface.input,
-    borderRadius: 8,
-    paddingVertical: spacing.lg,
+    backgroundColor: colors.background.primary,
+    borderRadius: borders.radius.md,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     fontSize: typography.sizes.base,
-    color: colors.text.light.primary,
+    color: colors.text.primary,
+    borderWidth: 1,
+    borderColor: colors.border.default,
   },
   budgetPreview: {
-    backgroundColor: colors.surface.input,
-    borderRadius: 8,
+    backgroundColor: colors.accent.muted,
+    borderRadius: borders.radius.md,
     padding: spacing.lg,
     marginBottom: spacing.lg,
   },
   budgetPreviewText: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.semibold,
-    color: colors.text.light.primary,
+    color: colors.accent.primary,
     textAlign: 'center',
   },
   chipGroup: {
@@ -625,14 +640,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
-    backgroundColor: colors.surface.input,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    backgroundColor: colors.background.primary,
+    borderRadius: borders.radius.full,
+    borderWidth: 1,
+    borderColor: colors.border.default,
   },
   chipSelected: {
-    backgroundColor: colors.interactive.primary,
-    borderColor: colors.interactive.primary,
+    backgroundColor: colors.accent.primary,
+    borderColor: colors.accent.primary,
   },
   chipIcon: {
     marginRight: spacing.xs,
@@ -640,10 +655,10 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.medium,
-    color: colors.text.light.primary,
+    color: colors.text.primary,
   },
   chipTextSelected: {
-    color: colors.surface.card,
+    color: colors.text.inverse,
   },
   settingRow: {
     flexDirection: 'row',
@@ -657,25 +672,24 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.medium,
-    color: colors.text.light.primary,
+    color: colors.text.primary,
     marginBottom: 4,
   },
   settingDescription: {
     fontSize: typography.sizes.sm,
-    color: colors.text.light.secondary,
+    color: colors.text.secondary,
   },
   saveButton: {
-    backgroundColor: colors.interactive.primary,
-    borderRadius: 12,
+    backgroundColor: colors.accent.primary,
+    borderRadius: borders.radius.md,
     paddingVertical: spacing.lg,
     alignItems: 'center',
     marginTop: spacing.lg,
-    ...shadows.md,
   },
   saveButtonText: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.semibold,
-    color: colors.surface.card,
+    color: colors.text.inverse,
   },
   bottomPadding: {
     height: spacing.xl,
@@ -684,25 +698,25 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl * 2,
     paddingTop: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
+    borderTopColor: colors.border.muted,
   },
   devSectionTitle: {
     fontSize: typography.sizes.sm,
-    color: colors.text.light.tertiary,
+    color: colors.text.tertiary,
     textAlign: 'center',
     marginBottom: spacing.md,
   },
   resetButton: {
-    backgroundColor: '#FFF1F0',
-    borderRadius: 12,
+    backgroundColor: colors.status.errorMuted,
+    borderRadius: borders.radius.md,
     paddingVertical: spacing.lg,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#FFCCC7',
+    borderColor: colors.status.error,
   },
   resetButtonText: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.medium,
-    color: '#FF4D4F',
+    color: colors.status.error,
   },
 });
