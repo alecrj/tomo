@@ -11,10 +11,11 @@ import {
   StatusBar,
   TextInput,
   Keyboard,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE, PROVIDER_DEFAULT, Region } from 'react-native-maps';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import {
   ArrowLeft,
@@ -46,6 +47,9 @@ import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import type { Coordinates, Destination, DestinationContext } from '../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Use Apple Maps on iOS (no Google branding) and Google Maps on Android
+const MAP_PROVIDER = Platform.OS === 'ios' ? PROVIDER_DEFAULT : PROVIDER_GOOGLE;
 
 interface PlaceResult {
   id: string;
@@ -366,8 +370,9 @@ export default function MapExploreScreen() {
       <MapView
         ref={mapRef}
         style={styles.map}
-        provider={PROVIDER_GOOGLE}
-        customMapStyle={mapStyle}
+        provider={MAP_PROVIDER}
+        customMapStyle={Platform.OS === 'android' ? mapStyle : undefined}
+        userInterfaceStyle="dark"
         initialRegion={initialRegion}
         showsUserLocation
         showsMyLocationButton={false}

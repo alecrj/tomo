@@ -2,158 +2,121 @@
 
 ## The Vision
 
-**Tomo = The Ultimate Travel Companion**
+**Tomo = Like having a local friend in every city**
 
-Not just a travel app - a complete AI-powered travel operating system:
-- General AI assistant that can answer ANYTHING
-- Deep travel context (location, time, weather, budget)
-- Plans your entire trip (flights, accommodation, daily itineraries)
-- Real-time navigation with live transit updates
-- Smart notifications (last train, place closing, weather alerts)
-- Works offline in remote areas
-- Integrates with booking apps (Hostelworld, Booking.com, etc.)
-- Voice mode for hands-free exploration
+A travel companion that:
+- Answers ANY question (general AI + travel superpowers)
+- Knows your location, time, weather, budget in real-time
+- Works for planners AND spontaneous travelers
+- Works offline when you lose signal
+- Feels as clean and fast as ChatGPT
 
-**Tagline:** "Like having a local friend in every city"
+**Core Philosophy:** Minimum friction, maximum value. Every feature must earn its place.
 
 ---
 
 ## Current Status (December 16, 2024)
 
 ### What's Working
-- ✅ Chat with GPT-4o (general Q&A + structured place recommendations)
-- ✅ **Smart system prompt** - Actual time, global AI, dietary emphasis, no markdown
-- ✅ **Temperature unit preference** - C/F toggle in settings
-- ✅ **Place open verification** - Checks Google Places API before showing
-- ✅ **Map search bar** - Search places directly in map modal
-- ✅ **Map chat input** - Ask Tomo about the area from map view
-- ✅ Location tracking and city detection
-- ✅ Google Places API (search, photos, open status)
-- ✅ Google Routes API (Walk, Transit, Drive)
-- ✅ Google Maps SDK with dark theme
+- ✅ AI chat with GPT-4o (context-aware, structured responses)
+- ✅ Smart system prompt (time, location, dietary, no markdown)
+- ✅ Google Places API (search, photos, open status verification)
+- ✅ Google Routes API (walk, transit, drive with fallback calculations)
+- ✅ Apple Maps on iOS / Google Maps on Android (no branding issues)
+- ✅ Location tracking with city detection
 - ✅ Budget tracking with auto-detected currency
 - ✅ Voice transcription (Whisper backend)
-- ✅ Memory system (6 types of memories)
+- ✅ Memory system (remembers preferences)
 - ✅ Trip tracking (multi-city)
-- ✅ Map explore screen with category browsing
-- ✅ Onboarding flow
-- ✅ Settings with dynamic currency
 - ✅ Dark mode (Explorer Teal theme)
-- ✅ ChatGPT-style messages
-- ✅ Haptic feedback (safe wrappers)
+- ✅ Notification store (built, not wired up)
+- ✅ Itinerary store (built, no UI yet)
 
-### Known Bugs
-- ❌ **0 min walk time** - Routes API sometimes returns 0 duration (see logs)
-- ❌ **Google branding** - MiniMap opens Google Maps, shows Google logo
-- ❌ **expo-haptics not in build** - Needs new dev client build
-
----
-
-## Feature Roadmap
-
-### Phase 1: Core Fixes (Next Session)
-
-#### 1.1 Fix 0 Min Walk Time Bug
-The Routes API sometimes returns `duration: 0`. Need to investigate.
-```
-LOG  [Routes] Walking directions fetched: {"distance": undefined, "duration": 0, ...}
-```
-
-#### 1.2 Remove Google Branding
-- Replace MiniMap tap action with in-app navigation
-- Remove "Google" text from navigation buttons
-- Use our own map styling throughout
-
-#### 1.3 Build New Dev Client
-```bash
-eas build --profile development --platform ios
-```
-Needed for expo-haptics to work properly.
+### What Needs Work
+- ⚠️ UI not ChatGPT-level polished
+- ⚠️ Settings scattered (should be in sidebar)
+- ⚠️ No quick actions (+) button
+- ⚠️ No itinerary UI screen
+- ⚠️ Notifications not wired up
+- ⚠️ No offline mode
+- ⚠️ No voice mode (realtime)
+- ⚠️ No booking integrations
 
 ---
 
-### Phase 2: Smart Notifications
+## The Complete Roadmap
 
-#### 2.1 Notification System Architecture
-New store: `stores/useNotificationStore.ts`
+### Milestone 1: ChatGPT-Level Polish (Priority: CRITICAL)
+*Goal: Make the app feel premium and intuitive*
 
-```typescript
-interface Notification {
-  id: string;
-  type: 'last_train' | 'place_closing' | 'weather' | 'itinerary' | 'budget' | 'transit';
-  priority: 'urgent' | 'warning' | 'info';
-  title: string;
-  body: string;
-  scheduledFor?: Date;
-  action?: { type: string; payload: any };
-}
+#### 1.1 Quick Actions Button (+)
+Add a + button that reveals contextual action chips:
+```
+Default chips:
+🍜 Food   ☕ Coffee   🍺 Drinks   🏛️ Sights
+📸 Photo  🗺️ Plan    💰 Budget   🏠 Home
+
+Context-aware:
+- Morning: "Breakfast" instead of "Food"
+- Evening: "Dinner", "Nightlife" appear
+- Navigating: "Pit stop", "Change route"
+- Rainy: "Indoor activities"
 ```
 
-#### 2.2 Notification Types
+#### 1.2 Sidebar Navigation (ChatGPT Style)
+Move from tab bar to hamburger menu:
+```
+┌──────────────────┬──────────────────────────┐
+│ ☰ Tomo           │                          │
+├──────────────────┤                          │
+│ + New chat       │                          │
+│                  │    Current chat          │
+│ TODAY            │    messages here         │
+│ • Food recs      │                          │
+│ • Temple guide   │                          │
+│                  │                          │
+│ YESTERDAY        │                          │
+│ • Bangkok tips   │                          │
+│                  │                          │
+├──────────────────┤                          │
+│ 📍 Chiang Mai    │                          │
+│ 🗓️ My Itinerary  │                          │
+│ 💰 Budget        │                          │
+│ ⚙️ Settings      │                          │
+└──────────────────┴──────────────────────────┘
+```
 
-| Type | Trigger | Example |
-|------|---------|---------|
-| **Last Train** | Time + location + home base | "Last train to Chang Phueak leaves in 45 min" |
-| **Place Closing** | Current destination + hours | "Wat Phra Singh closes in 30 min" |
-| **Weather Alert** | Weather API change | "Rain expected at 3 PM" |
-| **Itinerary** | Scheduled activity | "Thai cooking class in 1 hour" |
-| **Budget** | Spending threshold | "80% of today's budget spent" |
-| **Transit** | Real-time transit data | "Your bus arrives in 5 min" |
+#### 1.3 Response Polish
+- Add emoji usage setting (lots/some/none)
+- Add tone setting (casual/friendly/professional)
+- Improve response formatting
+- Faster perceived response time (streaming feel)
 
-#### 2.3 Implementation
-- Use `expo-notifications` for push notifications
-- Background location tracking for geofencing
-- Periodic weather checks
-- Integration with itinerary system
+#### 1.4 Clean Up Header
+Current header is cluttered. Simplify:
+```
+Before: [Chats] [Location • Temp • Budget] [Settings] [MiniMap]
+After:  [☰]     [Chiang Mai, Thailand]              [🗺️]
+```
 
 ---
 
-### Phase 3: Itinerary Planning
+### Milestone 2: Itinerary System (Priority: HIGH)
+*Goal: Serve both planners and wanderers*
 
-#### 3.1 Itinerary Data Model
-New store: `stores/useItineraryStore.ts`
+#### 2.1 Two Modes Philosophy
+**Wanderer Mode (Default):**
+- No itinerary needed
+- Just chat and get instant recommendations
+- "What should I do next?" works great
 
-```typescript
-interface Itinerary {
-  id: string;
-  name: string;
-  startDate: Date;
-  endDate: Date;
-  days: ItineraryDay[];
-}
+**Planner Mode (On Request):**
+- User says "Plan my next 3 days"
+- Tomo generates itinerary
+- User can view/edit in dedicated screen
+- Gets reminders for activities
 
-interface ItineraryDay {
-  date: Date;
-  activities: Activity[];
-}
-
-interface Activity {
-  id: string;
-  timeSlot: 'morning' | 'afternoon' | 'evening' | 'night';
-  startTime?: string;
-  endTime?: string;
-  place?: PlaceCardData;
-  title: string;
-  description: string;
-  category: 'food' | 'culture' | 'activity' | 'transport' | 'rest';
-  booked: boolean;
-  bookingUrl?: string;
-}
-```
-
-#### 3.2 AI Itinerary Generation
-User says: "Plan my next 3 days in Chiang Mai"
-
-GPT generates structured itinerary with:
-- Time-appropriate activities (temples morning, nightlife evening)
-- Geographical clustering (minimize travel between activities)
-- Budget-aware suggestions
-- Dietary-compliant food recommendations
-- Weather-aware outdoor activities
-
-#### 3.3 Itinerary UI
-New screen: `app/itinerary.tsx`
-
+#### 2.2 Itinerary UI Screen (`app/itinerary.tsx`)
 ```
 ┌─────────────────────────────────────┐
 │ [←] My Chiang Mai Trip    [Share]  │
@@ -162,130 +125,104 @@ New screen: `app/itinerary.tsx`
 ├─────────────────────────────────────┤
 │ 🌅 MORNING                          │
 │ ┌─────────────────────────────────┐ │
-│ │ 8:00 AM                         │ │
-│ │ Wat Chedi Luang                 │ │
+│ │ 8:00 AM - Wat Chedi Luang       │ │
 │ │ Ancient temple ruins            │ │
-│ │ [Navigate] [Remove]             │ │
-│ └─────────────────────────────────┘ │
-│ ┌─────────────────────────────────┐ │
-│ │ 10:00 AM                        │ │
-│ │ Ristr8to Coffee                 │ │
-│ │ Award-winning latte art         │ │
-│ │ [Navigate] [Remove]             │ │
+│ │ [Navigate]           [✓] [✕]   │ │
 │ └─────────────────────────────────┘ │
 │                                     │
 │ 🌞 AFTERNOON                        │
 │ ┌─────────────────────────────────┐ │
-│ │ 12:30 PM                        │ │
-│ │ Khao Soi Khun Yai               │ │
+│ │ 12:30 PM - Khao Soi Khun Yai    │ │
 │ │ Best khao soi in the city       │ │
-│ │ [Navigate] [Remove]             │ │
+│ │ [Navigate]           [✓] [✕]   │ │
 │ └─────────────────────────────────┘ │
 │                                     │
 │ [+ Add Activity]                    │
 ├─────────────────────────────────────┤
-│ [💬 Ask Tomo to modify...]     [➤] │
+│ [Ask Tomo to modify...]        [➤] │
+└─────────────────────────────────────┘
+```
+
+#### 2.3 Chat Integration
+- Detect "plan my day/week" requests automatically
+- Show itinerary preview in chat
+- "View full itinerary" button opens screen
+- Modify via chat: "Actually skip the shopping"
+
+---
+
+### Milestone 3: Smart Notifications (Priority: HIGH)
+*Goal: Helpful alerts, not annoying ones*
+
+#### 3.1 Core Notification Types
+| Type | Trigger | Value |
+|------|---------|-------|
+| **Transit** | Last train/bus approaching | Prevents being stranded |
+| **Place Closing** | Destination closing soon | Saves wasted trips |
+| **Weather** | Rain/storm incoming | Helps plan ahead |
+| **Itinerary** | Next activity reminder | Keeps planners on track |
+| **Budget** | Spending threshold | Financial awareness |
+
+#### 3.2 Notification Preferences (Onboarding + Settings)
+```
+How much help do you want?
+
+○ Minimal - Only urgent stuff (last train, safety)
+● Balanced - Helpful reminders when useful
+○ Full Support - Keep me informed of everything
+```
+
+#### 3.3 Wire Up Existing Stores
+- Connect `useNotificationStore` to UI
+- Connect `useLastTrainWarning` hook to app layout
+- Add notification bell/indicator in header
+- Push notifications via `expo-notifications`
+
+---
+
+### Milestone 4: Offline Mode (Priority: HIGH)
+*Goal: App works when you lose signal*
+
+#### 4.1 What Works Offline
+| Feature | Offline | How |
+|---------|---------|-----|
+| Saved places | ✅ Full | AsyncStorage cache |
+| Saved routes | ✅ Full | Cache polylines + steps |
+| Map tiles | ✅ Full | Download region |
+| Previous chats | ✅ Full | Already cached |
+| New AI chat | ⚠️ Queue | Send when back online |
+| Live transit | ❌ None | Requires internet |
+
+#### 4.2 Implementation
+- `stores/useOfflineStore.ts` - Manage cached data
+- Download map tiles for current region
+- Cache place details when viewed
+- Queue messages when offline, sync when online
+- Clear offline indicator in UI
+
+#### 4.3 Offline UI
+```
+┌─────────────────────────────────────┐
+│ ⚠️ You're offline                   │
+│ Cached data available • 2 messages  │
+│ queued                              │
 └─────────────────────────────────────┘
 ```
 
 ---
 
-### Phase 4: Third-Party Integrations
+### Milestone 5: Voice Mode (Priority: MEDIUM)
+*Goal: Hands-free interaction while exploring*
 
-#### 4.1 Deep Link Integration
-
-| Service | Deep Link Format | Use Case |
-|---------|-----------------|----------|
-| **Hostelworld** | `hostelworld://search?city=X&checkin=Y` | Book hostels |
-| **Booking.com** | `booking://hotel?dest_id=X` | Book hotels |
-| **Google Flights** | `https://google.com/flights?q=X+to+Y` | Search flights |
-| **Skyscanner** | Skyscanner API | Compare flights |
-| **Grab** | `grab://open?screenType=BOOKING&lat=X&lng=Y` | Book rides |
-| **Google Calendar** | Calendar API | Export itinerary |
-
-#### 4.2 "Tomo Finds, You Book" Flow
-```
-User: "Find me a hostel near Old City under $15"
-
-Tomo: "I found 3 hostels near Old City:
-
-1. Stamps Backpackers - $12/night ⭐ 9.2
-   Clean dorms, great social vibe
-
-2. Deejai Backpackers - $10/night ⭐ 8.8
-   Budget-friendly, basic but good
-
-3. Hug Hostel - $14/night ⭐ 9.0
-   Modern, quiet, good wifi
-
-[Book on Hostelworld] [Book on Booking.com] [Show on Map]"
-```
-
-#### 4.3 Flight/Transport Search
-New service: `services/transport.ts`
-
-- Search flights via Skyscanner API
-- Search buses via 12go.asia API (Southeast Asia)
-- Search trains via Rome2Rio API
-- Compare prices across providers
-
----
-
-### Phase 5: Live Transit Updates
-
-#### 5.1 Real-Time Transit Data
-
-| City/Region | Data Source | Status |
-|-------------|-------------|--------|
-| Tokyo | NAVITIME API | 🟢 Available |
-| Bangkok | BTS/MRT APIs | 🟡 Limited |
-| Singapore | LTA DataMall | 🟢 Available |
-| Europe | Google Transit | 🟢 Available |
-| USA | GTFS Realtime | 🟢 Available |
-| Other | Google fallback | 🟡 Schedules only |
-
-#### 5.2 Transit Notification Flow
-```
-User starts navigation to destination
-
-Tomo monitors:
-- Next departure time
-- Delays/disruptions
-- Platform changes
-
-Notifications:
-- "BTS arriving in 2 min - Platform 2"
-- "Delay on Sukhumvit Line - take alternate route?"
-- "You missed the train - next one in 8 min"
-```
-
----
-
-### Phase 6: Voice Mode
-
-#### 6.1 OpenAI Realtime API Integration
-New service: `services/realtime.ts`
-
-```typescript
-// WebSocket connection to OpenAI Realtime API
-const ws = new WebSocket('wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview');
-
-// Streaming audio in/out
-// Voice activity detection
-// Interrupt handling
-```
-
-#### 6.2 Voice Mode Features
-- Hands-free conversation with Tomo
-- Voice turn-by-turn navigation
-- "Hey Tomo" wake word (stretch goal)
-- Background audio playback
+#### 5.1 OpenAI Realtime API
+- WebSocket connection for streaming audio
+- Voice Activity Detection (VAD)
+- Interrupt handling
 - Works with AirPods/headphones
 
-#### 6.3 Voice Mode UI
+#### 5.2 Voice Mode UI
 ```
 ┌─────────────────────────────────────┐
-│                                     │
 │                                     │
 │            🎙️                       │
 │         Listening...                │
@@ -299,175 +236,180 @@ const ws = new WebSocket('wss://api.openai.com/v1/realtime?model=gpt-4o-realtime
 └─────────────────────────────────────┘
 ```
 
----
-
-### Phase 7: Offline Mode
-
-#### 7.1 Offline Capabilities
-
-| Feature | Offline Support | Implementation |
-|---------|-----------------|----------------|
-| Map tiles | ✅ Full | Download region tiles |
-| Saved places | ✅ Full | Cache in AsyncStorage |
-| Saved routes | ✅ Full | Cache polylines + steps |
-| Voice transcription | ✅ Full | On-device Whisper |
-| AI chat | ⚠️ Limited | Queue for sync |
-| Live transit | ❌ None | Requires internet |
-
-#### 7.2 Offline Data Management
-```
-Settings > Offline Maps
-
-Downloaded Regions:
-┌─────────────────────────────────────┐
-│ 🗺️ Chiang Mai          125 MB [✓]  │
-│ 🗺️ Bangkok             210 MB [✓]  │
-│ 🗺️ Tokyo               450 MB [ ]  │
-└─────────────────────────────────────┘
-
-[Download Current Region]
-
-Storage Used: 335 MB / 2 GB
-```
+#### 5.3 Voice Navigation
+- Speak turn-by-turn directions
+- "In 200 meters, turn left"
+- Works in background
 
 ---
 
-### Phase 8: Social & Sharing
+### Milestone 6: Booking Integration (Priority: MEDIUM)
+*Goal: Close the loop - recommend AND book*
 
-#### 8.1 Share Features
-- Share itinerary with travel buddy
-- Export trip as PDF
-- Share location in real-time (safety)
-- Trip recap (Instagram-style)
+#### 6.1 Deep Links
+| Service | Use Case |
+|---------|----------|
+| Hostelworld | Book hostels |
+| Booking.com | Book hotels |
+| Google Flights | Search flights |
+| Grab/Uber | Book rides |
+| Google Calendar | Export itinerary |
 
-#### 8.2 Trip Recap
-Auto-generated at end of trip:
+#### 6.2 "Tomo Finds, You Book" Flow
 ```
+User: "Find me a hostel near Old City under $15"
+
+Tomo: Found 3 hostels:
+
 ┌─────────────────────────────────────┐
-│ 🌏 Your Thailand Adventure          │
-│ December 10-20, 2024                │
-├─────────────────────────────────────┤
-│ [Photo collage]                     │
-├─────────────────────────────────────┤
-│ 📍 3 cities visited                 │
-│ 🏛️ 12 temples explored              │
-│ 🍜 28 meals enjoyed                 │
-│ 🚶 47 km walked                     │
-│ 💰 ฿15,420 spent                    │
-├─────────────────────────────────────┤
-│ Top Moments:                        │
-│ • Sunrise at Doi Suthep            │
-│ • Cooking class in Chiang Mai      │
-│ • Full moon party in Koh Phangan   │
-├─────────────────────────────────────┤
-│ [Share] [Export PDF] [Save Photos] │
+│ Stamps Backpackers - $12/night ⭐9.2│
+│ Clean dorms, great social vibe      │
+│ [Hostelworld] [Booking.com] [Map]  │
 └─────────────────────────────────────┘
 ```
 
 ---
 
-### Phase 9: Advanced Features
+### Milestone 7: Settings & Personalization (Priority: MEDIUM)
+*Goal: Make Tomo feel personal*
 
-#### 9.1 Multi-City Trip Planning
+#### 7.1 Tomo Personality Settings
 ```
-User: "I have 2 weeks in Southeast Asia, help me plan"
+Voice & Tone:
+○ Casual    "Yo! Found this sick spot 🔥"
+● Friendly  "Hey! Found a great place nearby"
+○ Professional "I recommend this establishment"
 
-Tomo generates:
-- Optimal route between cities
-- Flight/bus recommendations
-- Time allocation per city
-- Visa requirements
-- Budget breakdown
+Emoji Usage:
+○ Lots 🎉  ● Some  ○ None
+
+Response Length:
+○ Brief  ● Balanced  ○ Detailed
 ```
 
-#### 9.2 Expense Splitting
-For group travel:
-- Log who paid what
-- Multi-currency support
-- Auto-calculate settlements
-- Export expense report
+#### 7.2 Travel Preferences
+- Dietary restrictions (critical)
+- Budget level
+- Walking tolerance
+- Crowd preference
+- Interests (food, culture, nightlife, nature)
 
-#### 9.3 Language Assistant
-- Camera translation (menus, signs)
-- Common phrases for current country
-- Pronunciation guide with audio
-- "How do I say...?" quick access
-
-#### 9.4 Safety Features
-- Embassy contact info
-- Emergency services by country
-- Travel advisories
-- Share live location with emergency contact
+#### 7.3 Notification Preferences
+- Per-type toggles
+- Quiet hours
+- Urgency threshold
 
 ---
 
-## Architecture
+## What We're NOT Building (Intentionally Cut)
 
-### Current Services (`/services/`)
-
-| File | API | Purpose |
-|------|-----|---------|
-| `openai.ts` | OpenAI GPT-4o | Main chat, structured responses |
-| `places.ts` | Google Places API | Search, details, photos |
-| `routes.ts` | Google Routes API | Walking, Transit, Driving |
-| `voice.ts` | Whisper | Voice transcription |
-| `weather.ts` | OpenWeatherMap | Current weather |
-| `location.ts` | Expo Location | GPS, reverse geocoding |
-
-### New Services (To Build)
-
-| File | API | Purpose |
-|------|-----|---------|
-| `realtime.ts` | OpenAI Realtime | Voice mode |
-| `notifications.ts` | Expo Notifications | Push notifications |
-| `transport.ts` | Skyscanner, 12go | Flight/bus search |
-| `transit.ts` | Various | Real-time transit |
-| `offline.ts` | Local | Offline data management |
-
-### Current Stores (`/stores/`)
-
-| Store | Purpose |
-|-------|---------|
-| `useConversationStore` | Chat messages |
-| `useMemoryStore` | User memories (6 types) |
-| `useTripStore` | Multi-city trips |
-| `useBudgetStore` | Budget tracking |
-| `useLocationStore` | GPS coordinates |
-| `useNavigationStore` | Navigation state |
-| `usePreferencesStore` | Settings, dietary, temperature |
-| `useWeatherStore` | Weather data |
-| `useOnboardingStore` | Onboarding state |
-
-### New Stores (To Build)
-
-| Store | Purpose |
-|-------|---------|
-| `useItineraryStore` | Trip itineraries |
-| `useNotificationStore` | Notification queue |
-| `useOfflineStore` | Offline data cache |
-| `useVoiceModeStore` | Voice mode state |
+| Feature | Reason |
+|---------|--------|
+| Stamps/Achievements | Adds complexity, gamification not core value |
+| Expense Splitting | Splitwise exists, not our focus |
+| Camera Translation | Google Translate exists |
+| Multi-city Trip Planning | Scope creep, can add later |
+| Social Features | Not core to solo/couple travel |
+| Trip Recap/Journal | Nice-to-have, P3 at best |
 
 ---
 
-## Environment Variables
+## Technical Architecture
 
-```env
-# AI
-EXPO_PUBLIC_OPENAI_API_KEY=sk-proj-...
+### Services (`/services/`)
+| File | Status | Purpose |
+|------|--------|---------|
+| `openai.ts` | ✅ Built | Chat + itinerary generation |
+| `places.ts` | ✅ Built | Google Places API |
+| `routes.ts` | ✅ Built | Google Routes API |
+| `voice.ts` | ✅ Built | Whisper transcription |
+| `weather.ts` | ✅ Built | OpenWeatherMap |
+| `location.ts` | ✅ Built | GPS + geocoding |
+| `realtime.ts` | 🔲 TODO | OpenAI Realtime (voice mode) |
+| `offline.ts` | 🔲 TODO | Offline data management |
 
-# Google
-EXPO_PUBLIC_GOOGLE_PLACES_API_KEY=...
+### Stores (`/stores/`)
+| Store | Status | Purpose |
+|-------|--------|---------|
+| `useConversationStore` | ✅ Built | Chat messages |
+| `useMemoryStore` | ✅ Built | User preferences memory |
+| `useTripStore` | ✅ Built | Trip tracking |
+| `useBudgetStore` | ✅ Built | Budget tracking |
+| `useLocationStore` | ✅ Built | GPS coordinates |
+| `useNavigationStore` | ✅ Built | Navigation state |
+| `usePreferencesStore` | ✅ Built | User settings |
+| `useWeatherStore` | ✅ Built | Weather data |
+| `useNotificationStore` | ✅ Built | Notification queue |
+| `useItineraryStore` | ✅ Built | Trip itineraries |
+| `useOfflineStore` | 🔲 TODO | Offline cache |
 
-# Weather
-EXPO_PUBLIC_WEATHER_API_KEY=...
+### Hooks (`/hooks/`)
+| Hook | Status | Purpose |
+|------|--------|---------|
+| `useLocation` | ✅ Built | Location tracking |
+| `useWeather` | ✅ Built | Weather updates |
+| `useTimeOfDay` | ✅ Built | Time-based context |
+| `useCityDetection` | ✅ Built | City change detection |
+| `useLastTrainWarning` | ✅ Built | Transit alerts |
+| `useOfflineStatus` | 🔲 TODO | Network monitoring |
 
-# Voice
-EXPO_PUBLIC_WHISPER_BACKEND_URL=https://tomo-production-ed80.up.railway.app
+---
 
-# Future
-EXPO_PUBLIC_SKYSCANNER_API_KEY=...
-EXPO_PUBLIC_12GO_API_KEY=...
-```
+## Implementation Order (The Real TODO List)
+
+### Phase 1: Polish (Next 1-2 Sessions)
+- [ ] **Quick Actions Button** - Add + button with contextual chips
+- [ ] **Sidebar Navigation** - Replace tab bar with hamburger menu
+- [ ] **Clean Header** - Simplify to [☰] [Location] [🗺️]
+- [ ] **Tone Settings** - Add personality customization
+- [ ] **Emoji in Responses** - Enable by default, respect settings
+
+### Phase 2: Itinerary (Next 2-3 Sessions)
+- [ ] **Itinerary UI Screen** - `app/itinerary.tsx` with day view
+- [ ] **Chat Integration** - Detect plan requests, show previews
+- [ ] **Activity Management** - Add, remove, reorder, complete
+- [ ] **Itinerary Reminders** - Connect to notification system
+
+### Phase 3: Notifications (Next 1-2 Sessions)
+- [ ] **Wire Up Notifications** - Connect stores to UI
+- [ ] **Notification Center** - Bell icon, list view
+- [ ] **Push Notifications** - expo-notifications setup
+- [ ] **Preference Controls** - Onboarding + settings
+
+### Phase 4: Offline (Next 2-3 Sessions)
+- [ ] **Offline Store** - Cache management
+- [ ] **Map Tile Download** - Region-based caching
+- [ ] **Message Queue** - Send when back online
+- [ ] **Offline Indicator** - Clear UI feedback
+
+### Phase 5: Voice Mode (Future)
+- [ ] **Realtime Service** - OpenAI WebSocket
+- [ ] **Voice UI** - Listening/speaking states
+- [ ] **Background Audio** - Continue in background
+
+### Phase 6: Booking (Future)
+- [ ] **Deep Links** - Hostelworld, Booking.com, etc.
+- [ ] **Booking Flow** - "Book this" buttons in recommendations
+
+---
+
+## Session History
+
+### December 16, 2024 (Session 5) - P0 Fixes + P1 Foundation
+**Completed:**
+- ✅ Fixed 0 min walk time bug (Haversine fallback)
+- ✅ Removed Google branding (Apple Maps on iOS)
+- ✅ Built `useNotificationStore.ts`
+- ✅ Built `useItineraryStore.ts`
+- ✅ Built `useLastTrainWarning.ts` hook
+- ✅ Added `generateItinerary()` to OpenAI service
+- ✅ Added itinerary-related types
+
+### Previous Sessions
+- Session 4: Smart system prompt, temperature units, place verification, map search
+- Session 3: Distance fix, haptics, ChatGPT-style messages
+- Session 2: Dark mode, MiniMap, TypingIndicator
+- Session 1: Google Maps fix, API key rotation
 
 ---
 
@@ -480,7 +422,7 @@ npx expo start --dev-client --tunnel
 # Type check
 npx tsc --noEmit
 
-# Build dev client
+# Build dev client (needed for haptics)
 eas build --profile development --platform ios
 
 # Git
@@ -489,75 +431,48 @@ git add -A && git commit -m "message" && git push origin main
 
 ---
 
-## Session History
+## User Personas We're Designing For
 
-### December 16, 2024 (Session 4) - P0/P1 Complete + Roadmap
-**Completed:**
-- ✅ Fixed system prompt (actual time, global AI, dietary emphasis, no markdown)
-- ✅ Added temperature unit preference (C/F)
-- ✅ Added place open verification via Google Places API
-- ✅ Added search bar to map modal
-- ✅ Added chat input to map modal
-- ✅ Created comprehensive feature roadmap
+### 1. Solo Backpacker
+- Budget conscious
+- Spontaneous (wanderer mode)
+- Needs: Quick recs, budget tracking, safety info
+- Key question: "What's cheap and good nearby?"
 
-**Identified Bugs:**
-- 0 min walk time from Routes API
-- Google branding in MiniMap/navigation
+### 2. Couple Trip
+- Moderate budget
+- Mix of planning and spontaneity
+- Needs: Day planning, romantic spots, reservations
+- Key question: "Plan a nice day for us"
 
-**Committed:** `7e763c4` - feat: Smart system prompt + temperature unit + map search & chat
+### 3. Business Traveler
+- High budget, limited time
+- Efficiency focused
+- Needs: Fast decisions, reliable recs
+- Key question: "Best coffee in 5 min walk"
 
-### December 16, 2024 (Session 3) - Fixes & Planning
-- Fixed distance mismatch (Routes API integration)
-- Safe haptics wrapper
-- ChatGPT-style messages
-- Identified issues with system prompt
-
-### December 16, 2024 (Session 2) - UI Overhaul
-- Dark mode (Explorer Teal theme)
-- MiniMap component
-- TypingIndicator
-- Compact header
-
-### December 16, 2024 (Session 1) - Google Maps Fix
-- Fixed black screen issue
-- Rotated API key
+### 4. Family Vacation
+- Kid-friendly focus
+- Dietary restrictions common
+- Needs: Family activities, safe food
+- Key question: "What can we do with kids?"
 
 ---
 
-## Next Session Checklist
+## Success Metrics (How We Know It's Working)
 
-### Immediate (P0)
-- [ ] Fix 0 min walk time bug in `services/routes.ts`
-- [ ] Remove Google branding from navigation
-- [ ] Build new dev client for haptics
-
-### This Week (P1)
-- [ ] Notification system foundation
-- [ ] Last train warning
-- [ ] Itinerary data model
-- [ ] "Plan my day" command
-
-### This Month (P2)
-- [ ] Deep links to booking apps
-- [ ] Voice mode MVP
-- [ ] Offline map downloads
-- [ ] Trip recap feature
+1. **Time to Value** - How fast can a new user get a useful recommendation? Target: <30 seconds
+2. **Offline Reliability** - Does the app remain useful without signal? Target: Core features work
+3. **Notification Quality** - Are notifications helpful or annoying? Target: >80% marked helpful
+4. **Itinerary Adoption** - Do planners use the itinerary feature? Target: 40% of users
+5. **Session Length** - Do people keep the app open while exploring? Target: >10 min average
 
 ---
 
-## Implementation Priority Matrix
+## The North Star
 
-| Feature | Impact | Effort | Priority |
-|---------|--------|--------|----------|
-| Fix 0 min walk bug | High | Low | 🔴 P0 |
-| Remove Google branding | Medium | Low | 🔴 P0 |
-| Notification system | High | Medium | 🟡 P1 |
-| Itinerary planning | High | Medium | 🟡 P1 |
-| Booking deep links | Medium | Low | 🟡 P1 |
-| Voice mode | High | High | 🟢 P2 |
-| Offline mode | High | High | 🟢 P2 |
-| Live transit | Medium | High | 🟢 P2 |
-| Multi-city planning | High | Medium | 🟢 P2 |
-| Trip recap | Medium | Medium | 🔵 P3 |
-| Expense splitting | Low | Medium | 🔵 P3 |
-| Language assistant | Medium | Medium | 🔵 P3 |
+**When a traveler lands in a new city, Tomo should be the first app they open.**
+
+Not Google Maps. Not TripAdvisor. Not ChatGPT.
+
+Tomo. Because it knows them, knows the city, and gives them exactly what they need in that moment.

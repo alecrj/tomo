@@ -1,12 +1,15 @@
 import React, { useRef, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, Polyline } from 'react-native-maps';
+import { View, StyleSheet, TouchableOpacity, Text, Platform } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE, PROVIDER_DEFAULT, Polyline } from 'react-native-maps';
 import { MapPin, Navigation, Maximize2 } from 'lucide-react-native';
 import { colors, spacing, borders, shadows, mapStyle } from '../constants/theme';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useNavigationStore } from '../stores/useNavigationStore';
 import { decodePolyline } from '../utils/polyline';
 import type { Coordinates } from '../types';
+
+// Use Apple Maps on iOS (no Google branding) and Google Maps on Android
+const MAP_PROVIDER = Platform.OS === 'ios' ? PROVIDER_DEFAULT : PROVIDER_GOOGLE;
 
 interface MiniMapProps {
   onExpand?: () => void;
@@ -58,8 +61,9 @@ export function MiniMap({ onExpand, size = 'small' }: MiniMapProps) {
       <MapView
         ref={mapRef}
         style={styles.map}
-        provider={PROVIDER_GOOGLE}
-        customMapStyle={mapStyle}
+        provider={MAP_PROVIDER}
+        customMapStyle={Platform.OS === 'android' ? mapStyle : undefined}
+        userInterfaceStyle="dark"
         scrollEnabled={false}
         zoomEnabled={false}
         rotateEnabled={false}

@@ -352,6 +352,34 @@ export async function getDrivingDirections(
 }
 
 /**
+ * Calculate straight-line distance between two coordinates (Haversine formula)
+ * Returns distance in meters
+ */
+function calculateStraightLineDistance(origin: Coordinates, destination: Coordinates): number {
+  const R = 6371e3; // Earth's radius in meters
+  const lat1 = (origin.latitude * Math.PI) / 180;
+  const lat2 = (destination.latitude * Math.PI) / 180;
+  const deltaLat = ((destination.latitude - origin.latitude) * Math.PI) / 180;
+  const deltaLon = ((destination.longitude - origin.longitude) * Math.PI) / 180;
+
+  const a =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}
+
+/**
+ * Estimate walking duration based on distance
+ * Average walking speed: ~5 km/h = ~83 meters/minute
+ */
+function estimateWalkingDuration(distanceMeters: number): number {
+  const walkingSpeedMetersPerMinute = 80; // Conservative estimate (~4.8 km/h)
+  return Math.max(1, Math.ceil(distanceMeters / walkingSpeedMetersPerMinute));
+}
+
+/**
  * Get walking directions (fallback when transit not available)
  */
 export async function getWalkingDirections(
@@ -402,7 +430,26 @@ export async function getWalkingDirections(
     const data = await response.json();
 
     if (!data.routes || data.routes.length === 0) {
-      return null;
+      // Fallback: create a basic walking route using straight-line distance
+      const fallbackDistance = calculateStraightLineDistance(origin, destination);
+      const fallbackDuration = estimateWalkingDuration(fallbackDistance * 1.3); // Add 30% for actual walking path
+
+      console.log('[Routes] No routes returned, using fallback calculation:', {
+        distance: fallbackDistance,
+        duration: fallbackDuration,
+      });
+
+      return {
+        steps: [{
+          mode: 'walk',
+          instruction: 'Walk to destination',
+          duration: fallbackDuration,
+          distance: Math.round(fallbackDistance * 1.3),
+        }],
+        totalDuration: fallbackDuration,
+        totalDistance: Math.round(fallbackDistance * 1.3),
+        polyline: '', // No polyline for fallback
+      };
     }
 
     const route: GoogleRoute = data.routes[0];
@@ -417,11 +464,25 @@ export async function getWalkingDirections(
       }))
     );
 
+    // Get distance - fallback to calculation if not provided
+    let totalDistance = route.distanceMeters;
+    if (!totalDistance || totalDistance === 0) {
+      totalDistance = Math.round(calculateStraightLineDistance(origin, destination) * 1.3);
+      console.log('[Routes] Distance not provided, using calculated fallback:', totalDistance);
+    }
+
+    // Get duration - fallback to estimation if not provided or 0
+    let totalDuration = Math.round(parseDuration(route.duration));
+    if (!totalDuration || totalDuration === 0) {
+      totalDuration = estimateWalkingDuration(totalDistance);
+      console.log('[Routes] Duration was 0 or missing, using estimated fallback:', totalDuration);
+    }
+
     const result = {
       steps,
-      totalDuration: Math.round(parseDuration(route.duration)),
-      totalDistance: route.distanceMeters,
-      polyline: route.polyline.encodedPolyline,
+      totalDuration,
+      totalDistance,
+      polyline: route.polyline?.encodedPolyline || '',
     };
 
     console.log('[Routes] Walking directions fetched:', {
@@ -434,7 +495,31 @@ export async function getWalkingDirections(
     return result;
   } catch (error) {
     console.error('Error getting walking directions:', error);
-    return null;
+
+    // Even on error, try to return a basic estimate
+    try {
+      const fallbackDistance = calculateStraightLineDistance(origin, destination);
+      const fallbackDuration = estimateWalkingDuration(fallbackDistance * 1.3);
+
+      console.log('[Routes] Using error fallback calculation:', {
+        distance: fallbackDistance,
+        duration: fallbackDuration,
+      });
+
+      return {
+        steps: [{
+          mode: 'walk',
+          instruction: 'Walk to destination',
+          duration: fallbackDuration,
+          distance: Math.round(fallbackDistance * 1.3),
+        }],
+        totalDuration: fallbackDuration,
+        totalDistance: Math.round(fallbackDistance * 1.3),
+        polyline: '',
+      };
+    } catch {
+      return null;
+    }
   }
 }
 

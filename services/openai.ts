@@ -352,3 +352,224 @@ export async function chatSimple(
   const response = await chat(message, context, recentMessages, image);
   return response.content;
 }
+
+// === ITINERARY GENERATION ===
+
+export interface ItineraryActivityData {
+  timeSlot: 'morning' | 'afternoon' | 'evening' | 'night';
+  startTime?: string;
+  endTime?: string;
+  title: string;
+  description: string;
+  category: 'food' | 'culture' | 'activity' | 'transport' | 'rest';
+  place?: {
+    name: string;
+    address: string;
+    coordinates: Coordinates;
+    rating?: number;
+    priceLevel?: number;
+    estimatedCost?: string;
+  };
+  booked: boolean;
+  bookingUrl?: string;
+}
+
+export interface ItineraryDayData {
+  dayNumber: number;
+  date: string; // "Day 1", "Day 2", etc.
+  activities: ItineraryActivityData[];
+}
+
+export interface GeneratedItinerary {
+  name: string;
+  overview: string;
+  totalDays: number;
+  days: ItineraryDayData[];
+  tips?: string[];
+  estimatedBudget?: string;
+}
+
+/**
+ * Build system prompt for itinerary generation
+ */
+function buildItinerarySystemPrompt(context: DestinationContext, numDays: number): string {
+  const now = new Date();
+  const localTime = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+  const dietaryRestrictions = context.preferences.dietary?.length
+    ? context.preferences.dietary.join(', ').toUpperCase()
+    : null;
+
+  const userInterests = context.preferences.interests?.length
+    ? context.preferences.interests.join(', ')
+    : 'general sightseeing';
+
+  return `You are Tomo, an expert travel planner creating a ${numDays}-day itinerary.
+
+LOCATION: ${context.neighborhood || 'Unknown location'}
+CURRENT TIME: ${localTime} (${context.timeOfDay})
+WEATHER: ${context.weather?.condition || 'unknown'}, ${context.weather?.temperature || '?'}°
+DAILY BUDGET: ${context.dailyBudget}
+${dietaryRestrictions ? `⚠️ DIETARY RESTRICTIONS: ${dietaryRestrictions}` : ''}
+INTERESTS: ${userInterests}
+${context.preferences.avoidCrowds ? 'PREFERENCE: Less crowded places' : ''}
+${context.preferences.budget ? `BUDGET LEVEL: ${context.preferences.budget}` : ''}
+
+CREATE AN ITINERARY WITH THESE RULES:
+
+1. STRUCTURE:
+   - Each day has 4 time slots: morning, afternoon, evening, night
+   - Include 3-4 activities per day (meals count as activities)
+   - Cluster activities geographically to minimize travel
+   - Balance activity types (don't do 4 temples in a row)
+
+2. TIME-APPROPRIATE ACTIVITIES:
+   - Morning (6am-12pm): Temples, markets, breakfast spots, museums
+   - Afternoon (12pm-5pm): Lunch, sightseeing, shopping, cultural sites
+   - Evening (5pm-9pm): Dinner, sunset spots, entertainment
+   - Night (9pm+): Nightlife, night markets, bars (if appropriate)
+
+3. PLACE DATA:
+   - Use REAL places that exist in ${context.neighborhood || 'the area'}
+   - Include accurate GPS coordinates
+   - Include realistic estimated costs in local currency
+
+4. DIETARY:
+${dietaryRestrictions ? `   - ALL food suggestions MUST accommodate: ${dietaryRestrictions}` : '   - No restrictions'}
+
+RESPOND WITH VALID JSON:
+
+{
+  "name": "My ${context.neighborhood || ''} Adventure",
+  "overview": "Brief 1-2 sentence overview of the itinerary",
+  "totalDays": ${numDays},
+  "days": [
+    {
+      "dayNumber": 1,
+      "date": "Day 1",
+      "activities": [
+        {
+          "timeSlot": "morning",
+          "startTime": "08:00",
+          "endTime": "10:00",
+          "title": "Activity Name",
+          "description": "Brief description",
+          "category": "culture",
+          "place": {
+            "name": "Place Name",
+            "address": "Full address",
+            "coordinates": {"latitude": 18.123, "longitude": 98.456},
+            "rating": 4.5,
+            "priceLevel": 2,
+            "estimatedCost": "200 THB"
+          },
+          "booked": false,
+          "bookingUrl": null
+        }
+      ]
+    }
+  ],
+  "tips": ["Tip 1", "Tip 2"],
+  "estimatedBudget": "1500 THB per day"
+}
+
+CATEGORIES: food, culture, activity, transport, rest`;
+}
+
+/**
+ * Generate an itinerary using OpenAI
+ */
+export async function generateItinerary(
+  context: DestinationContext,
+  numDays: number = 3,
+  customRequest?: string
+): Promise<GeneratedItinerary | null> {
+  try {
+    const apiKey = getApiKey();
+
+    if (!apiKey) {
+      console.error('[OpenAI] No API key configured!');
+      return null;
+    }
+
+    const systemPrompt = buildItinerarySystemPrompt(context, numDays);
+
+    const userMessage = customRequest
+      ? `Plan a ${numDays}-day itinerary with these preferences: ${customRequest}`
+      : `Plan a ${numDays}-day itinerary for ${context.neighborhood || 'my current location'}. Make it fun and practical!`;
+
+    const response = await fetch(OPENAI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        max_tokens: 4000,
+        temperature: 0.8,
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('[OpenAI] Itinerary API error:', response.status, errorBody);
+      throw new Error(`OpenAI API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      throw new Error('No content in OpenAI response');
+    }
+
+    const itinerary: GeneratedItinerary = JSON.parse(content);
+
+    console.log('[OpenAI] Generated itinerary:', {
+      name: itinerary.name,
+      days: itinerary.totalDays,
+      activitiesPerDay: itinerary.days.map(d => d.activities.length),
+    });
+
+    return itinerary;
+  } catch (error) {
+    console.error('[OpenAI] Itinerary generation error:', error);
+    return null;
+  }
+}
+
+/**
+ * Check if a message is asking for itinerary/planning
+ */
+export function isItineraryRequest(message: string): { isItinerary: boolean; days?: number } {
+  const lowerMessage = message.toLowerCase();
+
+  // Common patterns for itinerary requests
+  const itineraryPatterns = [
+    /plan\s+(my|a|the)?\s*(\d+)?\s*day/i,
+    /(\d+)\s*day\s*(itinerary|plan|trip)/i,
+    /what\s+should\s+i\s+do\s+(today|tomorrow|this\s+week)/i,
+    /plan\s+(today|tomorrow|my\s+day)/i,
+    /itinerary\s+for\s+(\d+)\s*days?/i,
+    /help\s+me\s+plan/i,
+  ];
+
+  for (const pattern of itineraryPatterns) {
+    const match = lowerMessage.match(pattern);
+    if (match) {
+      // Try to extract number of days
+      const daysMatch = lowerMessage.match(/(\d+)\s*day/i);
+      const days = daysMatch ? parseInt(daysMatch[1]) : 1;
+
+      return { isItinerary: true, days: Math.min(days, 7) }; // Max 7 days
+    }
+  }
+
+  return { isItinerary: false };
+}

@@ -367,3 +367,67 @@ export interface Conversation {
   summary?: string; // Brief summary of conversation
   messageCount: number;
 }
+
+// === NOTIFICATIONS ===
+export type NotificationType =
+  | 'last_train' // Last train warning
+  | 'place_closing' // Destination closing soon
+  | 'weather' // Weather alert
+  | 'itinerary' // Scheduled activity reminder
+  | 'budget' // Budget threshold reached
+  | 'transit'; // Real-time transit updates
+
+export type NotificationPriority = 'urgent' | 'warning' | 'info';
+
+export interface Notification {
+  id: string;
+  type: NotificationType;
+  priority: NotificationPriority;
+  title: string;
+  body: string;
+  createdAt: number;
+  scheduledFor?: number; // When to show the notification
+  expiresAt?: number; // When notification becomes irrelevant
+  dismissed: boolean;
+  action?: {
+    type: 'navigate_home' | 'navigate_to' | 'view_details' | 'dismiss';
+    payload?: any;
+  };
+  // Context for notification
+  placeId?: string;
+  coordinates?: Coordinates;
+}
+
+// === ITINERARY ===
+export type ActivityCategory = 'food' | 'culture' | 'activity' | 'transport' | 'rest';
+export type TimeSlot = 'morning' | 'afternoon' | 'evening' | 'night';
+
+export interface Activity {
+  id: string;
+  timeSlot: TimeSlot;
+  startTime?: string; // "09:00"
+  endTime?: string; // "10:30"
+  place?: PlaceCardData;
+  title: string;
+  description: string;
+  category: ActivityCategory;
+  booked: boolean;
+  bookingUrl?: string;
+  notes?: string;
+}
+
+export interface ItineraryDay {
+  date: number; // timestamp for the day
+  activities: Activity[];
+}
+
+export interface Itinerary {
+  id: string;
+  name: string;
+  startDate: number;
+  endDate: number;
+  days: ItineraryDay[];
+  tripId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
