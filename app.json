@@ -46,16 +46,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-router",
-      "expo-location",
-      [
-        "react-native-maps",
-        {
-          "googleMapsApiKey": "AIzaSyAUI7qh-JvnANGhCc-8Tf2OJOGs2V5PNjc"
-        }
-      ]
-    ],
+    "_plugins_note": "Plugins are configured in app.config.js to keep API keys out of git",
     "extra": {
       "router": {},
       "eas": {

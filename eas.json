@@ -1,11 +1,15 @@
 {
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 16.0.0",
+    "promptToConfigurePushNotifications": false
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyDR9zUARYSyyr3FZe3jjkHXYaftWE6lXMM"
+      },
       "ios": {
         "resourceClass": "m-medium"
       }

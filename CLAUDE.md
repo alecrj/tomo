@@ -32,26 +32,24 @@ A general AI assistant that can answer anything, but with deep travel context:
 - ✅ Route duration displays correctly (fixed parsing)
 
 ### What's Broken
-- ❌ **Google Maps SDK showing black screen** - Routes work, but map tiles don't render
 - ⚠️ expo-av deprecated - Needs migration to expo-audio
 
-### Recent Fix (Dec 16)
-Moved from old API key (in "recep" project with closed billing) to new API key in "tomo" project:
-- **New API Key:** `AIzaSyAUI7qh-JvnANGhCc-8Tf2OJOGs2V5PNjc`
-- **Project:** tomo (with billing enabled)
-- **APIs enabled:** Maps SDK iOS, Maps SDK Android, Places API (New), Routes API, Geocoding API
+### Recent Fixes (Dec 16)
 
-### Remaining Issue: Black Map Screen
-Routes API works (confirmed in logs), but MapView renders black. Possible causes:
-1. Maps SDK for iOS billing not fully propagated (wait and retry)
-2. Maps SDK for iOS not actually enabled in tomo project (verify in Google Cloud Console)
-3. Native build caching issue (try `eas build --clear-cache`)
+**Google Maps Black Screen - FIXED!**
+Root cause: Wrong plugin parameter name in app.json. The react-native-maps plugin expects `iosGoogleMapsApiKey` but we had `googleMapsApiKey`.
 
-### Next Steps to Debug Maps
-1. Verify in Google Cloud Console → APIs & Services → Enabled APIs that "Maps SDK for iOS" is listed
-2. Wait 10-15 minutes for billing to fully propagate to Maps SDK
-3. If still broken, try rebuilding with cache clear: `eas build --profile development --platform ios --clear-cache`
-4. As fallback, can use Apple Maps by removing PROVIDER_GOOGLE (works but less ideal internationally)
+What was fixed:
+1. Created `app.config.js` for dynamic config (reads API key from env vars)
+2. Uses correct parameter names: `iosGoogleMapsApiKey` and `androidGoogleMapsApiKey`
+3. Removed hardcoded API key from app.json (was exposed on GitHub)
+4. Rotated API key after Google detected public exposure
+5. New key configured in eas.json for builds
+
+**API Key Security:**
+- Old key `AIzaSyAUI7qh-JvnANGhCc-8Tf2OJOGs2V5PNjc` was exposed - DELETED
+- New key stored in `.env` (gitignored) and `eas.json` (for builds)
+- Key should be restricted to bundle ID `com.alecrodriguez.tomo` in Google Cloud Console
 
 ---
 
@@ -62,8 +60,9 @@ Routes API works (confirmed in logs), but MapView renders black. Possible causes
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Rebuild dev client with Google Maps | 🔄 In Progress | User rebuilding now |
-| Test all maps work | ⏳ Waiting | After rebuild |
+| Fix Google Maps black screen | ✅ Done | Wrong plugin param name |
+| Rebuild dev client with Google Maps | ✅ Done | Build submitted Dec 16 |
+| Test all maps work | ⏳ Waiting | After build completes |
 | Migrate expo-av → expo-audio | ⏳ Pending | Deprecated in SDK 54 |
 
 ### Phase 1: Voice Revolution
