@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { useLocationStore } from '../stores/useLocationStore';
 import { useOnboardingStore } from '../stores/useOnboardingStore';
 import { useConversationStore } from '../stores/useConversationStore';
 import { useMemoryStore } from '../stores/useMemoryStore';
+import { detectCurrency } from '../utils/currency';
 import * as Location from 'expo-location';
 
 /**
@@ -33,6 +34,14 @@ export default function SettingsScreen() {
   const budget = useBudgetStore();
   const coordinates = useLocationStore((state) => state.coordinates);
   const neighborhood = useLocationStore((state) => state.neighborhood);
+
+  // Detect currency from GPS location
+  const currency = useMemo(() => {
+    if (coordinates) {
+      return detectCurrency(coordinates);
+    }
+    return { code: 'USD', symbol: '$', name: 'US Dollar' };
+  }, [coordinates]);
 
   // Local state for editing
   const [homeBaseName, setHomeBaseName] = useState(preferences.homeBase?.name || '');
@@ -273,7 +282,7 @@ export default function SettingsScreen() {
 
             <View style={styles.inputRow}>
               <View style={[styles.inputGroup, styles.inputHalf]}>
-                <Text style={styles.inputLabel}>Total Budget (¥)</Text>
+                <Text style={styles.inputLabel}>Total Budget ({currency.symbol})</Text>
                 <TextInput
                   style={styles.textInput}
                   placeholder="70000"
@@ -300,7 +309,7 @@ export default function SettingsScreen() {
             {tripBudget && tripDays && parseInt(tripBudget) > 0 && parseInt(tripDays) > 0 && (
               <View style={styles.budgetPreview}>
                 <Text style={styles.budgetPreviewText}>
-                  Daily Budget: ¥{Math.floor(parseInt(tripBudget) / parseInt(tripDays)).toLocaleString()}
+                  Daily Budget: {currency.symbol}{Math.floor(parseInt(tripBudget) / parseInt(tripDays)).toLocaleString()}
                 </Text>
               </View>
             )}

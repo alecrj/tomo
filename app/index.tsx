@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Send, Mic, Camera, Settings, MapPin, Plus, Home, MessageSquare } from 'lucide-react-native';
+import { Send, Mic, Camera, Settings, MapPin, Plus, Home, MessageSquare, Map } from 'lucide-react-native';
 import { colors, spacing, typography } from '../constants/theme';
 import { chat, StructuredChatResponse } from '../services/openai';
 import { takePhoto, pickPhoto } from '../services/camera';
@@ -442,6 +442,12 @@ What would you like to do first?`,
               >
                 <MessageSquare size={20} color={colors.text.light.secondary} />
               </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.exploreMapButton}
+                onPress={() => router.push('/map')}
+              >
+                <Map size={18} color="#007AFF" />
+              </TouchableOpacity>
               {homeBase && (
                 <TouchableOpacity
                   style={styles.homeButton}
@@ -713,6 +719,14 @@ const styles = StyleSheet.create({
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  exploreMapButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E3F2FD',
+    borderRadius: 18,
   },
   homeButton: {
     width: 36,

@@ -1,56 +1,136 @@
 # Tomo - AI Travel Companion
 
-**Vision:** ChatGPT that always knows where you are, can show maps, navigate you anywhere, and remembers everything about your trip.
+## The Vision
 
-**Tagline:** "Like Strava for running, but Tomo for travel"
+**Tomo = ChatGPT + Travel Superpowers**
 
----
+A general AI assistant that can answer anything, but with deep travel context:
+- Knows your exact location, time, weather, budget
+- Shows maps, navigates you anywhere
+- Speaks to you in real-time (hands-free mode)
+- Remembers everything about your trip
+- Works offline in remote areas
 
-## Current Status (December 14, 2024)
-
-### Just Completed This Session:
-1. **Switched from Claude API to OpenAI GPT-4o** - Better for structured outputs and future real-time voice
-2. **Redesigned navigation screen** - Now looks like Google Maps (full screen map, single step card, bottom ETA bar)
-3. **Fixed Zustand infinite loop** - Messages now use useMemo for stable references
-4. **Fixed Transit routing** - Removed invalid routingPreference parameter
-5. **Added better error logging** - API errors now show actual error messages
-
-### What's Working:
-- Chat with GPT-4o (structured JSON responses for place cards)
-- Location tracking and city detection
-- Google Places API (search, photos)
-- Google Routes API (Walk, Transit, Drive)
-- Interactive maps with react-native-maps
-- Budget tracking
-- Memory system (6 types)
-- Trip tracking (multi-city)
-- Onboarding flow
-- Settings screen
-
-### What's NOT Working / Needs Testing:
-- Navigation map may still show blank (needs testing after restart)
-- Voice transcription (Whisper backend exists but untested)
-- Trip recap sharing/export
+**Tagline:** "Like having a local friend in every city"
 
 ---
 
-## Development Setup
+## Current Status (December 16, 2024)
 
-```bash
-# Start development (after building dev client)
-npx expo start --dev-client --tunnel
+### What's Working
+- ✅ Chat with GPT-4o (general Q&A + structured place recommendations)
+- ✅ Location tracking and city detection
+- ✅ Google Places API (search, photos)
+- ✅ Google Routes API (Walk, Transit, Drive) - ALL WORKING with new API key
+- ✅ Budget tracking with auto-detected currency (฿ in Thailand, etc.)
+- ✅ Voice transcription (Whisper backend)
+- ✅ Memory system (6 types of memories)
+- ✅ Trip tracking (multi-city)
+- ✅ Map explore screen with category browsing
+- ✅ Onboarding flow
+- ✅ Settings with dynamic currency
+- ✅ Route duration displays correctly (fixed parsing)
 
-# If tunnel fails, ensure @expo/ngrok is installed:
-npm install @expo/ngrok@4.1.0 --save-dev
+### What's Broken
+- ❌ **Google Maps SDK showing black screen** - Routes work, but map tiles don't render
+- ⚠️ expo-av deprecated - Needs migration to expo-audio
 
-# Type check
-npx tsc --noEmit
+### Recent Fix (Dec 16)
+Moved from old API key (in "recep" project with closed billing) to new API key in "tomo" project:
+- **New API Key:** `AIzaSyAUI7qh-JvnANGhCc-8Tf2OJOGs2V5PNjc`
+- **Project:** tomo (with billing enabled)
+- **APIs enabled:** Maps SDK iOS, Maps SDK Android, Places API (New), Routes API, Geocoding API
 
-# Build dev client (one-time)
-eas build --profile development --platform ios
-```
+### Remaining Issue: Black Map Screen
+Routes API works (confirmed in logs), but MapView renders black. Possible causes:
+1. Maps SDK for iOS billing not fully propagated (wait and retry)
+2. Maps SDK for iOS not actually enabled in tomo project (verify in Google Cloud Console)
+3. Native build caching issue (try `eas build --clear-cache`)
 
-**Important:** The dev client connects via tunnel because local network often doesn't work.
+### Next Steps to Debug Maps
+1. Verify in Google Cloud Console → APIs & Services → Enabled APIs that "Maps SDK for iOS" is listed
+2. Wait 10-15 minutes for billing to fully propagate to Maps SDK
+3. If still broken, try rebuilding with cache clear: `eas build --profile development --platform ios --clear-cache`
+4. As fallback, can use Apple Maps by removing PROVIDER_GOOGLE (works but less ideal internationally)
+
+---
+
+## Development Roadmap
+
+### Phase 0: Foundation (Current)
+**Goal:** Get core experience working perfectly
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Rebuild dev client with Google Maps | 🔄 In Progress | User rebuilding now |
+| Test all maps work | ⏳ Waiting | After rebuild |
+| Migrate expo-av → expo-audio | ⏳ Pending | Deprecated in SDK 54 |
+
+### Phase 1: Voice Revolution
+**Goal:** Hands-free conversations like ChatGPT voice mode
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Implement OpenAI Realtime API | ⏳ Pending | WebSocket-based streaming |
+| Add voice output (AI speaks) | ⏳ Pending | TTS for responses |
+| Voice turn-by-turn navigation | ⏳ Pending | "Turn left in 50 meters" |
+| Push-to-talk or voice activity detection | ⏳ Pending | Hands-free activation |
+| Background audio | ⏳ Pending | Keep guiding when phone locked |
+| Visual feedback (waveforms) | ⏳ Pending | Show speaking state |
+
+### Phase 2: Polish & UX
+**Goal:** Feel as polished as ChatGPT/Claude
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Better conversation sidebar | ⏳ Pending | Like ChatGPT's sidebar |
+| Smooth animations & transitions | ⏳ Pending | |
+| Dark mode | ⏳ Pending | |
+| Haptic feedback | ⏳ Pending | |
+| Remove walking tolerance setting | ⏳ Pending | Not useful |
+| Improved onboarding | ⏳ Pending | |
+
+### Phase 3: Travel Intelligence
+**Goal:** Know everything about travel
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Real-time camera translation | ⏳ Pending | Point at menu, get translation |
+| Currency conversion display | ⏳ Pending | Show prices in home currency |
+| Scam/safety alerts | ⏳ Pending | Warn about tourist traps |
+| Last train warnings | ⚠️ Partial | Improve existing |
+| Local tips knowledge | ⏳ Pending | "Shops close early Sundays" |
+| Visa/entry requirements | ⏳ Pending | Based on passport country |
+
+### Phase 4: Offline Mode
+**Goal:** Work without internet
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Offline map tiles | ⏳ Pending | Download regions |
+| Cache places & routes | ⏳ Pending | Save searched places |
+| On-device voice transcription | ⏳ Pending | No internet needed |
+| Request queue for sync | ⏳ Pending | Sync when back online |
+
+### Phase 5: Social & Sharing
+**Goal:** Share your adventures
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Trip recap PDF export | ⏳ Pending | |
+| Instagram story generation | ⏳ Pending | Auto-create stories |
+| Shareable trip links | ⏳ Pending | |
+| Photo journal with auto-tagging | ⏳ Pending | Location-tagged photos |
+
+### Phase 6: Proactive Assistant
+**Goal:** Anticipate needs before you ask
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Weather alerts | ⏳ Pending | "Rain in 30 min, find indoor spot?" |
+| Crowd avoidance | ⏳ Pending | "Busy now, go at 3pm instead" |
+| Booking integration | ⏳ Pending | Reserve restaurants, buy tickets |
+| Flight tracking | ⏳ Pending | "Your flight delayed 2 hours" |
 
 ---
 
@@ -60,14 +140,15 @@ eas build --profile development --platform ios
 
 | File | API | Purpose |
 |------|-----|---------|
-| `openai.ts` | OpenAI GPT-4o | **Main chat** - structured responses with placeCards |
-| `claude.ts` | Claude API | Backup (kept but not used) |
+| `openai.ts` | OpenAI GPT-4o | Main chat - structured JSON responses |
+| `realtime.ts` | OpenAI Realtime API | 🔜 Voice conversations (to be added) |
 | `places.ts` | Google Places API (New) | Search places, get details, photos |
 | `routes.ts` | Google Routes API v2 | Walking, Transit, Driving directions |
-| `voice.ts` | Whisper (via Railway backend) | Voice transcription |
+| `voice.ts` | Whisper (Railway backend) | Voice transcription |
 | `weather.ts` | OpenWeatherMap | Current weather |
 | `location.ts` | Expo Location | GPS, reverse geocoding |
 | `camera.ts` | Expo Camera | Photo capture |
+| `claude.ts` | Claude API | Backup (not currently used) |
 
 ### State Management (Zustand stores in `/stores/`)
 
@@ -87,11 +168,12 @@ eas build --profile development --platform ios
 
 | Screen | Purpose |
 |--------|---------|
-| `index.tsx` | Main chat screen (default) |
-| `navigation.tsx` | Google Maps-style navigation |
+| `index.tsx` | Main chat screen |
+| `map.tsx` | Map explore (browse nearby by category) |
+| `navigation.tsx` | Google Maps-style turn-by-turn |
 | `trip-recap.tsx` | Trip summary with map |
 | `settings.tsx` | User preferences |
-| `conversations.tsx` | Chat history |
+| `conversations.tsx` | Chat history sidebar |
 | `onboarding.tsx` | First-launch setup |
 
 ---
@@ -99,43 +181,31 @@ eas build --profile development --platform ios
 ## Environment Variables (`.env`)
 
 ```
-EXPO_PUBLIC_OPENAI_API_KEY=sk-proj-...  # GPT-4o for chat
-EXPO_PUBLIC_CLAUDE_API_KEY=sk-ant-...   # Backup
-EXPO_PUBLIC_WEATHER_API_KEY=...         # OpenWeatherMap
-EXPO_PUBLIC_GOOGLE_PLACES_API_KEY=...   # Google Places + Routes
+EXPO_PUBLIC_OPENAI_API_KEY=sk-proj-...      # GPT-4o for chat
+EXPO_PUBLIC_GOOGLE_PLACES_API_KEY=...       # Google Places + Routes + Maps
+EXPO_PUBLIC_WEATHER_API_KEY=...             # OpenWeatherMap
 EXPO_PUBLIC_WHISPER_BACKEND_URL=https://tomo-production-ed80.up.railway.app
+EXPO_PUBLIC_CLAUDE_API_KEY=sk-ant-...       # Backup (optional)
 ```
 
----
-
-## Remaining TODO List
-
-### High Priority:
-1. **Test navigation after restart** - Map might still be blank, need to debug
-2. **Fix currency in settings** - Hardcoded as Yen (¥), should use `detectCurrency()`
-3. **Add map explore button** - Button on main chat to open full map and browse nearby places
-4. **Test voice transcription** - Whisper backend is deployed but untested in new flow
-
-### Medium Priority:
-5. Remove walking tolerance from settings (not useful)
-6. Make conversations sidebar more visible (like ChatGPT)
-7. Test OpenAI real-time voice API for hands-free navigation
-
-### Future:
-8. Trip recap export (PDF, shareable link)
-9. Instagram story generation
-10. Offline mode
+### Google Cloud Console Setup
+API Key must have these APIs enabled:
+- ✅ Maps SDK for iOS
+- ✅ Maps SDK for Android
+- ✅ Places API (New)
+- ✅ Routes API
+- ✅ Geocoding API
 
 ---
 
 ## Code Patterns
 
-### Chat Message with Place Card (OpenAI returns JSON)
+### OpenAI Structured Response (response_format: json_object)
 ```typescript
-// GPT-4o returns structured JSON for place recommendations:
+// GPT-4o always returns JSON with this structure:
 {
   "text": "I found a great spot for you!",
-  "placeCard": {
+  "placeCard": null | {
     "name": "Restaurant Name",
     "address": "123 Street",
     "rating": 4.5,
@@ -160,12 +230,6 @@ const messages = useMemo(() => {
   const conv = conversations.find(c => c.id === currentConversationId);
   return conv?.messages || [];
 }, [conversations, currentConversationId]);
-
-// WRONG - creates new array each render
-const messages = useConversationStore((state) => {
-  const conv = state.conversations.find(c => c.id === state.currentConversationId);
-  return conv?.messages || [];  // New array reference causes infinite loop!
-});
 ```
 
 ### Navigation Flow
@@ -177,6 +241,17 @@ User asks for place → GPT-4o returns placeCard → User taps "Take me there"
 → User walks there → Arrival detected (within 50m) → Visit logged
 ```
 
+### Voice Flow (Current)
+```
+Tap mic → Record audio → Stop → Send to Whisper → Get transcription → Send to GPT-4o
+```
+
+### Voice Flow (Target - Realtime API)
+```
+Tap mic → WebSocket streams audio → GPT-4o processes live → Streams audio response back
+(Sub-500ms latency, can interrupt mid-sentence)
+```
+
 ---
 
 ## File Structure
@@ -185,6 +260,7 @@ User asks for place → GPT-4o returns placeCard → User taps "Take me there"
 /app
   _layout.tsx       # Root layout with onboarding redirect
   index.tsx         # Main chat (uses OpenAI)
+  map.tsx           # Map explore (browse nearby by category)
   navigation.tsx    # Google Maps-style navigation
   trip-recap.tsx    # Trip summary
   settings.tsx      # User preferences
@@ -193,13 +269,14 @@ User asks for place → GPT-4o returns placeCard → User taps "Take me there"
 
 /services
   openai.ts         # GPT-4o chat (PRIMARY)
-  claude.ts         # Claude chat (BACKUP)
+  realtime.ts       # 🔜 OpenAI Realtime API (to be added)
   routes.ts         # Google Routes API
   places.ts         # Google Places API
   voice.ts          # Whisper transcription
   location.ts       # GPS + geocoding
   weather.ts        # OpenWeatherMap
   camera.ts         # Photo capture
+  claude.ts         # Claude chat (BACKUP)
 
 /stores
   useConversationStore.ts
@@ -237,23 +314,9 @@ User asks for place → GPT-4o returns placeCard → User taps "Take me there"
 ## Known Issues
 
 1. **Tunnel required for dev** - Local network doesn't work, must use `--tunnel`
-2. **expo-av deprecated** - Warning shows, should migrate to expo-audio
-3. **Currency hardcoded in settings** - Shows ¥ regardless of location
-4. **Walking tolerance setting** - Not useful, should remove
-
----
-
-## Git Repository
-
-**Remote:** https://github.com/alecrj/tomo.git
-**Branch:** main
-
-Last commit includes:
-- OpenAI service
-- Redesigned navigation
-- Fixed Zustand selectors
-- Fixed transit routing
-- Better error logging
+2. **expo-av deprecated** - Warning shows, migrate to expo-audio before SDK 54
+3. **Walking tolerance setting** - Not useful, should remove
+4. **Google Maps blank** - Requires dev client rebuild
 
 ---
 
@@ -266,7 +329,7 @@ npx expo start --dev-client --tunnel
 # Type check
 npx tsc --noEmit
 
-# Build dev client
+# Build dev client (fixes Google Maps)
 eas build --profile development --platform ios
 
 # Build preview (standalone)
@@ -278,10 +341,63 @@ git add -A && git commit -m "message" && git push origin main
 
 ---
 
-## Next Session Priority
+## Git Repository
 
-1. **Restart Metro and test** - `npx expo start --dev-client --tunnel`
-2. **Test navigation** - Ask for a place, tap "Take me there", see if map works
-3. **Check logs** - Look for `[Navigation]`, `[Routes]`, `[OpenAI]` logs
-4. **Fix any remaining bugs** before adding new features
-5. **If working:** Add map explore button on main screen
+**Remote:** https://github.com/alecrj/tomo.git
+**Branch:** main
+
+---
+
+## Next Session Checklist
+
+### Priority 1: Fix Google Maps Black Screen
+The Routes API works but map tiles don't render. Debug steps:
+
+1. **Verify Maps SDK for iOS is enabled** in Google Cloud Console:
+   - Go to APIs & Services → Enabled APIs & Services
+   - Look for "Maps SDK for iOS" in the list
+   - If not there, enable it from Library
+
+2. **Wait for billing propagation** (if just enabled):
+   - Can take 5-15 minutes for Maps SDK to recognize billing
+   - Kill app completely, wait, reopen
+
+3. **If still broken, rebuild with cache clear**:
+   ```bash
+   eas build --profile development --platform ios --clear-cache
+   ```
+
+4. **Fallback option** - Use Apple Maps temporarily:
+   - Remove `PROVIDER_GOOGLE` from all MapView components
+   - Works without rebuild, but less ideal for international travel
+
+### Priority 2: After Maps Work
+1. Start **Phase 1: Voice Revolution** (OpenAI Realtime API)
+2. Migrate expo-av to expo-audio (deprecated warning)
+
+---
+
+## Session History
+
+### December 16, 2024
+- Discovered API key was in wrong Google Cloud project ("recep" with closed billing)
+- Created new API key in "tomo" project with billing enabled
+- New key: `AIzaSyAUI7qh-JvnANGhCc-8Tf2OJOGs2V5PNjc`
+- Routes API now working (Walk, Transit, Drive all succeed)
+- Maps SDK still showing black screen (needs debugging)
+- Added detailed error logging to routes.ts
+- Created comprehensive 6-phase development roadmap
+- Updated CLAUDE.md with full vision and plan
+
+### December 15, 2024
+- Fixed route duration parsing (was showing 0)
+- Fixed currency in settings (now uses detectCurrency())
+- Added map explore screen with category browsing
+- Improved OpenAI structured JSON (response_format: json_object)
+
+### December 14, 2024
+- Switched from Claude API to OpenAI GPT-4o
+- Redesigned navigation screen (Google Maps style)
+- Fixed Zustand infinite loop with useMemo
+- Fixed Transit routing
+- Added better error logging

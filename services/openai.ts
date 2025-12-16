@@ -33,55 +33,52 @@ YOUR PERSONALITY:
 - Proactive about useful tips
 - Never robotic or formal
 
-RESPONSE FORMAT:
+RESPONSE FORMAT (ALWAYS respond with valid JSON):
 
-1. FOR PLACE RECOMMENDATIONS (restaurants, cafes, attractions, etc.):
-   Respond with a JSON object. Your entire response must be valid JSON:
-   {
-     "text": "Your conversational response here",
-     "placeCard": {
-       "name": "Place Name",
-       "address": "Full address",
-       "rating": 4.5,
-       "priceLevel": 2,
-       "distance": "8 min walk",
-       "openNow": true,
-       "hours": "9 AM - 10 PM",
-       "estimatedCost": "200 THB",
-       "coordinates": {"latitude": 18.123, "longitude": 98.456}
-     },
-     "showMap": true,
-     "actions": [
-       {"label": "Take me there", "type": "navigate"},
-       {"label": "Something else", "type": "regenerate"}
-     ]
-   }
+{
+  "text": "Your conversational response here",
+  "placeCard": null OR {
+    "name": "Place Name",
+    "address": "Full address",
+    "rating": 4.5,
+    "priceLevel": 2,
+    "distance": "8 min walk",
+    "openNow": true,
+    "hours": "9 AM - 10 PM",
+    "estimatedCost": "200 THB",
+    "coordinates": {"latitude": 18.123, "longitude": 98.456}
+  },
+  "showMap": true/false,
+  "actions": [] OR [
+    {"label": "Take me there", "type": "navigate"},
+    {"label": "Something else", "type": "regenerate"}
+  ]
+}
 
-2. FOR GENERAL QUESTIONS (tips, translation, directions help, etc.):
-   Respond with plain text only. Be helpful and concise.
+WHEN TO INCLUDE placeCard:
+- Restaurant, cafe, bar, attraction recommendations: Include placeCard with real place data
+- General questions, tips, translations: Set placeCard to null
 
 IMPORTANT RULES:
+- ALWAYS respond with valid JSON in the format above
 - Use REAL places that actually exist in ${context.neighborhood || 'the area'}
-- Include accurate GPS coordinates for places
-- Use LOCAL CURRENCY for prices (detect from location)
+- Include accurate GPS coordinates for places (critical for navigation)
+- Use LOCAL CURRENCY for prices
 - Consider: time of day, weather, user's budget
-- priceLevel: 1=cheap, 2=moderate, 3=expensive, 4=luxury
-- For place recommendations, respond ONLY with JSON, nothing else`;
+- priceLevel: 1=cheap, 2=moderate, 3=expensive, 4=luxury`;
 }
 
 /**
  * Parse response for structured content
+ * With response_format: json_object, OpenAI always returns valid JSON
  */
 function parseStructuredResponse(responseText: string, userLocation: Coordinates): StructuredChatResponse {
   let jsonText = responseText.trim();
 
-  // Check for JSON code blocks
+  // Handle case where response might be wrapped in code blocks (shouldn't happen with json_object mode)
   const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
   if (jsonMatch) {
     jsonText = jsonMatch[1];
-  } else if (!responseText.trim().startsWith('{')) {
-    // Plain text response
-    return { content: responseText };
   }
 
   try {
@@ -91,11 +88,11 @@ function parseStructuredResponse(responseText: string, userLocation: Coordinates
       content: parsed.text || responseText,
     };
 
-    // Build place card if present
-    if (parsed.placeCard) {
+    // Build place card if present and not null
+    if (parsed.placeCard && parsed.placeCard.name) {
       result.placeCard = {
         name: parsed.placeCard.name,
-        address: parsed.placeCard.address,
+        address: parsed.placeCard.address || '',
         rating: parsed.placeCard.rating,
         priceLevel: parsed.placeCard.priceLevel,
         distance: parsed.placeCard.distance,
@@ -104,31 +101,39 @@ function parseStructuredResponse(responseText: string, userLocation: Coordinates
         estimatedCost: parsed.placeCard.estimatedCost,
         coordinates: parsed.placeCard.coordinates || userLocation,
       };
+
+      // Build inline map if showMap is true and we have coordinates
+      if (parsed.showMap && result.placeCard.coordinates) {
+        result.inlineMap = {
+          center: result.placeCard.coordinates,
+          markers: [
+            {
+              id: 'destination',
+              coordinate: result.placeCard.coordinates,
+              title: result.placeCard.name,
+            },
+          ],
+        };
+      }
     }
 
-    // Build inline map if requested
-    if (parsed.showMap && parsed.placeCard?.coordinates) {
-      result.inlineMap = {
-        center: parsed.placeCard.coordinates,
-        markers: [
-          {
-            id: 'destination',
-            coordinate: parsed.placeCard.coordinates,
-            title: parsed.placeCard.name,
-          },
-        ],
-      };
-    }
-
-    // Add actions if present
-    if (parsed.actions && Array.isArray(parsed.actions)) {
+    // Add actions if present and non-empty
+    if (parsed.actions && Array.isArray(parsed.actions) && parsed.actions.length > 0) {
       result.actions = parsed.actions;
     }
 
+    console.log('[OpenAI] Parsed structured response:', {
+      hasText: !!result.content,
+      hasPlaceCard: !!result.placeCard,
+      hasMap: !!result.inlineMap,
+      actionsCount: result.actions?.length || 0,
+    });
+
     return result;
   } catch (error) {
-    // If JSON parsing fails, return plain text
-    console.log('[OpenAI] Response is not structured JSON, returning as plain text');
+    // If JSON parsing fails (shouldn't happen with json_object mode), return as plain text
+    console.warn('[OpenAI] Failed to parse JSON response:', error);
+    console.log('[OpenAI] Raw response:', responseText.substring(0, 200));
     return { content: responseText };
   }
 }
@@ -198,6 +203,7 @@ export async function chat(
         messages,
         max_tokens: 1500,
         temperature: 0.7,
+        response_format: { type: 'json_object' },
       }),
     });
 

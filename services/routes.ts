@@ -200,17 +200,31 @@ function parseGoogleRoute(
 }
 
 /**
- * Parse ISO 8601 duration string (e.g., "PT15M30S") to minutes
+ * Parse duration string to minutes
+ * Google Routes API returns duration as seconds string (e.g., "1860s")
+ * Also supports ISO 8601 format (e.g., "PT15M30S") as fallback
  */
 function parseDuration(duration: string): number {
-  const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-  if (!match) return 0;
+  if (!duration) return 0;
 
-  const hours = parseInt(match[1] || '0', 10);
-  const minutes = parseInt(match[2] || '0', 10);
-  const seconds = parseInt(match[3] || '0', 10);
+  // Google Routes API format: "1860s" (seconds as string)
+  const secondsMatch = duration.match(/^(\d+(?:\.\d+)?)s$/);
+  if (secondsMatch) {
+    const seconds = parseFloat(secondsMatch[1]);
+    return seconds / 60; // Convert to minutes
+  }
 
-  return hours * 60 + minutes + seconds / 60;
+  // ISO 8601 duration format fallback: "PT15M30S"
+  const isoMatch = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (isoMatch) {
+    const hours = parseInt(isoMatch[1] || '0', 10);
+    const minutes = parseInt(isoMatch[2] || '0', 10);
+    const seconds = parseInt(isoMatch[3] || '0', 10);
+    return hours * 60 + minutes + seconds / 60;
+  }
+
+  console.warn('[Routes] Unknown duration format:', duration);
+  return 0;
 }
 
 /**
@@ -367,6 +381,8 @@ export async function getWalkingDirections(
       units: 'METRIC',
     };
 
+    console.log('[Routes] Using API key:', config.googlePlacesApiKey?.substring(0, 15) + '...');
+
     const response = await fetch(ROUTES_API_URL, {
       method: 'POST',
       headers: {
@@ -378,6 +394,8 @@ export async function getWalkingDirections(
     });
 
     if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('[Routes] FULL ERROR from Google:', errorBody);
       throw new Error(`Routes API error: ${response.status}`);
     }
 
