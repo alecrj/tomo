@@ -17,9 +17,11 @@ import {
   Footprints,
   Car,
   Train,
+  Heart,
 } from 'lucide-react-native';
 import { safeHaptics, ImpactFeedbackStyle } from '../utils/haptics';
 import { colors, spacing, borders, shadows, typography } from '../constants/theme';
+import { getPrimaryBookingOptions, openBookingUrl, BookingOption } from '../services/booking';
 import type { PlaceCardData } from '../types';
 
 interface PlaceCardProps {
@@ -27,6 +29,9 @@ interface PlaceCardProps {
   currencySymbol?: string;
   onTakeMeThere?: () => void;
   onSomethingElse?: () => void;
+  onSave?: () => void;
+  isSaved?: boolean;
+  showBookingOptions?: boolean;
 }
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -38,9 +43,15 @@ export function PlaceCard({
   currencySymbol = '$',
   onTakeMeThere,
   onSomethingElse,
+  onSave,
+  isSaved = false,
+  showBookingOptions = true,
 }: PlaceCardProps) {
   const scrollRef = useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+
+  // Get booking options
+  const bookingOptions = showBookingOptions ? getPrimaryBookingOptions(placeCard) : [];
 
   // Build photos array (support both single photo and multiple photos)
   const photos = placeCard.photos?.length
@@ -63,6 +74,16 @@ export function PlaceCard({
   const handleSomethingElse = () => {
     safeHaptics.impact(ImpactFeedbackStyle.Light);
     onSomethingElse?.();
+  };
+
+  const handleSave = () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
+    onSave?.();
+  };
+
+  const handleBooking = async (option: BookingOption) => {
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
+    await openBookingUrl(option.url);
   };
 
   // Build info pills
@@ -188,7 +209,7 @@ export function PlaceCard({
       )}
 
       {/* Action Buttons */}
-      {(onTakeMeThere || onSomethingElse) && (
+      {(onTakeMeThere || onSomethingElse || onSave) && (
         <View style={styles.actions}>
           {onTakeMeThere && (
             <TouchableOpacity
@@ -200,6 +221,19 @@ export function PlaceCard({
               <Text style={styles.primaryButtonText}>Take me there</Text>
             </TouchableOpacity>
           )}
+          {onSave && (
+            <TouchableOpacity
+              style={[styles.secondaryButton, isSaved && styles.savedButton]}
+              onPress={handleSave}
+              activeOpacity={0.8}
+            >
+              <Heart
+                size={18}
+                color={isSaved ? colors.status.error : colors.text.primary}
+                fill={isSaved ? colors.status.error : 'transparent'}
+              />
+            </TouchableOpacity>
+          )}
           {onSomethingElse && (
             <TouchableOpacity
               style={styles.secondaryButton}
@@ -209,6 +243,26 @@ export function PlaceCard({
               <Shuffle size={16} color={colors.text.primary} />
             </TouchableOpacity>
           )}
+        </View>
+      )}
+
+      {/* Booking Options */}
+      {bookingOptions.length > 0 && (
+        <View style={styles.bookingContainer}>
+          <Text style={styles.bookingLabel}>Quick Actions</Text>
+          <View style={styles.bookingOptions}>
+            {bookingOptions.map((option) => (
+              <TouchableOpacity
+                key={option.provider}
+                style={styles.bookingButton}
+                onPress={() => handleBooking(option)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.bookingIcon}>{option.icon}</Text>
+                <Text style={styles.bookingText}>{option.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       )}
     </View>
@@ -326,5 +380,45 @@ const styles = StyleSheet.create({
     borderRadius: borders.radius.lg,
     borderWidth: 1,
     borderColor: colors.border.default,
+  },
+  savedButton: {
+    backgroundColor: colors.status.errorMuted,
+    borderColor: colors.status.error,
+  },
+  bookingContainer: {
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.muted,
+  },
+  bookingLabel: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.medium,
+    color: colors.text.tertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.sm,
+  },
+  bookingOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  bookingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.background.tertiary,
+    borderRadius: borders.radius.full,
+  },
+  bookingIcon: {
+    fontSize: 14,
+  },
+  bookingText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.text.secondary,
   },
 });

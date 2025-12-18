@@ -718,3 +718,157 @@ export function isItineraryRequest(message: string): { isItinerary: boolean; day
 
   return { isItinerary: false };
 }
+
+// === ITINERARY MODIFICATION ===
+
+export interface ItineraryModificationResult {
+  action: 'add' | 'remove' | 'move' | 'update' | 'none';
+  message: string;
+  activityData?: {
+    title: string;
+    description: string;
+    timeSlot: 'morning' | 'afternoon' | 'evening' | 'night';
+    category: 'food' | 'culture' | 'activity' | 'transport' | 'rest';
+    place?: {
+      name: string;
+      address: string;
+      coordinates: Coordinates;
+      rating?: number;
+      priceLevel?: number;
+    };
+    dayIndex?: number; // Which day to add/modify
+  };
+  removeActivityId?: string;
+  moveDetails?: {
+    activityId: string;
+    newTimeSlot: 'morning' | 'afternoon' | 'evening' | 'night';
+    newDayIndex?: number;
+  };
+}
+
+/**
+ * Build system prompt for itinerary modifications
+ */
+function buildItineraryModificationPrompt(
+  currentItinerary: { name: string; days: { date: number; activities: { id: string; title: string; timeSlot: string; description: string }[] }[] },
+  neighborhood: string
+): string {
+  // Format current itinerary for AI
+  const itineraryDescription = currentItinerary.days.map((day, index) => {
+    const activities = day.activities.map(a => `  - [${a.id}] ${a.timeSlot}: ${a.title}`).join('\n');
+    return `Day ${index + 1}:\n${activities || '  (no activities)'}`;
+  }).join('\n\n');
+
+  return `You are Tomo, helping modify a travel itinerary.
+
+CURRENT ITINERARY: "${currentItinerary.name}"
+LOCATION: ${neighborhood}
+
+${itineraryDescription}
+
+USER WANTS TO MODIFY THIS ITINERARY. Determine what action to take:
+
+1. ADD - User wants to add a new activity
+2. REMOVE - User wants to remove an existing activity (use activity ID from above)
+3. MOVE - User wants to reschedule an activity
+4. UPDATE - User wants to change details of an activity
+5. NONE - User is asking a question or unclear request
+
+RESPOND WITH VALID JSON:
+{
+  "action": "add" | "remove" | "move" | "update" | "none",
+  "message": "Your friendly response explaining what you did",
+  "activityData": null OR {
+    "title": "Activity Name",
+    "description": "Brief description",
+    "timeSlot": "morning" | "afternoon" | "evening" | "night",
+    "category": "food" | "culture" | "activity" | "transport" | "rest",
+    "place": {
+      "name": "Place Name",
+      "address": "Address",
+      "coordinates": {"latitude": X, "longitude": Y}
+    } OR null,
+    "dayIndex": 0
+  },
+  "removeActivityId": null OR "activity-id-to-remove",
+  "moveDetails": null OR {
+    "activityId": "activity-id",
+    "newTimeSlot": "morning" | "afternoon" | "evening" | "night",
+    "newDayIndex": 0
+  }
+}
+
+RULES:
+- For ADD, suggest real places in ${neighborhood} with coordinates
+- For REMOVE, match user's description to activity IDs
+- Be conversational in message, confirm what you did
+- dayIndex is 0-based (Day 1 = index 0)`;
+}
+
+/**
+ * Modify itinerary based on user request
+ */
+export async function modifyItinerary(
+  userMessage: string,
+  currentItinerary: { name: string; days: { date: number; activities: { id: string; title: string; timeSlot: string; description: string }[] }[] },
+  neighborhood: string
+): Promise<ItineraryModificationResult> {
+  try {
+    const apiKey = getApiKey();
+
+    if (!apiKey) {
+      return {
+        action: 'none',
+        message: "Sorry, I can't make changes right now. API not configured.",
+      };
+    }
+
+    const systemPrompt = buildItineraryModificationPrompt(currentItinerary, neighborhood);
+
+    const response = await fetch(OPENAI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini', // Use faster model for modifications
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        max_tokens: 800,
+        temperature: 0.7,
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('[OpenAI] Itinerary modification error:', response.status, errorBody);
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      throw new Error('No content in response');
+    }
+
+    const result: ItineraryModificationResult = JSON.parse(content);
+
+    console.log('[OpenAI] Itinerary modification result:', {
+      action: result.action,
+      message: result.message?.substring(0, 50),
+    });
+
+    return result;
+  } catch (error) {
+    console.error('[OpenAI] Itinerary modification error:', error);
+    return {
+      action: 'none',
+      message: "Sorry, I couldn't understand that request. Try being more specific, like 'add dinner at 7pm' or 'remove the temple visit'.",
+    };
+  }
+}

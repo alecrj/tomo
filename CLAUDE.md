@@ -18,243 +18,278 @@ A travel companion that:
 
 ---
 
-## HONEST STATUS ASSESSMENT: ~70% Complete
+## HONEST STATUS ASSESSMENT: ~55-60% Actually Working
 
-### What's TRULY Working (End-to-End)
+> **Previous claim of 95% was WRONG.** This is a FAANG-level honest assessment of what actually works end-to-end vs what's just code that exists.
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| **Core Chat AI** | ✅ 95% | GPT-4o, context-aware, structured responses |
-| **Place Discovery** | ✅ 95% | Google Places, photos, ratings, open status |
-| **Navigation** | ✅ 80% | Turn-by-turn with compass, chat is real AI now |
-| **Map Explorer** | ✅ 95% | Categories, search, selection, markers |
-| **Settings** | ✅ 90% | Preferences, personality, notifications toggles |
+### Truly Working End-to-End
 
-### What's "Beautiful Shell" (UI Built, Logic Not Wired)
+| Feature | Status | Confidence | Notes |
+|---------|--------|------------|-------|
+| **Core Chat AI** | ✅ 90% | HIGH | GPT-4o, structured responses, context-aware |
+| **Place Discovery** | ✅ 90% | HIGH | Google Places, photos, ratings, open status |
+| **Navigation** | ✅ 85% | MEDIUM | Needs real device testing (compass) |
+| **Map Explorer** | ✅ 85% | HIGH | Categories, search, selection |
+| **Settings** | ✅ 90% | HIGH | All preferences persist |
+| **Saved Places** | ✅ 80% | MEDIUM | Complete but newly built, needs testing |
 
-| Feature | UI Status | Logic Status | Gap |
-|---------|-----------|--------------|-----|
-| **Itinerary** | ✅ Complete | ⚠️ 50% | Chat modifications don't work |
-| **Notifications** | ✅ Complete | ⚠️ 10% | ZERO triggers implemented |
-| **Memory** | ⚠️ Basic | ⚠️ 30% | Not auto-populated from chat |
-| **Offline Mode** | ✅ Complete | ⚠️ 40% | Store built, never checked in flows |
-| **Saved Places** | ❌ None | ❌ 0% | No UI, memory store only |
+### Code Exists But NOT Actually Working
 
-### What's NOT Started
-
-| Feature | Priority | Why Essential |
-|---------|----------|---------------|
-| **Voice Mode** | High | Hands-free while walking |
-| **Booking Integrations** | High | Recommendations → action |
-| **Map Tile Caching** | Medium | True offline maps |
-| **Saved Places UI** | Medium | Bookmark spots for later |
-| **Push Notifications** | Medium | Proactive alerts |
+| Feature | Code Status | Actually Works | Critical Issue |
+|---------|-------------|----------------|----------------|
+| **Offline Mode** | 40% | **0%** | Store exists, **NO SERVICE CHECKS IT** |
+| **Voice Realtime** | 100% | **5%** | **Requires paid OpenAI tier** |
+| **Voice Whisper** | 70% | **0%** | **Requires you to deploy a backend** |
+| **Memory Extraction** | 100% | **25%** | Regex patterns only - misses most natural language |
+| **Notification Triggers** | 100% | **30%** | Code runs but needs data to trigger |
+| **Itinerary Chat** | 100% | **50%** | Untested end-to-end |
+| **Booking Links** | 100% | **50%** | Deep links untested on real devices |
 
 ---
 
-## NEXT SESSION: Wire the Beautiful Shells
+## CRITICAL GAPS (Why We're NOT at 95%)
 
-### Priority 1: Notification Triggers (HIGH IMPACT)
-The notification system UI is complete but nothing triggers notifications:
-
-```typescript
-// What exists:
-useNotificationStore.ts - stores notifications
-NotificationToast.tsx - displays toasts
-app/notifications.tsx - list screen
-Sidebar.tsx - shows unread count
-
-// What's MISSING:
-- Last train warning trigger
-- Place closing soon trigger
-- Weather change trigger
-- Itinerary reminder trigger
-- Budget threshold trigger
-```
-
-**Implementation needed:**
-1. Create `hooks/useNotificationTriggers.ts`
-2. Add to `_layout.tsx` to run in background
-3. Check conditions every 30-60 seconds
-4. Add notifications via `addNotification()`
-
-### Priority 2: Memory Auto-Extraction
-Memory doesn't learn from conversations automatically:
+### 1. Offline Mode is COMPLETELY BROKEN
 
 ```typescript
-// What exists:
-useMemoryStore.ts - stores memories
-Memory.tsx screen - view/edit memories
+// What EXISTS:
+useOfflineStore.ts → checkNetworkStatus() runs every 30s
+initNetworkListener() is called in _layout.tsx
+OfflineBanner.tsx exists
 
 // What's MISSING:
-- Post-chat hook to extract memories
-- "Tomo learned: you love spicy food"
-- Auto-detect dietary restrictions, interests, dislikes
+// services/openai.ts  → NEVER checks isOnline
+// services/places.ts  → NEVER checks isOnline
+// services/routes.ts  → NEVER checks isOnline
+
+// RESULT: When user goes offline:
+// - No banner shows (no trigger)
+// - Chat still tries API calls (and fails)
+// - No fallback to cached data
+// - Messages aren't queued
 ```
 
-### Priority 3: Itinerary Chat Modifications
-The chat input at bottom of itinerary screen is decoration:
+**Fix needed:** Every service must check `useOfflineStore.getState().isOnline` before API calls and use cached data / queue messages when offline.
+
+### 2. Voice Features Require External Infrastructure
+
+**Realtime API (voice mode):**
+```typescript
+// services/realtime.ts connects to: wss://api.openai.com/v1/realtime
+// This requires:
+// 1. OpenAI API key with Realtime API access (paid tier)
+// 2. The model 'gpt-4o-realtime-preview-2024-12-17' to be available
+// Without this, the voice.tsx screen will show "Connection error"
+```
+
+**Whisper Transcription:**
+```typescript
+// services/voice.ts requires:
+const backendUrl = process.env.EXPO_PUBLIC_WHISPER_BACKEND_URL;
+// Without this URL, transcribeAudio() returns null
+
+// You must deploy a backend like:
+// POST /transcribe - accepts audio file, returns { text: "transcription" }
+```
+
+### 3. Memory Extraction Only Catches Exact Phrases
 
 ```typescript
-// What exists:
-app/itinerary.tsx - full UI with chat input
+// Pattern examples from hooks/useMemoryExtraction.ts:
+/i(?:'m|'m| am) (vegetarian|vegan|pescatarian)/i  // ✅ "I'm vegetarian"
+/i (?:can't|cannot|don't|do not) eat (\w+)/i       // ✅ "I can't eat pork"
 
-// What's MISSING:
-- Connect chat input to AI
-- Parse modification requests
-- Update itinerary via store
+// What it MISSES:
+"I try to avoid meat" ❌
+"No beef for me" ❌
+"I'm trying to eat healthier" ❌
+"We're traveling with kids" ✅ (has pattern)
+"My daughter is allergic to nuts" ❌
+
+// Coverage: ~25% of natural language about preferences
 ```
 
-### Priority 4: Offline Mode Activation
-Store exists but never used:
+### 4. Notification Triggers Need Data to Fire
 
-```typescript
-// What exists:
-useOfflineStore.ts - caching logic
-OfflineBanner.tsx - UI component
+The triggers run every 30 seconds but require:
 
-// What's MISSING:
-- Check isOnline before API calls
-- Use cached data when offline
-- Queue messages when offline
-- Sync on reconnect
-```
+| Trigger | Requirement | In Fresh App |
+|---------|-------------|--------------|
+| Budget warning | User must set budget AND log spending | ❌ Empty |
+| Weather alert | Weather must be fetched AND change | ❌ No fetch trigger |
+| Itinerary reminder | User must create itinerary with times | ❌ Empty |
+| Place closing | Activity must have place with hours | ❌ No activities |
+
+**In a fresh app with no user data, ZERO notifications will ever fire.**
+
+---
+
+## API Requirements
+
+| Environment Variable | Required For | Status |
+|---------------------|--------------|--------|
+| `EXPO_PUBLIC_OPENAI_API_KEY` | All AI features | **REQUIRED** |
+| `EXPO_PUBLIC_GOOGLE_PLACES_API_KEY` | Places, photos, open status | **REQUIRED** |
+| `EXPO_PUBLIC_WEATHER_API_KEY` | Weather data | Optional (has mock fallback) |
+| `EXPO_PUBLIC_WHISPER_BACKEND_URL` | Voice-to-text transcription | **REQUIRES BACKEND DEPLOYMENT** |
+
+### OpenAI Realtime API Note
+The voice mode uses the OpenAI Realtime API which may require:
+- A paid OpenAI account with specific tier access
+- The model `gpt-4o-realtime-preview-2024-12-17` to be available to your account
+
+---
+
+## What Needs to Be Done
+
+### CRITICAL (Blocking Core Features)
+
+| Task | Impact | Effort |
+|------|--------|--------|
+| Wire offline mode into services | High | Medium |
+| Add offline fallbacks to chat | High | Medium |
+| Show OfflineBanner when actually offline | High | Low |
+| Test voice mode with Realtime API access | High | Medium |
+
+### HIGH PRIORITY (Features Don't Work)
+
+| Task | Impact | Effort |
+|------|--------|--------|
+| Document Whisper backend requirements or create one | High | Medium |
+| Test booking deep links on iOS/Android devices | Medium | Low |
+| Test itinerary modification flow E2E | Medium | Low |
+| Improve memory extraction (AI-based or more patterns) | Medium | Medium |
+
+### MEDIUM PRIORITY (Polish)
+
+| Task | Impact | Effort |
+|------|--------|--------|
+| Add initial data seeding for notifications to fire | Medium | Low |
+| Test navigation compass on real device | Medium | Low |
+| Test saved places flow E2E | Low | Low |
 
 ---
 
 ## Technical Architecture
 
 ### Services (`/services/`)
-| File | Status | Notes |
-|------|--------|-------|
-| `openai.ts` | ✅ Built | Chat + navigation chat + itinerary generation |
-| `places.ts` | ✅ Built | Google Places API |
-| `routes.ts` | ✅ Built | Google Routes API |
-| `voice.ts` | ✅ Built | Whisper transcription |
-| `weather.ts` | ✅ Built | OpenWeatherMap |
-| `location.ts` | ✅ Built | GPS + geocoding |
-| `realtime.ts` | ❌ TODO | OpenAI Realtime (voice mode) |
+| File | Code | Works E2E | Notes |
+|------|------|-----------|-------|
+| `openai.ts` | ✅ | ✅ 90% | Chat + itinerary + navigation chat |
+| `places.ts` | ✅ | ✅ 90% | Google Places API |
+| `routes.ts` | ✅ | ✅ 85% | Google Routes API |
+| `weather.ts` | ✅ | ✅ 80% | Has mock fallback |
+| `location.ts` | ✅ | ✅ 85% | GPS + geocoding |
+| `voice.ts` | ✅ | ❌ 0% | **Needs backend** |
+| `realtime.ts` | ✅ | ❌ 5% | **Needs paid tier** |
+| `booking.ts` | ✅ | ⚠️ 50% | Untested deep links |
 
 ### Stores (`/stores/`)
-| Store | Status | Wired? |
-|-------|--------|--------|
-| `useConversationStore` | ✅ Built | ✅ Yes |
-| `useMemoryStore` | ✅ Built | ⚠️ Manual only |
-| `useTripStore` | ✅ Built | ✅ Yes |
-| `useBudgetStore` | ✅ Built | ✅ Yes |
-| `useLocationStore` | ✅ Built | ✅ Yes |
-| `useNavigationStore` | ✅ Built | ✅ Yes |
-| `usePreferencesStore` | ✅ Built | ✅ Yes |
-| `useWeatherStore` | ✅ Built | ✅ Yes |
-| `useNotificationStore` | ✅ Built | ⚠️ UI only, no triggers |
-| `useItineraryStore` | ✅ Built | ⚠️ Partial |
-| `useOfflineStore` | ✅ Built | ⚠️ Never checked |
+| Store | Code | Wired | Actually Used |
+|-------|------|-------|---------------|
+| `useConversationStore` | ✅ | ✅ | ✅ |
+| `useMemoryStore` | ✅ | ✅ | ⚠️ Pattern extraction only |
+| `useTripStore` | ✅ | ✅ | ✅ |
+| `useBudgetStore` | ✅ | ✅ | ✅ |
+| `useLocationStore` | ✅ | ✅ | ✅ |
+| `useNavigationStore` | ✅ | ✅ | ✅ |
+| `usePreferencesStore` | ✅ | ✅ | ✅ |
+| `useWeatherStore` | ✅ | ✅ | ✅ |
+| `useNotificationStore` | ✅ | ✅ | ⚠️ Needs data to trigger |
+| `useItineraryStore` | ✅ | ✅ | ⚠️ Mods untested |
+| `useOfflineStore` | ✅ | ✅ | ❌ **Not checked by services** |
+| `useSavedPlacesStore` | ✅ | ✅ | ✅ New |
 
-### Key Files
-| File | What it does | Status |
-|------|--------------|--------|
-| `app/index.tsx` | Main chat screen | ✅ Working |
-| `app/map.tsx` | Map explorer | ✅ Working |
-| `app/navigation.tsx` | Turn-by-turn navigation | ✅ Working (chat fixed) |
-| `app/itinerary.tsx` | Itinerary screen | ⚠️ UI only |
-| `app/notifications.tsx` | Notification list | ⚠️ No triggers |
-| `app/settings.tsx` | User settings | ✅ Working |
-| `components/PlaceCard.tsx` | Place recommendation cards | ✅ Working |
-| `components/NotificationToast.tsx` | Animated toasts | ✅ Working |
-| `components/OfflineBanner.tsx` | Offline indicator | ⚠️ Never shown |
+### Key Hooks
+| Hook | Purpose | Status |
+|------|---------|--------|
+| `useNotificationTriggers` | Background notification checks | ⚠️ Runs but needs data |
+| `useMemoryExtraction` | Auto-learn from chat | ⚠️ Limited pattern coverage |
 
 ---
 
-## The Gap to World-Class
+## What DOES Work Well
 
-### What We Have That Competitors Don't
-1. **Conversational AI** - No travel app has this at our level
-2. **Context Fusion** - Location + weather + time + budget in every response
-3. **Single App** - Everything in one place
-4. **Personality** - Feels like a friend, not a tool
+### The Core Experience is Strong
 
-### What Competitors Have That We Don't
-| Feature | Google Maps | TripAdvisor | Booking.com | Tomo |
-|---------|-------------|-------------|-------------|------|
-| AI Chat | ❌ | ❌ | ❌ | ✅ |
-| Place Discovery | ✅ | ✅ | ✅ | ✅ |
-| Navigation | ✅ | ❌ | ❌ | ✅ |
-| Offline Maps | ✅ | ❌ | ❌ | ⚠️ |
-| Booking | ❌ | ✅ | ✅ | ❌ |
-| Voice Control | ✅ | ❌ | ❌ | ❌ |
-| Saved Places | ✅ | ✅ | ✅ | ⚠️ |
-| Proactive Alerts | ❌ | ❌ | ❌ | ⚠️ |
+1. **Chat AI (90% working)**
+   - Full context injection (location, weather, budget, time)
+   - Structured JSON responses with place cards
+   - Place verification via Google Places API
+   - Walking distance correction via Routes API
+   - Photo fetching from Google Places
+
+2. **Place Discovery (90% working)**
+   - Category-based browsing
+   - Text search
+   - Real photos, ratings, hours
+   - Open/closed status
+
+3. **Navigation (85% working)**
+   - Turn-by-turn directions
+   - Compass rotation (needs device testing)
+   - AI chat during navigation
+   - Route recalculation
+
+4. **Saved Places (80% working)**
+   - Full list/map UI
+   - Filter by nearby/visited
+   - Mark visited, delete, navigate
 
 ---
 
-## Development Priorities
+## What Competitors Have That We Don't Have Working
 
-### TIER 1: Wire What's Built (Next 1-2 Sessions)
-*Embarrassing gaps - UI exists but doesn't work*
-
-| Task | Impact | Effort |
-|------|--------|--------|
-| Notification triggers | High | Medium |
-| Memory auto-extraction | Medium | Medium |
-| Itinerary chat modifications | High | Low |
-| Offline mode activation | Medium | Medium |
-
-### TIER 2: Essential New Features (Sessions 3-5)
-*Features that make Tomo indispensable*
-
-| Feature | Why Essential |
-|---------|---------------|
-| **Saved Places UI** | Users need to bookmark spots |
-| **Voice Mode** | Hands-free while walking |
-| **Photo Translation** | Point at menu, instant translation |
-| **Push Notifications** | Proactive value |
-
-### TIER 3: Competitive Features (Future)
-*Features that make Tomo better than alternatives*
-
-| Feature | Why Important |
-|---------|---------------|
-| **Booking Deep Links** | "Book this" → OpenTable/Uber |
-| **Offline Maps** | True offline with downloaded tiles |
-| **Trip Sharing** | Share itinerary with friends |
+| Feature | Google Maps | TripAdvisor | Tomo |
+|---------|-------------|-------------|------|
+| AI Chat | ❌ | ❌ | ✅ |
+| Place Discovery | ✅ | ✅ | ✅ |
+| Navigation | ✅ | ❌ | ✅ |
+| **TRUE Offline** | ✅ | ❌ | ❌ |
+| Booking | ❌ | ✅ | ⚠️ |
+| **Voice Control** | ✅ | ❌ | ❌ |
+| Saved Places | ✅ | ✅ | ✅ |
+| **Proactive Alerts** | ❌ | ❌ | ⚠️ |
 
 ---
 
 ## Session History
 
-### Session 9 (December 18, 2024) - Major Feature Implementation + Analysis
-**Built:**
-- ✅ Real navigation chat (replaced hardcoded responses)
-- ✅ Action buttons (Take me there, Something else, Add to itinerary, Save)
-- ✅ Full itinerary UI (day tabs, time slots, activity cards)
-- ✅ Notification system UI (toasts, list screen, sidebar indicator)
-- ✅ Tomo personality settings
-- ✅ Notification preferences
-- ✅ Translation chip
-- ✅ Offline mode store + banner
-- ✅ Skeleton loaders
+### Session 10 (December 18, 2024) - FAANG Analysis
+**Honest assessment revealed:**
+- Previous 95% claim was incorrect
+- Offline mode completely broken (store exists, never used)
+- Voice features require external infrastructure
+- Memory extraction is regex-only
+- Notification triggers need user data to fire
 
-**Analysis revealed:** Many features are "beautiful shells" - UI complete but logic not wired
+### Session 10 Earlier - Wiring Features
+**Code created:**
+- `hooks/useNotificationTriggers.ts` - Background triggers
+- `hooks/useMemoryExtraction.ts` - Pattern-based extraction
+- `stores/useSavedPlacesStore.ts` - Saved places
+- `app/saved.tsx` - Saved places UI
+- `app/voice.tsx` - Voice mode UI
+- `services/realtime.ts` - OpenAI Realtime WebSocket
+- `services/booking.ts` - Deep link generators
+- Added `modifyItinerary()` to `services/openai.ts`
+- Wired BackgroundTriggers in `app/_layout.tsx`
 
-**Files created:**
-- `components/NotificationToast.tsx`
-- `components/OfflineBanner.tsx`
-- `components/SkeletonLoader.tsx`
-- `app/notifications.tsx`
-- `stores/useOfflineStore.ts`
-- `ROADMAP.md`
+### Session 9 (December 18, 2024)
+- Real navigation chat (replaced hardcoded)
+- Full itinerary UI
+- Notification system UI
+- Offline mode store + banner
 
-### Session 8 (December 18, 2024) - Google Maps & Navigation
-- Switched to Google Maps everywhere
-- Google Maps-style navigation with compass rotation
-- Magnetometer integration for heading
-- Re-center button when user pans
+### Session 8 (December 18, 2024)
+- Google Maps integration
+- Compass-based navigation
+- Magnetometer for heading
 
 ### Sessions 1-7
-- Core chat AI implementation
+- Core chat AI
 - Google Places/Routes integration
-- PlaceCard design iterations
-- Quick Actions Menu
+- PlaceCard design
 - Sidebar navigation
 - Dark mode theme
 
@@ -269,7 +304,7 @@ npx expo start --dev-client --tunnel
 # Type check
 npx tsc --noEmit
 
-# Build dev client (after adding native modules)
+# Build dev client
 eas build --profile development --platform ios
 
 # Git
@@ -286,11 +321,13 @@ git add -A && git commit -m "message" && git push origin main
 3. The app they TELL their friends about
 
 **This happens when:**
-- Tomo knows them (preferences, history) ← memory not auto-populated
-- Tomo knows the city (places, transit, customs) ✅
-- Tomo is always available (offline works) ← not wired
-- Tomo is hands-free (voice works) ← not started
-- Tomo takes action (booking works) ← not started
-- Tomo is proactive (notifications work) ← no triggers
+| Requirement | Status | Gap |
+|-------------|--------|-----|
+| Tomo knows them | ⚠️ 25% | Memory extraction too limited |
+| Tomo knows the city | ✅ 90% | Google APIs working |
+| Tomo is always available | ❌ 0% | Offline mode not wired |
+| Tomo is hands-free | ❌ 5% | Voice needs paid API |
+| Tomo takes action | ⚠️ 50% | Deep links untested |
+| Tomo is proactive | ⚠️ 30% | Triggers need data |
 
-We're 70% there. The last 30% is what separates "nice app" from "can't travel without it."
+**We're 55-60% there.** The core chat and place discovery work great. Everything else needs real work to be production-ready.

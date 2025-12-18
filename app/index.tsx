@@ -44,6 +44,7 @@ import { useMemoryStore } from '../stores/useMemoryStore';
 import { useConversationStore } from '../stores/useConversationStore';
 import { useNavigationStore } from '../stores/useNavigationStore';
 import { useItineraryStore } from '../stores/useItineraryStore';
+import { useSavedPlacesStore } from '../stores/useSavedPlacesStore';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { useLocation } from '../hooks/useLocation';
 import { useWeather } from '../hooks/useWeather';
@@ -107,6 +108,10 @@ export default function ChatScreen() {
   const viewDestination = useNavigationStore((state) => state.viewDestination);
   const currentDestination = useNavigationStore((state) => state.currentDestination);
   const isNavigating = !!currentDestination;
+
+  // Saved places store
+  const savePlace = useSavedPlacesStore((state) => state.savePlace);
+  const isPlaceSaved = useSavedPlacesStore((state) => state.isPlaceSaved);
 
   // Local state
   const [inputText, setInputText] = useState('');
@@ -408,6 +413,14 @@ export default function ChatScreen() {
   const handleVoicePress = async () => {
     safeHaptics.impact(ImpactFeedbackStyle.Medium);
 
+    // Long press or double tap behavior - go to full voice mode
+    // For now, navigate to voice screen
+    router.push('/voice');
+  };
+
+  const handleVoiceQuickPress = async () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
+
     if (isRecording) {
       setIsRecording(false);
       const audioUri = await stopRecording();
@@ -557,6 +570,17 @@ export default function ChatScreen() {
                         onSomethingElse={() =>
                           handleAction({ label: 'Something else', type: 'regenerate' })
                         }
+                        onSave={() => {
+                          if (message.placeCard) {
+                            savePlace(
+                              message.placeCard,
+                              neighborhood || undefined,
+                              undefined
+                            );
+                            safeHaptics.notification(NotificationFeedbackType.Success);
+                          }
+                        }}
+                        isSaved={message.placeCard ? isPlaceSaved(message.placeCard.name, message.placeCard.coordinates) : false}
                       />
                     )}
 

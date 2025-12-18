@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   TextInput,
   Alert,
   Image,
+  Keyboard,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -36,7 +38,8 @@ import { colors, spacing, borders, typography, shadows } from '../constants/them
 import { useItineraryStore } from '../stores/useItineraryStore';
 import { useNavigationStore } from '../stores/useNavigationStore';
 import { useLocationStore } from '../stores/useLocationStore';
-import type { Activity, TimeSlot, Destination, ActivityCategory } from '../types';
+import { modifyItinerary } from '../services/openai';
+import type { Activity, TimeSlot, Destination, ActivityCategory, PlaceCardData } from '../types';
 
 const TIME_SLOTS: { slot: TimeSlot; label: string; timeRange: string }[] = [
   { slot: 'morning', label: 'Morning', timeRange: '6am - 12pm' },
@@ -79,6 +82,11 @@ export default function ItineraryScreen() {
   // Selected day index
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [chatInput, setChatInput] = useState('');
+  const [isModifying, setIsModifying] = useState(false);
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
+
+  // Additional store functions for modifications
+  const addActivity = useItineraryStore((state) => state.addActivity);
 
   // Get activities for selected day grouped by time slot
   const dayActivities = useMemo((): Record<TimeSlot, Activity[]> => {
@@ -185,16 +193,110 @@ export default function ItineraryScreen() {
     }
   };
 
-  const handleChatSubmit = () => {
-    if (!chatInput.trim()) return;
+  const handleChatSubmit = useCallback(async () => {
+    if (!chatInput.trim() || !activeItinerary || isModifying) return;
+
     safeHaptics.impact(ImpactFeedbackStyle.Light);
-    // Navigate back to chat with the modification request
-    router.push({
-      pathname: '/',
-      params: { message: chatInput },
-    });
+    Keyboard.dismiss();
+    setIsModifying(true);
+    setAiResponse(null);
+
+    const userMessage = chatInput.trim();
     setChatInput('');
-  };
+
+    try {
+      // Prepare itinerary data for AI
+      const itineraryForAI = {
+        name: activeItinerary.name,
+        days: activeItinerary.days.map((day) => ({
+          date: day.date,
+          activities: day.activities.map((a) => ({
+            id: a.id,
+            title: a.title,
+            timeSlot: a.timeSlot,
+            description: a.description,
+          })),
+        })),
+      };
+
+      const result = await modifyItinerary(
+        userMessage,
+        itineraryForAI,
+        neighborhood || 'your current location'
+      );
+
+      // Handle the modification result
+      switch (result.action) {
+        case 'add':
+          if (result.activityData) {
+            const dayIndex = result.activityData.dayIndex ?? selectedDayIndex;
+            const day = activeItinerary.days[dayIndex];
+            if (day) {
+              const placeCard: PlaceCardData | undefined = result.activityData.place
+                ? {
+                    name: result.activityData.place.name,
+                    address: result.activityData.place.address,
+                    coordinates: result.activityData.place.coordinates,
+                    rating: result.activityData.place.rating,
+                    priceLevel: result.activityData.place.priceLevel as 1 | 2 | 3 | 4 | undefined,
+                  }
+                : undefined;
+
+              addActivity(activeItinerary.id, day.date, {
+                timeSlot: result.activityData.timeSlot,
+                title: result.activityData.title,
+                description: result.activityData.description,
+                category: result.activityData.category,
+                place: placeCard,
+                booked: false,
+              });
+              safeHaptics.notification(NotificationFeedbackType.Success);
+            }
+          }
+          break;
+
+        case 'remove':
+          if (result.removeActivityId) {
+            // Find the activity across all days and remove it
+            for (const day of activeItinerary.days) {
+              const activityIndex = day.activities.findIndex(
+                (a) => a.id === result.removeActivityId
+              );
+              if (activityIndex >= 0) {
+                removeActivity(activeItinerary.id, day.date, result.removeActivityId);
+                safeHaptics.notification(NotificationFeedbackType.Success);
+                break;
+              }
+            }
+          }
+          break;
+
+        case 'move':
+          // TODO: Implement move logic if needed
+          break;
+
+        case 'update':
+          // TODO: Implement update logic if needed
+          break;
+      }
+
+      // Show AI response
+      setAiResponse(result.message);
+
+      // Clear response after 5 seconds
+      setTimeout(() => {
+        setAiResponse(null);
+      }, 5000);
+    } catch (error) {
+      console.error('[Itinerary] Modification error:', error);
+      setAiResponse("Sorry, I couldn't make that change. Try again?");
+      setTimeout(() => {
+        setAiResponse(null);
+      }, 3000);
+    } finally {
+      setIsModifying(false);
+    }
+  }, [chatInput, activeItinerary, isModifying, neighborhood, selectedDayIndex, addActivity, removeActivity]);
 
   const formatDayLabel = (date: number, index: number) => {
     const d = new Date(date);
@@ -460,6 +562,13 @@ export default function ItineraryScreen() {
           )}
         </ScrollView>
 
+        {/* AI Response Banner */}
+        {aiResponse && (
+          <View style={styles.aiResponseBanner}>
+            <Text style={styles.aiResponseText}>{aiResponse}</Text>
+          </View>
+        )}
+
         {/* Chat Input for Modifications */}
         <View style={styles.chatInputContainer}>
           <View style={styles.chatInputWrapper}>
@@ -472,8 +581,13 @@ export default function ItineraryScreen() {
               onSubmitEditing={handleChatSubmit}
               returnKeyType="send"
               keyboardAppearance="dark"
+              editable={!isModifying}
             />
-            {chatInput.trim() ? (
+            {isModifying ? (
+              <View style={styles.chatLoadingContainer}>
+                <ActivityIndicator size="small" color={colors.accent.primary} />
+              </View>
+            ) : chatInput.trim() ? (
               <TouchableOpacity style={styles.chatSendButton} onPress={handleChatSubmit}>
                 <Send size={16} color={colors.text.inverse} />
               </TouchableOpacity>
@@ -826,5 +940,23 @@ const styles = StyleSheet.create({
     height: 32,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  chatLoadingContainer: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiResponseBanner: {
+    backgroundColor: colors.accent.muted,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.accent.primary,
+  },
+  aiResponseText: {
+    fontSize: typography.sizes.base,
+    color: colors.text.primary,
+    lineHeight: 22,
   },
 });

@@ -3,6 +3,26 @@ import { Slot, useRouter, useSegments } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useOnboardingStore } from '../stores/useOnboardingStore';
+import { useNotificationTriggers } from '../hooks/useNotificationTriggers';
+import { useMemoryExtraction } from '../hooks/useMemoryExtraction';
+import { initNetworkListener } from '../stores/useOfflineStore';
+
+// Component that runs background triggers
+function BackgroundTriggers() {
+  // Initialize notification triggers
+  useNotificationTriggers();
+
+  // Initialize memory auto-extraction from conversations
+  useMemoryExtraction();
+
+  // Initialize network listener for offline mode
+  useEffect(() => {
+    const cleanup = initNetworkListener();
+    return cleanup;
+  }, []);
+
+  return null;
+}
 
 export default function RootLayout() {
   const router = useRouter();
@@ -51,6 +71,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
+      <BackgroundTriggers />
       <Slot />
     </SafeAreaProvider>
   );

@@ -20,12 +20,14 @@ import {
   X,
   Trash2,
   Bell,
+  Heart,
 } from 'lucide-react-native';
 import { colors, spacing, borders, shadows, typography } from '../constants/theme';
 import { useConversationStore } from '../stores/useConversationStore';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
 import { useNotificationStore } from '../stores/useNotificationStore';
+import { useSavedPlacesStore } from '../stores/useSavedPlacesStore';
 import type { Conversation } from '../types';
 
 interface SidebarProps {
@@ -84,6 +86,7 @@ export function Sidebar({
   const budgetStore = useBudgetStore();
   const budgetRemaining = budgetStore.remainingToday();
   const hasUnreadNotifications = useNotificationStore((state) => state.hasUnreadNotifications());
+  const savedPlacesCount = useSavedPlacesStore((state) => state.places.length);
 
   const groupedConversations = groupConversationsByDate(conversations);
 
@@ -210,6 +213,21 @@ export function Sidebar({
             >
               <Calendar size={20} color={colors.text.secondary} />
               <Text style={styles.navItemText}>My Itinerary</Text>
+            </TouchableOpacity>
+
+            {/* Saved Places */}
+            <TouchableOpacity
+              style={styles.navItem}
+              onPress={() => {
+                onNavigate('/saved');
+                onClose();
+              }}
+              activeOpacity={0.7}
+            >
+              <Heart size={20} color={colors.text.secondary} />
+              <Text style={styles.navItemText}>
+                Saved Places{savedPlacesCount > 0 ? ` (${savedPlacesCount})` : ''}
+              </Text>
             </TouchableOpacity>
 
             {/* Notifications */}
