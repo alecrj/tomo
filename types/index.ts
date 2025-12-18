@@ -259,7 +259,7 @@ export interface InlineMapData {
 }
 
 // === ACTION BUTTONS ===
-export type MessageActionType = 'navigate' | 'regenerate' | 'show_photos' | 'log_expense' | 'show_recap';
+export type MessageActionType = 'navigate' | 'regenerate' | 'show_photos' | 'log_expense' | 'show_recap' | 'add_to_itinerary' | 'save_for_later';
 
 export interface MessageAction {
   label: string;

@@ -19,11 +19,13 @@ import {
   Settings,
   X,
   Trash2,
+  Bell,
 } from 'lucide-react-native';
 import { colors, spacing, borders, shadows, typography } from '../constants/theme';
 import { useConversationStore } from '../stores/useConversationStore';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
 import type { Conversation } from '../types';
 
 interface SidebarProps {
@@ -81,6 +83,7 @@ export function Sidebar({
   const neighborhood = useLocationStore((state) => state.neighborhood);
   const budgetStore = useBudgetStore();
   const budgetRemaining = budgetStore.remainingToday();
+  const hasUnreadNotifications = useNotificationStore((state) => state.hasUnreadNotifications());
 
   const groupedConversations = groupConversationsByDate(conversations);
 
@@ -207,6 +210,22 @@ export function Sidebar({
             >
               <Calendar size={20} color={colors.text.secondary} />
               <Text style={styles.navItemText}>My Itinerary</Text>
+            </TouchableOpacity>
+
+            {/* Notifications */}
+            <TouchableOpacity
+              style={styles.navItem}
+              onPress={() => {
+                onNavigate('/notifications');
+                onClose();
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.navItemIconContainer}>
+                <Bell size={20} color={colors.text.secondary} />
+                {hasUnreadNotifications && <View style={styles.notificationDot} />}
+              </View>
+              <Text style={styles.navItemText}>Notifications</Text>
             </TouchableOpacity>
 
             {/* Budget */}
@@ -373,6 +392,18 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: typography.sizes.sm,
     color: colors.text.secondary,
+  },
+  navItemIconContainer: {
+    position: 'relative',
+  },
+  notificationDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.status.error,
   },
 });
 

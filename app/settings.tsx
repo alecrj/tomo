@@ -13,9 +13,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
-import { ArrowLeft, MapPin, DollarSign, Utensils, Heart, Users, Check, Navigation, Brain, Thermometer } from 'lucide-react-native';
+import { ArrowLeft, MapPin, DollarSign, Utensils, Heart, Users, Check, Navigation, Brain, Thermometer, MessageCircle, Bell, Smile, AlignLeft, Train, Clock, CloudRain, Wallet, Calendar } from 'lucide-react-native';
 import { colors, spacing, typography, shadows, borders } from '../constants/theme';
-import { usePreferencesStore } from '../stores/usePreferencesStore';
+import { usePreferencesStore, TomoTone, EmojiUsage, ResponseLength } from '../stores/usePreferencesStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useOnboardingStore } from '../stores/useOnboardingStore';
@@ -54,6 +54,18 @@ export default function SettingsScreen() {
 
   const [interests, setInterests] = useState<Set<string>>(new Set(preferences.interests));
   const interestOptions = ['food', 'culture', 'nightlife', 'nature', 'shopping', 'iconic'];
+
+  // Tomo Personality
+  const [tomoTone, setTomoTone] = useState<TomoTone>(preferences.tomoTone);
+  const [emojiUsage, setEmojiUsage] = useState<EmojiUsage>(preferences.emojiUsage);
+  const [responseLength, setResponseLength] = useState<ResponseLength>(preferences.responseLength);
+
+  // Notification preferences
+  const [lastTrainWarnings, setLastTrainWarnings] = useState(preferences.lastTrainWarnings);
+  const [placeClosingWarnings, setPlaceClosingWarnings] = useState(preferences.placeClosingWarnings);
+  const [weatherAlerts, setWeatherAlerts] = useState(preferences.weatherAlerts);
+  const [budgetAlerts, setBudgetAlerts] = useState(preferences.budgetAlerts);
+  const [itineraryReminders, setItineraryReminders] = useState(preferences.itineraryReminders);
 
   const toggleDietary = (option: string) => {
     safeHaptics.selection();
@@ -144,6 +156,14 @@ export default function SettingsScreen() {
     preferences.setBudgetLevel(budgetLevel);
     preferences.setAvoidCrowds(avoidCrowds);
     preferences.setTemperatureUnit(temperatureUnit);
+    preferences.setTomoTone(tomoTone);
+    preferences.setEmojiUsage(emojiUsage);
+    preferences.setResponseLength(responseLength);
+    preferences.setLastTrainWarnings(lastTrainWarnings);
+    preferences.setPlaceClosingWarnings(placeClosingWarnings);
+    preferences.setWeatherAlerts(weatherAlerts);
+    preferences.setBudgetAlerts(budgetAlerts);
+    preferences.setItineraryReminders(itineraryReminders);
 
     const currentDietary = preferences.dietary;
     const newDietary = Array.from(dietary).filter(d => d !== 'none');
@@ -413,6 +433,177 @@ export default function SettingsScreen() {
                   </Text>
                 </TouchableOpacity>
               ))}
+            </View>
+          </View>
+
+          {/* Tomo Personality Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <MessageCircle size={20} color={colors.accent.primary} />
+              <Text style={styles.sectionTitle}>Tomo's Personality</Text>
+            </View>
+            <Text style={styles.sectionDescription}>
+              Customize how Tomo talks to you.
+            </Text>
+
+            <Text style={styles.inputLabel}>Tone</Text>
+            <View style={styles.chipGroup}>
+              {(['casual', 'friendly', 'professional'] as const).map((tone) => (
+                <TouchableOpacity
+                  key={tone}
+                  style={[styles.chip, tomoTone === tone && styles.chipSelected]}
+                  onPress={() => {
+                    safeHaptics.selection();
+                    setTomoTone(tone);
+                  }}
+                >
+                  <Text style={[styles.chipText, tomoTone === tone && styles.chipTextSelected]}>
+                    {tone.charAt(0).toUpperCase() + tone.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={[styles.inputLabel, { marginTop: spacing.lg }]}>Emoji Usage</Text>
+            <View style={styles.chipGroup}>
+              {(['lots', 'some', 'none'] as const).map((usage) => (
+                <TouchableOpacity
+                  key={usage}
+                  style={[styles.chip, emojiUsage === usage && styles.chipSelected]}
+                  onPress={() => {
+                    safeHaptics.selection();
+                    setEmojiUsage(usage);
+                  }}
+                >
+                  <Text style={[styles.chipText, emojiUsage === usage && styles.chipTextSelected]}>
+                    {usage === 'lots' ? 'Lots' : usage === 'some' ? 'Some' : 'None'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={[styles.inputLabel, { marginTop: spacing.lg }]}>Response Length</Text>
+            <View style={styles.chipGroup}>
+              {(['brief', 'balanced', 'detailed'] as const).map((length) => (
+                <TouchableOpacity
+                  key={length}
+                  style={[styles.chip, responseLength === length && styles.chipSelected]}
+                  onPress={() => {
+                    safeHaptics.selection();
+                    setResponseLength(length);
+                  }}
+                >
+                  <Text style={[styles.chipText, responseLength === length && styles.chipTextSelected]}>
+                    {length.charAt(0).toUpperCase() + length.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Notification Preferences Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Bell size={20} color={colors.accent.primary} />
+              <Text style={styles.sectionTitle}>Notifications</Text>
+            </View>
+            <Text style={styles.sectionDescription}>
+              Choose what alerts you want to receive.
+            </Text>
+
+            <View style={styles.settingRow}>
+              <View style={styles.settingIconLabel}>
+                <Train size={18} color={colors.text.secondary} />
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Last Train Warnings</Text>
+                  <Text style={styles.settingDescription}>Alert when last train is approaching</Text>
+                </View>
+              </View>
+              <Switch
+                value={lastTrainWarnings}
+                onValueChange={(value) => {
+                  safeHaptics.selection();
+                  setLastTrainWarnings(value);
+                }}
+                trackColor={{ false: colors.background.tertiary, true: colors.accent.primary }}
+                thumbColor={colors.text.primary}
+              />
+            </View>
+
+            <View style={styles.settingRow}>
+              <View style={styles.settingIconLabel}>
+                <Clock size={18} color={colors.text.secondary} />
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Place Closing Warnings</Text>
+                  <Text style={styles.settingDescription}>Alert when a place is closing soon</Text>
+                </View>
+              </View>
+              <Switch
+                value={placeClosingWarnings}
+                onValueChange={(value) => {
+                  safeHaptics.selection();
+                  setPlaceClosingWarnings(value);
+                }}
+                trackColor={{ false: colors.background.tertiary, true: colors.accent.primary }}
+                thumbColor={colors.text.primary}
+              />
+            </View>
+
+            <View style={styles.settingRow}>
+              <View style={styles.settingIconLabel}>
+                <CloudRain size={18} color={colors.text.secondary} />
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Weather Alerts</Text>
+                  <Text style={styles.settingDescription}>Alert for incoming rain or weather changes</Text>
+                </View>
+              </View>
+              <Switch
+                value={weatherAlerts}
+                onValueChange={(value) => {
+                  safeHaptics.selection();
+                  setWeatherAlerts(value);
+                }}
+                trackColor={{ false: colors.background.tertiary, true: colors.accent.primary }}
+                thumbColor={colors.text.primary}
+              />
+            </View>
+
+            <View style={styles.settingRow}>
+              <View style={styles.settingIconLabel}>
+                <Wallet size={18} color={colors.text.secondary} />
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Budget Alerts</Text>
+                  <Text style={styles.settingDescription}>Alert when approaching budget limit</Text>
+                </View>
+              </View>
+              <Switch
+                value={budgetAlerts}
+                onValueChange={(value) => {
+                  safeHaptics.selection();
+                  setBudgetAlerts(value);
+                }}
+                trackColor={{ false: colors.background.tertiary, true: colors.accent.primary }}
+                thumbColor={colors.text.primary}
+              />
+            </View>
+
+            <View style={styles.settingRow}>
+              <View style={styles.settingIconLabel}>
+                <Calendar size={18} color={colors.text.secondary} />
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Itinerary Reminders</Text>
+                  <Text style={styles.settingDescription}>Remind you of upcoming activities</Text>
+                </View>
+              </View>
+              <Switch
+                value={itineraryReminders}
+                onValueChange={(value) => {
+                  safeHaptics.selection();
+                  setItineraryReminders(value);
+                }}
+                trackColor={{ false: colors.background.tertiary, true: colors.accent.primary }}
+                thumbColor={colors.text.primary}
+              />
             </View>
           </View>
 
@@ -687,6 +878,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  settingIconLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: spacing.md,
   },
   settingInfo: {
     flex: 1,

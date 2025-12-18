@@ -21,6 +21,7 @@ import {
   CloudRain,
   MapPin,
   Shuffle,
+  Languages,
 } from 'lucide-react-native';
 import { colors, spacing, borders, shadows, typography } from '../constants/theme';
 import type { TimeOfDay, WeatherCondition } from '../types';
@@ -48,6 +49,7 @@ const defaultActions: QuickAction[] = [
   { id: 'drinks', label: 'Drinks', icon: Beer, message: 'Find me a good bar or place for drinks nearby' },
   { id: 'sights', label: 'Sights', icon: Landmark, message: "What's interesting to see around here?" },
   { id: 'photo', label: 'Photo', icon: Camera, message: 'Where are the best photo spots nearby?' },
+  { id: 'translate', label: 'Translate', icon: Languages, message: 'Help me translate something' },
   { id: 'plan', label: 'Plan', icon: CalendarDays, message: 'Help me plan my day' },
   { id: 'budget', label: 'Budget', icon: Wallet, message: "How's my budget looking today?" },
   { id: 'home', label: 'Home', icon: Home, message: 'Take me home' },
@@ -121,12 +123,13 @@ function getContextualActions(
     ];
   }
 
-  // Always have plan and budget
-  actions.push(defaultActions[5]); // plan
-  actions.push(defaultActions[6]); // budget
+  // Always have translate, plan and budget
+  actions.push(defaultActions[5]); // translate
+  actions.push(defaultActions[6]); // plan
+  actions.push(defaultActions[7]); // budget
 
   // Always have home
-  actions.push(defaultActions[7]); // home
+  actions.push(defaultActions[8]); // home
 
   // Remove duplicates by id
   const seen = new Set<string>();

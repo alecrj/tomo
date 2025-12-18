@@ -33,6 +33,7 @@ import {
 } from 'lucide-react-native';
 import { colors, spacing, borders, shadows, mapStyle, typography } from '../constants/theme';
 import { getDirections, TravelMode } from '../services/routes';
+import { navigationChat, NavigationContext } from '../services/openai';
 import { useNavigationStore } from '../stores/useNavigationStore';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useTripStore } from '../stores/useTripStore';
@@ -281,28 +282,62 @@ export default function NavigationScreen() {
     router.back();
   };
 
-  const handleChatSend = async () => {
-    if (!chatInput.trim()) return;
+  const handleChatSend = async (message?: string) => {
+    const userMessage = (message || chatInput).trim();
+    if (!userMessage) return;
 
     safeHaptics.impact(ImpactFeedbackStyle.Light);
-    const userMessage = chatInput.trim();
     setChatInput('');
     setChatMessages((prev) => [...prev, { role: 'user', text: userMessage }]);
     setIsChatLoading(true);
 
-    // Simulate AI response (in real app, this would call the chat API)
-    setTimeout(() => {
-      const responses = [
-        "I found a 7-Eleven about 2 minutes off your route. Want me to add it as a stop?",
-        "There's a coffee shop on the way! Should I add it to your route?",
-        "I can see a few options nearby. What are you looking for specifically?",
-      ];
-      const response = responses[Math.floor(Math.random() * responses.length)];
-      setChatMessages((prev) => [...prev, { role: 'assistant', text: response }]);
-      setIsChatLoading(false);
+    try {
+      // Build navigation context for AI
+      const navContext: NavigationContext = {
+        userLocation: coordinates!,
+        destination: {
+          name: currentDestination!.title,
+          address: currentDestination!.address || '',
+          coordinates: currentDestination!.coordinates,
+        },
+        currentStep: currentStep ? {
+          instruction: currentStep.instruction,
+          distance: currentStep.distance,
+        } : undefined,
+        totalDuration: route?.totalDuration || 0,
+        totalDistance: route?.totalDistance || 0,
+        distanceRemaining: distanceToDestination || route?.totalDistance || 0,
+        travelMode: selectedMode,
+      };
+
+      const response = await navigationChat(userMessage, navContext);
+      setChatMessages((prev) => [...prev, { role: 'assistant', text: response.text }]);
+
+      // Handle actions from the response
+      if (response.action?.type === 'add_stop' && response.action.place) {
+        // TODO: Implement waypoint/stop addition
+        console.log('[Navigation] Add stop suggested:', response.action.place);
+      }
+
       safeHaptics.notification(NotificationFeedbackType.Success);
-    }, 1500);
+    } catch (error) {
+      console.error('[Navigation] Chat error:', error);
+      setChatMessages((prev) => [...prev, {
+        role: 'assistant',
+        text: "Sorry, I couldn't process that. Try again in a moment."
+      }]);
+    } finally {
+      setIsChatLoading(false);
+    }
   };
+
+  // Quick action chips for navigation
+  const QUICK_ACTIONS = [
+    { label: 'Pit stop', message: 'Find me a quick pit stop nearby' },
+    { label: 'Bathroom', message: 'Where is the nearest bathroom?' },
+    { label: 'Coffee', message: 'Find a coffee shop on my route' },
+    { label: 'How long?', message: 'How much longer until I arrive?' },
+  ];
 
   if (!currentDestination || !coordinates) {
     return (
@@ -451,10 +486,22 @@ export default function NavigationScreen() {
 
           <View style={styles.chatMessages}>
             {chatMessages.length === 0 && (
-              <Text style={styles.chatHint}>
-                Ask me anything while navigating!{'\n'}
-                "Where's the nearest 7-Eleven?"
-              </Text>
+              <>
+                <Text style={styles.chatHint}>
+                  Ask me anything while navigating!
+                </Text>
+                <View style={styles.quickActionsContainer}>
+                  {QUICK_ACTIONS.map((action) => (
+                    <TouchableOpacity
+                      key={action.label}
+                      style={styles.quickActionChip}
+                      onPress={() => handleChatSend(action.message)}
+                    >
+                      <Text style={styles.quickActionText}>{action.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
             )}
             {chatMessages.map((msg, index) => (
               <View
@@ -484,10 +531,10 @@ export default function NavigationScreen() {
               placeholderTextColor={colors.text.tertiary}
               value={chatInput}
               onChangeText={setChatInput}
-              onSubmitEditing={handleChatSend}
+              onSubmitEditing={() => handleChatSend()}
               returnKeyType="send"
             />
-            <TouchableOpacity style={styles.chatSendButton} onPress={handleChatSend}>
+            <TouchableOpacity style={styles.chatSendButton} onPress={() => handleChatSend()}>
               <Send size={16} color={colors.text.inverse} />
             </TouchableOpacity>
           </View>
@@ -731,6 +778,25 @@ const styles = StyleSheet.create({
     color: colors.text.tertiary,
     textAlign: 'center',
     lineHeight: 20,
+    marginBottom: spacing.md,
+  },
+  quickActionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  quickActionChip: {
+    backgroundColor: colors.accent.muted,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borders.radius.full,
+  },
+  quickActionText: {
+    fontSize: typography.sizes.sm,
+    color: colors.accent.primary,
+    fontWeight: typography.weights.medium,
   },
   chatBubble: {
     maxWidth: '80%',

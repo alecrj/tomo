@@ -579,7 +579,12 @@ export default function MapExploreScreen() {
               <MessageCircle size={16} color={colors.accent.primary} />
               <Text style={styles.chatResponseLabel}>Tomo</Text>
             </View>
-            <Text style={styles.chatResponseText}>{chatResponse}</Text>
+            <ScrollView
+              style={styles.chatResponseScroll}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.chatResponseText}>{chatResponse}</Text>
+            </ScrollView>
           </View>
         </View>
       )}
@@ -677,16 +682,15 @@ const styles = StyleSheet.create({
   categoriesContainer: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    gap: spacing.sm,
   },
   categoryPill: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.background.secondary,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderRadius: borders.radius.full,
-    marginRight: spacing.sm,
+    marginRight: spacing.xs,
     gap: spacing.xs,
     ...shadows.sm,
   },
@@ -780,13 +784,14 @@ const styles = StyleSheet.create({
   placeInfo: {
     flex: 1,
     marginLeft: spacing.md,
-    paddingRight: spacing.xl,
+    paddingRight: spacing.lg,
   },
   placeName: {
-    fontSize: typography.sizes.lg,
+    fontSize: typography.sizes.base,
     fontWeight: typography.weights.semibold,
     color: colors.text.primary,
     marginBottom: spacing.xs,
+    lineHeight: 20,
   },
   placeDetails: {
     flexDirection: 'row',
@@ -819,9 +824,9 @@ const styles = StyleSheet.create({
     color: colors.status.error,
   },
   placeAddress: {
-    fontSize: typography.sizes.sm,
+    fontSize: typography.sizes.xs,
     color: colors.text.secondary,
-    lineHeight: 18,
+    lineHeight: 16,
   },
   navigateButton: {
     flexDirection: 'row',
@@ -943,7 +948,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.secondary,
     borderRadius: borders.radius.xl,
     padding: spacing.lg,
+    maxHeight: 220,
     ...shadows.lg,
+  },
+  chatResponseScroll: {
+    maxHeight: 140,
   },
   chatResponseClose: {
     position: 'absolute',
@@ -972,6 +981,7 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.base,
     color: colors.text.primary,
     lineHeight: 22,
-    paddingRight: spacing.lg,
+    paddingRight: spacing.xl,
+    flexShrink: 1,
   },
 });

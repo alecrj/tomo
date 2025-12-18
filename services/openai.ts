@@ -107,7 +107,8 @@ RESPONSE FORMAT (ALWAYS respond with valid JSON):
   "showMap": true/false,
   "actions": [] OR [
     {"label": "Take me there", "type": "navigate"},
-    {"label": "Something else", "type": "regenerate"}
+    {"label": "Something else", "type": "regenerate"},
+    {"label": "Add to itinerary", "type": "add_to_itinerary"}
   ]
 }
 
@@ -541,6 +542,150 @@ export async function generateItinerary(
   } catch (error) {
     console.error('[OpenAI] Itinerary generation error:', error);
     return null;
+  }
+}
+
+// === NAVIGATION CHAT ===
+
+export interface NavigationContext {
+  userLocation: Coordinates;
+  destination: {
+    name: string;
+    address: string;
+    coordinates: Coordinates;
+  };
+  currentStep?: {
+    instruction: string;
+    distance?: number;
+  };
+  totalDuration: number; // minutes
+  totalDistance: number; // meters
+  distanceRemaining: number; // meters
+  travelMode: 'WALK' | 'TRANSIT' | 'DRIVE';
+}
+
+export interface NavigationChatResponse {
+  text: string;
+  action?: {
+    type: 'add_stop' | 'find_nearby' | 'change_route' | 'info' | 'none';
+    place?: {
+      name: string;
+      address: string;
+      coordinates: Coordinates;
+    };
+  };
+}
+
+/**
+ * Build system prompt for navigation chat
+ */
+function buildNavigationSystemPrompt(navContext: NavigationContext): string {
+  const distanceRemaining = navContext.distanceRemaining < 1000
+    ? `${Math.round(navContext.distanceRemaining)} m`
+    : `${(navContext.distanceRemaining / 1000).toFixed(1)} km`;
+
+  const eta = Math.round(navContext.totalDuration * (navContext.distanceRemaining / navContext.totalDistance));
+
+  return `You are Tomo, a friendly AI assistant helping a traveler during navigation.
+
+CURRENT NAVIGATION:
+- Destination: ${navContext.destination.name}
+- Address: ${navContext.destination.address}
+- Distance remaining: ${distanceRemaining}
+- ETA: ${eta} minutes
+- Travel mode: ${navContext.travelMode.toLowerCase()}
+${navContext.currentStep ? `- Current step: ${navContext.currentStep.instruction}` : ''}
+
+YOU CAN HELP WITH:
+1. Finding nearby places ("find a coffee shop", "where's the nearest bathroom")
+2. Adding stops to the route ("add a 7-Eleven stop", "I need to stop for gas")
+3. Answering questions about the route ("how much longer", "am I going the right way")
+4. General questions while navigating
+
+RESPONSE FORMAT (JSON):
+{
+  "text": "Your response (conversational, concise)",
+  "action": {
+    "type": "add_stop" | "find_nearby" | "change_route" | "info" | "none",
+    "place": null OR {
+      "name": "Place Name",
+      "address": "Address",
+      "coordinates": {"latitude": X, "longitude": Y}
+    }
+  }
+}
+
+RULES:
+- Be concise (user is navigating, keep it brief)
+- If user asks to find something nearby, suggest a real place with coordinates
+- If asked about remaining time/distance, use the context provided
+- Do NOT use markdown formatting
+- Be helpful and proactive`;
+}
+
+/**
+ * Chat during navigation with context about the current route
+ */
+export async function navigationChat(
+  message: string,
+  navContext: NavigationContext
+): Promise<NavigationChatResponse> {
+  try {
+    const apiKey = getApiKey();
+
+    if (!apiKey) {
+      return { text: "Sorry, I can't respond right now. API key not configured." };
+    }
+
+    const systemPrompt = buildNavigationSystemPrompt(navContext);
+
+    const response = await fetch(OPENAI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini', // Use faster model for navigation
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message },
+        ],
+        max_tokens: 500,
+        temperature: 0.7,
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('[OpenAI] Navigation chat error:', response.status, errorBody);
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      throw new Error('No content in response');
+    }
+
+    const parsed = JSON.parse(content);
+
+    console.log('[OpenAI] Navigation chat response:', {
+      text: parsed.text?.substring(0, 50),
+      actionType: parsed.action?.type,
+    });
+
+    return {
+      text: parsed.text || "I'm not sure how to help with that.",
+      action: parsed.action,
+    };
+  } catch (error) {
+    console.error('[OpenAI] Navigation chat error:', error);
+    return {
+      text: "Sorry, I'm having trouble responding. Try again in a moment.",
+    };
   }
 }
 

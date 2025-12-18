@@ -5,7 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import { Navigation, RefreshCw, Image, Receipt, Map } from 'lucide-react-native';
+import { Navigation, RefreshCw, Image, Receipt, Map, CalendarPlus, Bookmark } from 'lucide-react-native';
 import { safeHaptics, ImpactFeedbackStyle } from '../utils/haptics';
 import { colors, spacing, borders } from '../constants/theme';
 import type { MessageAction, MessageActionType } from '../types';
@@ -27,6 +27,10 @@ const getActionIcon = (type: MessageActionType) => {
       return Receipt;
     case 'show_recap':
       return Map;
+    case 'add_to_itinerary':
+      return CalendarPlus;
+    case 'save_for_later':
+      return Bookmark;
     default:
       return null;
   }

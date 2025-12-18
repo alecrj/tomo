@@ -43,6 +43,7 @@ import { useTripStore } from '../stores/useTripStore';
 import { useMemoryStore } from '../stores/useMemoryStore';
 import { useConversationStore } from '../stores/useConversationStore';
 import { useNavigationStore } from '../stores/useNavigationStore';
+import { useItineraryStore } from '../stores/useItineraryStore';
 import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { useLocation } from '../hooks/useLocation';
 import { useWeather } from '../hooks/useWeather';
@@ -55,6 +56,8 @@ import { ActionButtons } from '../components/ActionButtons';
 import LogVisitModal from '../components/LogVisitModal';
 import { QuickActionsMenu } from '../components/QuickActionsMenu';
 import { Sidebar } from '../components/Sidebar';
+import { NotificationContainer } from '../components/NotificationToast';
+import { OfflineBanner } from '../components/OfflineBanner';
 import type { DestinationContext, ChatMessage, MessageAction, Destination, WeatherCondition } from '../types';
 
 export default function ChatScreen() {
@@ -307,6 +310,58 @@ export default function ChatScreen() {
       case 'log_expense':
         setShowLogVisit(true);
         break;
+      case 'add_to_itinerary':
+        if (placeCard) {
+          // Get or create an active itinerary
+          const itineraryStore = useItineraryStore.getState();
+          let activeItinerary = itineraryStore.getActiveItinerary();
+
+          if (!activeItinerary) {
+            // Create a new itinerary for today
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            activeItinerary = itineraryStore.createItinerary(
+              `${neighborhood || 'My'} Itinerary`,
+              today.getTime(),
+              tomorrow.getTime(),
+              currentTrip?.id
+            );
+          }
+
+          // Add the place as an activity
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
+
+          itineraryStore.addActivity(activeItinerary.id, todayStart.getTime(), {
+            timeSlot: timeOfDay === 'morning' ? 'morning' : timeOfDay === 'afternoon' ? 'afternoon' : 'evening',
+            title: placeCard.name,
+            description: placeCard.description || placeCard.address,
+            category: 'activity',
+            place: placeCard,
+            booked: false,
+          });
+
+          safeHaptics.notification(NotificationFeedbackType.Success);
+          Alert.alert('Added to Itinerary', `${placeCard.name} has been added to your itinerary!`, [
+            { text: 'View Itinerary', onPress: () => router.push('/itinerary') },
+            { text: 'OK', style: 'cancel' },
+          ]);
+        }
+        break;
+      case 'save_for_later':
+        if (placeCard) {
+          // Add to memory as a liked place
+          const memoryStore = useMemoryStore.getState();
+          memoryStore.addMemory({
+            type: 'like',
+            category: 'place',
+            content: `Saved for later: ${placeCard.name} at ${placeCard.address}`,
+          });
+          safeHaptics.notification(NotificationFeedbackType.Success);
+          Alert.alert('Saved!', `${placeCard.name} has been saved for later.`);
+        }
+        break;
     }
   };
 
@@ -390,6 +445,8 @@ export default function ChatScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
+      <OfflineBanner />
+      <NotificationContainer />
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         {/* Simplified Header - ChatGPT Style */}
         <View style={styles.header}>
