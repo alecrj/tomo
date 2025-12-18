@@ -227,13 +227,19 @@ export interface PlaceCardData {
   placeId?: string;
   name: string;
   photo?: string;
+  photos?: string[]; // Multiple photos for carousel
   rating?: number;
   priceLevel?: 1 | 2 | 3 | 4;
   address: string;
   distance?: string;
+  walkTime?: string; // "8 min walk"
+  transitTime?: string; // "15 min by train"
+  driveTime?: string; // "5 min drive"
   openNow?: boolean;
   hours?: string;
+  closingTime?: string; // "til 10pm"
   estimatedCost?: string;
+  description?: string; // Tomo's conversational description
   coordinates: Coordinates;
 }
 

@@ -29,6 +29,7 @@ import {
   Map,
   ChevronDown,
   ChevronUp,
+  Menu,
 } from 'lucide-react-native';
 import { colors, spacing, typography, borders, shadows } from '../constants/theme';
 import { chat } from '../services/openai';
@@ -48,12 +49,13 @@ import { useWeather } from '../hooks/useWeather';
 import { useCityDetection } from '../hooks/useCityDetection';
 import { detectCurrency } from '../utils/currency';
 import { TypingIndicator } from '../components/TypingIndicator';
-import { MiniMap } from '../components/MiniMap';
 import { PlaceCard } from '../components/PlaceCard';
 import { InlineMap } from '../components/InlineMap';
 import { ActionButtons } from '../components/ActionButtons';
 import LogVisitModal from '../components/LogVisitModal';
-import type { DestinationContext, ChatMessage, MessageAction, Destination } from '../types';
+import { QuickActionsMenu } from '../components/QuickActionsMenu';
+import { Sidebar } from '../components/Sidebar';
+import type { DestinationContext, ChatMessage, MessageAction, Destination, WeatherCondition } from '../types';
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -100,6 +102,8 @@ export default function ChatScreen() {
   }, [currentConversation]);
 
   const viewDestination = useNavigationStore((state) => state.viewDestination);
+  const currentDestination = useNavigationStore((state) => state.currentDestination);
+  const isNavigating = !!currentDestination;
 
   // Local state
   const [inputText, setInputText] = useState('');
@@ -107,6 +111,8 @@ export default function ChatScreen() {
   const [showContextBar, setShowContextBar] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [showLogVisit, setShowLogVisit] = useState(false);
+  const [showQuickActions, setShowQuickActions] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [lastPlaceCard, setLastPlaceCard] = useState<ChatMessage['placeCard'] | null>(null);
 
   const currency = coordinates
@@ -385,57 +391,34 @@ export default function ChatScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        {/* Compact Header - ChatGPT Style */}
+        {/* Simplified Header - ChatGPT Style */}
         <View style={styles.header}>
           <View style={styles.headerTop}>
-            {/* Left: Conversations Button */}
+            {/* Left: Hamburger Menu */}
             <TouchableOpacity
               style={styles.headerIconButton}
-              onPress={() => router.push('/conversations')}
+              onPress={() => setShowSidebar(true)}
             >
-              <MessageSquare size={22} color={colors.text.secondary} />
+              <Menu size={24} color={colors.text.primary} />
             </TouchableOpacity>
 
-            {/* Center: Location & Context */}
-            <TouchableOpacity
-              style={styles.contextInfo}
-              onPress={() => setShowContextBar(!showContextBar)}
-              activeOpacity={0.7}
-            >
+            {/* Center: Location */}
+            <View style={styles.headerCenter}>
               <Text style={styles.locationText} numberOfLines={1}>
                 {neighborhood || 'Loading...'}
               </Text>
-              <View style={styles.contextRow}>
-                {displayTemperature !== null && (
-                  <Text style={styles.contextText}>{displayTemperature}°{temperatureUnit}</Text>
-                )}
-                {displayTemperature !== null && dailyBudget > 0 && (
-                  <Text style={styles.contextDot}>•</Text>
-                )}
-                {dailyBudget > 0 && (
-                  <Text style={styles.contextText}>
-                    {currency.symbol}{budgetRemaining.toFixed(0)}
-                  </Text>
-                )}
-              </View>
-            </TouchableOpacity>
-
-            {/* Right: Settings + Mini Map */}
-            <View style={styles.headerRight}>
-              <TouchableOpacity
-                style={styles.headerIconButton}
-                onPress={() => router.push('/settings')}
-              >
-                <Settings size={22} color={colors.text.secondary} />
-              </TouchableOpacity>
-              <MiniMap
-                size="small"
-                onExpand={() => router.push('/map')}
-              />
             </View>
+
+            {/* Right: Map Button */}
+            <TouchableOpacity
+              style={styles.headerIconButton}
+              onPress={() => router.push('/map')}
+            >
+              <Map size={24} color={colors.text.primary} />
+            </TouchableOpacity>
           </View>
 
-          {/* Budget Bar - Always visible when budget set */}
+          {/* Budget Bar - Subtle indicator */}
           {dailyBudget > 0 && (
             <View style={styles.budgetBar}>
               <View style={styles.budgetTrack}>
@@ -553,7 +536,7 @@ export default function ChatScreen() {
 
           {/* Input Bar */}
           <View style={styles.inputContainer}>
-            <TouchableOpacity style={styles.inputIconButton} onPress={() => setShowLogVisit(true)}>
+            <TouchableOpacity style={styles.inputIconButton} onPress={() => setShowQuickActions(true)}>
               <Plus size={22} color={colors.text.secondary} />
             </TouchableOpacity>
 
@@ -597,6 +580,27 @@ export default function ChatScreen() {
       </SafeAreaView>
 
       <LogVisitModal visible={showLogVisit} onClose={() => setShowLogVisit(false)} />
+
+      <QuickActionsMenu
+        visible={showQuickActions}
+        timeOfDay={timeOfDay}
+        weather={weatherCondition as WeatherCondition | undefined}
+        isNavigating={isNavigating}
+        onSelectAction={(message) => handleSendMessage(message)}
+        onClose={() => setShowQuickActions(false)}
+      />
+
+      <Sidebar
+        visible={showSidebar}
+        onClose={() => setShowSidebar(false)}
+        onNewChat={() => {
+          startNewConversation(neighborhood || undefined, currentTrip?.id);
+        }}
+        onSelectConversation={(conversationId) => {
+          useConversationStore.getState().switchConversation(conversationId);
+        }}
+        onNavigate={(route) => router.push(route as any)}
+      />
     </View>
   );
 }
@@ -624,38 +628,21 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   headerIconButton: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: borders.radius.md,
   },
-  contextInfo: {
+  headerCenter: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   locationText: {
-    fontSize: typography.sizes.base,
+    fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
     color: colors.text.primary,
-  },
-  contextRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  contextText: {
-    fontSize: typography.sizes.xs,
-    color: colors.text.secondary,
-  },
-  contextDot: {
-    fontSize: typography.sizes.xs,
-    color: colors.text.tertiary,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
   },
   budgetBar: {
     paddingHorizontal: spacing.md,

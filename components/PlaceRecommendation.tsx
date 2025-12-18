@@ -20,34 +20,42 @@ import {
 } from 'lucide-react-native';
 import { safeHaptics, ImpactFeedbackStyle } from '../utils/haptics';
 import { colors, spacing, borders, shadows, typography } from '../constants/theme';
-import type { PlaceCardData } from '../types';
 
-interface PlaceCardProps {
-  placeCard: PlaceCardData;
-  currencySymbol?: string;
-  onTakeMeThere?: () => void;
-  onSomethingElse?: () => void;
+interface PlaceRecommendationProps {
+  name: string;
+  photos: string[]; // Multiple photos for carousel
+  description?: string; // Tomo's conversational description
+  walkTime?: string; // "8 min"
+  transitTime?: string; // "15 min"
+  driveTime?: string; // "5 min"
+  price?: string; // "~$4" or "$$"
+  closingTime?: string; // "til 4pm" or "til 10pm"
+  isOpen?: boolean;
+  rating?: number;
+  onNavigate?: () => void;
+  onShowOthers?: () => void;
 }
 
 const { width: screenWidth } = Dimensions.get('window');
-const IMAGE_WIDTH = screenWidth - spacing.lg * 4; // Account for message padding
+const IMAGE_WIDTH = screenWidth - spacing.lg * 2 - spacing.xl; // Account for message padding
 const IMAGE_HEIGHT = 180;
 
-export function PlaceCard({
-  placeCard,
-  currencySymbol = '$',
-  onTakeMeThere,
-  onSomethingElse,
-}: PlaceCardProps) {
+export function PlaceRecommendation({
+  name,
+  photos,
+  description,
+  walkTime,
+  transitTime,
+  driveTime,
+  price,
+  closingTime,
+  isOpen,
+  rating,
+  onNavigate,
+  onShowOthers,
+}: PlaceRecommendationProps) {
   const scrollRef = useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-
-  // Build photos array (support both single photo and multiple photos)
-  const photos = placeCard.photos?.length
-    ? placeCard.photos
-    : placeCard.photo
-      ? [placeCard.photo]
-      : [];
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
@@ -55,21 +63,19 @@ export function PlaceCard({
     setActiveIndex(index);
   };
 
-  const handleTakeMeThere = () => {
+  const handleNavigate = () => {
     safeHaptics.impact(ImpactFeedbackStyle.Medium);
-    onTakeMeThere?.();
+    onNavigate?.();
   };
 
-  const handleSomethingElse = () => {
+  const handleShowOthers = () => {
     safeHaptics.impact(ImpactFeedbackStyle.Light);
-    onSomethingElse?.();
+    onShowOthers?.();
   };
 
   // Build info pills
   const infoPills: { icon: React.ReactNode; label: string }[] = [];
 
-  // Walk time (from walkTime or distance field)
-  const walkTime = placeCard.walkTime || placeCard.distance;
   if (walkTime) {
     infoPills.push({
       icon: <Footprints size={14} color={colors.text.secondary} />,
@@ -77,34 +83,28 @@ export function PlaceCard({
     });
   }
 
-  if (placeCard.transitTime) {
+  if (transitTime) {
     infoPills.push({
       icon: <Train size={14} color={colors.text.secondary} />,
-      label: placeCard.transitTime,
+      label: transitTime,
     });
   }
 
-  if (placeCard.driveTime) {
+  if (driveTime) {
     infoPills.push({
       icon: <Car size={14} color={colors.text.secondary} />,
-      label: placeCard.driveTime,
+      label: driveTime,
     });
   }
 
-  // Price (from estimatedCost or priceLevel)
-  const priceDisplay = placeCard.estimatedCost ||
-    (placeCard.priceLevel ? currencySymbol.repeat(placeCard.priceLevel) : null);
-  if (priceDisplay) {
+  if (price) {
     infoPills.push({
       icon: null,
-      label: priceDisplay.startsWith('~') ? priceDisplay : `~${priceDisplay}`,
+      label: price,
     });
   }
 
-  // Closing time
-  const closingTime = placeCard.closingTime ||
-    (placeCard.hours && placeCard.openNow ? `til ${placeCard.hours.split(' - ')[1] || placeCard.hours}` : null);
-  if (closingTime && placeCard.openNow !== false) {
+  if (closingTime && isOpen !== false) {
     infoPills.push({
       icon: <Clock size={14} color={colors.text.secondary} />,
       label: closingTime,
@@ -156,18 +156,18 @@ export function PlaceCard({
       )}
 
       {/* Place Name */}
-      <Text style={styles.name}>{placeCard.name}</Text>
+      <Text style={styles.name}>{name}</Text>
 
-      {/* Rating */}
-      {placeCard.rating && (
+      {/* Rating if available */}
+      {rating && (
         <Text style={styles.rating}>
-          {'★'.repeat(Math.round(placeCard.rating))}{'☆'.repeat(5 - Math.round(placeCard.rating))} {placeCard.rating.toFixed(1)}
+          {'★'.repeat(Math.round(rating))}{'☆'.repeat(5 - Math.round(rating))} {rating.toFixed(1)}
         </Text>
       )}
 
-      {/* Tomo's Description (if available) */}
-      {placeCard.description && (
-        <Text style={styles.description}>{placeCard.description}</Text>
+      {/* Tomo's Description */}
+      {description && (
+        <Text style={styles.description}>{description}</Text>
       )}
 
       {/* Info Pills */}
@@ -179,7 +179,7 @@ export function PlaceCard({
               <Text style={styles.pillText}>{pill.label}</Text>
             </View>
           ))}
-          {placeCard.openNow === false && (
+          {isOpen === false && (
             <View style={[styles.pill, styles.closedPill]}>
               <Text style={styles.closedText}>Closed</Text>
             </View>
@@ -188,29 +188,28 @@ export function PlaceCard({
       )}
 
       {/* Action Buttons */}
-      {(onTakeMeThere || onSomethingElse) && (
-        <View style={styles.actions}>
-          {onTakeMeThere && (
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={handleTakeMeThere}
-              activeOpacity={0.8}
-            >
-              <Navigation size={18} color={colors.text.inverse} />
-              <Text style={styles.primaryButtonText}>Take me there</Text>
-            </TouchableOpacity>
-          )}
-          {onSomethingElse && (
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={handleSomethingElse}
-              activeOpacity={0.8}
-            >
-              <Shuffle size={16} color={colors.text.primary} />
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
+      <View style={styles.actions}>
+        {onNavigate && (
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleNavigate}
+            activeOpacity={0.8}
+          >
+            <Navigation size={18} color={colors.text.inverse} />
+            <Text style={styles.primaryButtonText}>Take me there</Text>
+          </TouchableOpacity>
+        )}
+        {onShowOthers && (
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={handleShowOthers}
+            activeOpacity={0.8}
+          >
+            <Shuffle size={18} color={colors.text.primary} />
+            <Text style={styles.secondaryButtonText}>Others</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }
@@ -318,8 +317,10 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.semibold,
   },
   secondaryButton: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.xs,
     backgroundColor: colors.surface.card,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
@@ -327,4 +328,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border.default,
   },
+  secondaryButtonText: {
+    color: colors.text.primary,
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.medium,
+  },
 });
+
+export default PlaceRecommendation;

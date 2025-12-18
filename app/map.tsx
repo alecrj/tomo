@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import MapView, { Marker, PROVIDER_GOOGLE, PROVIDER_DEFAULT, Region } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import {
   ArrowLeft,
@@ -48,8 +48,8 @@ import type { Coordinates, Destination, DestinationContext } from '../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Use Apple Maps on iOS (no Google branding) and Google Maps on Android
-const MAP_PROVIDER = Platform.OS === 'ios' ? PROVIDER_DEFAULT : PROVIDER_GOOGLE;
+// Use Google Maps everywhere for better international coverage
+const MAP_PROVIDER = PROVIDER_GOOGLE;
 
 interface PlaceResult {
   id: string;

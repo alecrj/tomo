@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE, PROVIDER_DEFAULT, Camera } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Camera } from 'react-native-maps';
+import { Magnetometer } from 'expo-sensors';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import {
   ArrowLeft,
@@ -28,6 +29,7 @@ import {
   Send,
   ChevronUp,
   ChevronDown,
+  Locate,
 } from 'lucide-react-native';
 import { colors, spacing, borders, shadows, mapStyle, typography } from '../constants/theme';
 import { getDirections, TravelMode } from '../services/routes';
@@ -40,8 +42,8 @@ import type { TransitRoute, Coordinates } from '../types';
 
 const { width, height } = Dimensions.get('window');
 
-// Use Apple Maps on iOS (no Google branding) and Google Maps on Android
-const MAP_PROVIDER = Platform.OS === 'ios' ? PROVIDER_DEFAULT : PROVIDER_GOOGLE;
+// Use Google Maps everywhere for better international coverage
+const MAP_PROVIDER = PROVIDER_GOOGLE;
 
 const TRAVEL_MODES: { mode: TravelMode; label: string; icon: typeof Car }[] = [
   { mode: 'WALK', label: 'Walk', icon: Footprints },
@@ -97,6 +99,10 @@ export default function NavigationScreen() {
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
+  // Compass heading for Google Maps-style navigation
+  const [heading, setHeading] = useState(0);
+  const [isFollowingUser, setIsFollowingUser] = useState(true);
+
   // Chat overlay state
   const [showChat, setShowChat] = useState(false);
   const [chatInput, setChatInput] = useState('');
@@ -129,38 +135,61 @@ export default function NavigationScreen() {
     fetchRoute();
   }, [currentDestination?.id, selectedMode]);
 
-  // Fit map and set tilted camera
+  // Subscribe to compass heading for Google Maps-style navigation
   useEffect(() => {
-    if (mapRef.current && routeCoordinates.length > 0 && coordinates) {
-      const allCoords = [
-        coordinates,
-        ...routeCoordinates,
-        currentDestination?.coordinates,
-      ].filter(Boolean) as Coordinates[];
+    let subscription: { remove: () => void } | null = null;
 
-      setTimeout(() => {
-        mapRef.current?.fitToCoordinates(allCoords, {
-          edgePadding: { top: 200, right: 50, bottom: 300, left: 50 },
-          animated: true,
-        });
+    const subscribe = async () => {
+      // Update heading 10 times per second for smooth rotation
+      Magnetometer.setUpdateInterval(100);
+      subscription = Magnetometer.addListener((data: { x: number; y: number; z: number }) => {
+        // Calculate heading from magnetometer data
+        let angle = Math.atan2(data.y, data.x) * (180 / Math.PI);
+        // Normalize to 0-360
+        if (angle < 0) angle += 360;
+        // Invert for map rotation (map rotates opposite to device)
+        setHeading(360 - angle);
+      });
+    };
 
-        // Set tilted camera for walking perspective
-        setTimeout(() => {
-          if (coordinates) {
-            const camera: Camera = {
-              center: {
-                latitude: coordinates.latitude,
-                longitude: coordinates.longitude,
-              },
-              pitch: 45, // Tilt the map
-              heading: 0,
-              zoom: 17,
-              altitude: 500,
-            };
-            mapRef.current?.animateCamera(camera, { duration: 1000 });
-          }
-        }, 1000);
-      }, 500);
+    subscribe();
+
+    return () => {
+      subscription?.remove();
+    };
+  }, []);
+
+  // Google Maps-style camera: behind user, looking forward, rotates with heading
+  useEffect(() => {
+    if (isFollowingUser && coordinates && mapRef.current && !hasArrived && route) {
+      // Offset camera center to put user at bottom 1/3 of screen
+      // This makes it feel like you're looking ahead, not down at yourself
+      const OFFSET_DISTANCE = 0.0006; // ~60-70 meters ahead
+      const headingRad = (heading * Math.PI) / 180;
+
+      const offsetLat = coordinates.latitude + OFFSET_DISTANCE * Math.cos(headingRad);
+      const offsetLng = coordinates.longitude + OFFSET_DISTANCE * Math.sin(headingRad);
+
+      const camera: Camera = {
+        center: {
+          latitude: offsetLat,
+          longitude: offsetLng,
+        },
+        pitch: 60, // High tilt for street-level feel
+        heading: heading, // Rotate with device compass
+        zoom: 18, // Close zoom to see street details
+        altitude: 300, // Low altitude
+      };
+
+      mapRef.current.animateCamera(camera, { duration: 300 });
+    }
+  }, [coordinates, heading, isFollowingUser, hasArrived, route]);
+
+  // Initial camera setup when route loads
+  useEffect(() => {
+    if (mapRef.current && routeCoordinates.length > 0 && coordinates && !hasArrived) {
+      // Start in navigation mode immediately
+      setIsFollowingUser(true);
     }
   }, [routeCoordinates.length]);
 
@@ -182,6 +211,35 @@ export default function NavigationScreen() {
     }
   }, [coordinates, currentDestination, hasArrived]);
 
+  // Progressive step advancement based on distance traveled
+  useEffect(() => {
+    if (!coordinates || !route?.steps || hasArrived || !currentDestination) return;
+
+    const totalDistance = route.totalDistance;
+    const distanceToDestination = calculateDistance(
+      coordinates.latitude,
+      coordinates.longitude,
+      currentDestination.coordinates.latitude,
+      currentDestination.coordinates.longitude
+    );
+
+    // Calculate progress (0 to 1)
+    const progress = 1 - distanceToDestination / totalDistance;
+
+    // Map progress to step index
+    const stepCount = route.steps.length;
+    const expectedStepIndex = Math.min(
+      Math.floor(progress * stepCount),
+      stepCount - 1
+    );
+
+    // Only advance forward, never go back
+    if (expectedStepIndex > currentStepIndex) {
+      setCurrentStepIndex(expectedStepIndex);
+      safeHaptics.impact(ImpactFeedbackStyle.Light);
+    }
+  }, [coordinates, route, currentStepIndex, hasArrived, currentDestination]);
+
   const handleClose = () => {
     safeHaptics.impact(ImpactFeedbackStyle.Medium);
     exitCompanionMode();
@@ -194,6 +252,17 @@ export default function NavigationScreen() {
       setSelectedMode(mode);
       setRoute(null);
     }
+  };
+
+  // Handle user panning the map - disable follow mode
+  const handleMapPanDrag = () => {
+    setIsFollowingUser(false);
+  };
+
+  // Re-center on user position
+  const handleRecenter = () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
+    setIsFollowingUser(true);
   };
 
   const handleArrived = () => {
@@ -267,7 +336,7 @@ export default function NavigationScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Full Screen Map with Tilt */}
+      {/* Full Screen Map - Google Maps style navigation */}
       <MapView
         ref={mapRef}
         style={styles.map}
@@ -276,15 +345,16 @@ export default function NavigationScreen() {
         userInterfaceStyle="dark"
         showsUserLocation
         showsMyLocationButton={false}
-        followsUserLocation={!hasArrived}
         showsCompass={false}
         pitchEnabled
         rotateEnabled
+        scrollEnabled
+        onPanDrag={handleMapPanDrag}
         initialRegion={{
           latitude: coordinates.latitude,
           longitude: coordinates.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
         }}
       >
         {/* Destination Marker */}
@@ -346,6 +416,13 @@ export default function NavigationScreen() {
           <ActivityIndicator size="large" color={colors.accent.primary} />
           <Text style={styles.loadingText}>Getting directions...</Text>
         </View>
+      )}
+
+      {/* Re-center button - shows when user pans away */}
+      {!isFollowingUser && !hasArrived && (
+        <TouchableOpacity style={styles.recenterButton} onPress={handleRecenter}>
+          <Locate size={22} color={colors.accent.primary} />
+        </TouchableOpacity>
       )}
 
       {/* Chat Overlay Toggle */}
@@ -591,6 +668,18 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     fontSize: typography.sizes.base,
     color: colors.text.primary,
+  },
+  recenterButton: {
+    position: 'absolute',
+    top: 180,
+    left: spacing.md,
+    width: 48,
+    height: 48,
+    backgroundColor: colors.background.secondary,
+    borderRadius: borders.radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.md,
   },
   chatToggle: {
     position: 'absolute',
