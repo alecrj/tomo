@@ -121,7 +121,12 @@ export default function TomoHomeScreen() {
   const weatherTemperature = useWeatherStore((state) => state.temperature);
   const temperatureUnit = usePreferencesStore((state) => state.temperatureUnit);
   const savedPlaces = useSavedPlacesStore((state) => state.places);
-  const activeItinerary = useItineraryStore((state) => state.getActiveItinerary());
+  // Get raw data and compute active itinerary with useMemo to avoid Zustand anti-pattern
+  const itineraries = useItineraryStore((state) => state.itineraries);
+  const activeItineraryId = useItineraryStore((state) => state.activeItineraryId);
+  const activeItinerary = useMemo(() => {
+    return itineraries.find((i) => i.id === activeItineraryId) || null;
+  }, [itineraries, activeItineraryId]);
   const addMessage = useConversationStore((state) => state.addMessage);
   const startNewConversation = useConversationStore((state) => state.startNewConversation);
 

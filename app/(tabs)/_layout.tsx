@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import {
   MessageSquare,
   Map,
@@ -8,7 +8,7 @@ import {
   User,
   Pencil,
 } from 'lucide-react-native';
-import { colors, spacing, borders } from '../../constants/theme';
+import { colors, spacing } from '../../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabLayout() {
@@ -37,32 +37,11 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="plan"
-        options={{
-          title: 'Plan',
-          tabBarIcon: ({ color, size }) => (
-            <Pencil size={22} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="map"
-        options={{
-          title: 'Map',
-          tabBarIcon: ({ color, size }) => (
-            <Map size={22} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="index"
         options={{
           title: 'Tomo',
-          tabBarIcon: ({ color, size, focused }) => (
-            <View style={[
-              styles.centerTab,
-              focused && styles.centerTabActive
-            ]}>
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.centerTab, focused && styles.centerTabActive]}>
               <MessageSquare
                 size={22}
                 color={focused ? colors.text.inverse : color}
@@ -73,21 +52,31 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="plan"
+        options={{
+          title: 'Plan',
+          tabBarIcon: ({ color }) => <Pencil size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="map"
+        options={{
+          title: 'Map',
+          tabBarIcon: ({ color }) => <Map size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="saved"
         options={{
           title: 'Saved',
-          tabBarIcon: ({ color, size }) => (
-            <Heart size={22} color={color} />
-          ),
+          tabBarIcon: ({ color }) => <Heart size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="you"
         options={{
           title: 'You',
-          tabBarIcon: ({ color, size }) => (
-            <User size={22} color={color} />
-          ),
+          tabBarIcon: ({ color }) => <User size={22} color={color} />,
         }}
       />
     </Tabs>

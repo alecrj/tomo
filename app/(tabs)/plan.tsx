@@ -36,9 +36,13 @@ const TIME_SLOT_LABELS = {
 export default function PlanScreen() {
   const router = useRouter();
 
-  // Store state
+  // Store state - use proper selectors to avoid re-render loops
   const itineraries = useItineraryStore((state) => state.itineraries);
-  const activeItinerary = useItineraryStore((state) => state.getActiveItinerary());
+  const activeItineraryId = useItineraryStore((state) => state.activeItineraryId);
+  // Compute active itinerary in useMemo to avoid infinite loops from getActiveItinerary()
+  const activeItinerary = useMemo(() => {
+    return itineraries.find((i) => i.id === activeItineraryId) || null;
+  }, [itineraries, activeItineraryId]);
   const createItinerary = useItineraryStore((state) => state.createItinerary);
   const updateActivity = useItineraryStore((state) => state.updateActivity);
   const removeActivity = useItineraryStore((state) => state.removeActivity);

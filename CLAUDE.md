@@ -18,6 +18,31 @@ A travel companion that:
 
 ---
 
+## FIXED: App Now Running (Session 12)
+
+**Root Cause Found:** React Native 0.81.5's New Architecture has a bug in `RCTLegacyViewManagerInteropComponentView` that crashes when setting props on legacy native views at startup.
+
+### The Fix (Session 12)
+1. **Disabled New Architecture** (`newArchEnabled: false` in app.json)
+2. **Downgraded react-native-maps** from v1.26 (requires New Arch) to v1.19.1 (works with Old Arch)
+3. **Removed maps plugin** from app.config.js (v1.19.1 doesn't have a config plugin)
+
+### What's Working
+- ✅ App launches and runs
+- ✅ All tab screens (Tomo, Plan, Map, Saved, You)
+- ✅ Onboarding flow
+- ✅ Lucide icons (react-native-svg)
+- ✅ SafeAreaProvider
+- ✅ Chat navigation
+- ⚠️ Maps may need additional native config for Google Maps API key
+
+### Known Limitations
+- **New Architecture disabled** - Some performance optimizations unavailable
+- **react-native-maps v1.19.1** - Older version, may lack some features
+- **Maps API Key** - Need to configure Google Maps API key manually in native code
+
+---
+
 ## HONEST STATUS ASSESSMENT: ~55-60% Actually Working
 
 > **Previous claim of 95% was WRONG.** This is a FAANG-level honest assessment of what actually works end-to-end vs what's just code that exists.

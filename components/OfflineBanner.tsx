@@ -5,9 +5,9 @@ import {
   StyleSheet,
   Animated,
 } from 'react-native';
-import { WifiOff, CloudOff } from 'lucide-react-native';
-import { colors, spacing, typography, borders } from '../constants/theme';
-import { useOfflineStore, initNetworkListener } from '../stores/useOfflineStore';
+import { WifiOff } from 'lucide-react-native';
+import { colors, spacing, typography } from '../constants/theme';
+import { useOfflineStore } from '../stores/useOfflineStore';
 
 export function OfflineBanner() {
   const isOnline = useOfflineStore((state) => state.isOnline);
@@ -15,11 +15,8 @@ export function OfflineBanner() {
   const [slideAnim] = useState(new Animated.Value(-60));
   const [isVisible, setIsVisible] = useState(false);
 
-  useEffect(() => {
-    // Initialize network listener
-    const unsubscribe = initNetworkListener();
-    return () => unsubscribe();
-  }, []);
+  // Network listener is initialized in BackgroundTriggers (app/_layout.tsx)
+  // No need to initialize it here - that would create duplicate intervals
 
   useEffect(() => {
     if (!isOnline) {

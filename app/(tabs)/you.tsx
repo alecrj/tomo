@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -33,14 +33,24 @@ import { safeHaptics, ImpactFeedbackStyle } from '../../utils/haptics';
 export default function YouScreen() {
   const router = useRouter();
 
-  // Store state
+  // Store state - use proper selectors to avoid re-render loops
   const currentTrip = useTripStore((state) => state.currentTrip);
   const visits = useTripStore((state) => state.visits);
-  const budgetStore = useBudgetStore();
-  const dailyBudget = budgetStore.dailyBudget;
-  const spentToday = budgetStore.spentToday();
+  // Get budget data with proper selectors
+  const dailyBudget = useBudgetStore((state) => state.dailyBudget);
+  const expenses = useBudgetStore((state) => state.expenses);
+  // Compute spentToday in useMemo instead of calling store method
+  const spentToday = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    return expenses
+      .filter((e) => e.timestamp >= todayStart.getTime() && e.timestamp <= todayEnd.getTime())
+      .reduce((sum, e) => sum + e.amount, 0);
+  }, [expenses]);
   const notifications = useNotificationStore((state) => state.notifications);
-  const unreadCount = notifications.filter((n) => !n.dismissed).length;
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.dismissed).length, [notifications]);
   const neighborhood = useLocationStore((state) => state.neighborhood);
   const memories = useMemoryStore((state) => state.memories);
 
