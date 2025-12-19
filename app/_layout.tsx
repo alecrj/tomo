@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Slot, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useOnboardingStore } from '../stores/useOnboardingStore';
 import { useNotificationTriggers } from '../hooks/useNotificationTriggers';
 import { useMemoryExtraction } from '../hooks/useMemoryExtraction';
 import { initNetworkListener } from '../stores/useOfflineStore';
+import { colors } from '../constants/theme';
 
 // Component that runs background triggers
 function BackgroundTriggers() {
@@ -48,13 +49,14 @@ export default function RootLayout() {
     if (!isReady) return;
 
     const inOnboarding = segments[0] === 'onboarding';
+    const inTabs = segments[0] === '(tabs)';
 
     if (!hasCompletedOnboarding && !inOnboarding) {
       // User hasn't completed onboarding, redirect to onboarding
       router.replace('/onboarding');
     } else if (hasCompletedOnboarding && inOnboarding) {
       // User has completed onboarding but is on onboarding screen, redirect to home
-      router.replace('/');
+      router.replace('/(tabs)');
     }
   }, [isReady, hasCompletedOnboarding, segments]);
 
@@ -63,7 +65,7 @@ export default function RootLayout() {
     return (
       <SafeAreaProvider>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
+          <ActivityIndicator size="large" color={colors.accent.primary} />
         </View>
       </SafeAreaProvider>
     );
@@ -72,7 +74,27 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <BackgroundTriggers />
-      <Slot />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.background.primary },
+          animation: 'slide_from_right',
+        }}
+      >
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="chat" options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="navigation" options={{ animation: 'fade' }} />
+        <Stack.Screen name="voice" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+        <Stack.Screen name="onboarding" options={{ animation: 'none' }} />
+        <Stack.Screen name="settings" />
+        <Stack.Screen name="notifications" />
+        <Stack.Screen name="memory" />
+        <Stack.Screen name="trip-recap" />
+        <Stack.Screen name="itinerary" />
+        <Stack.Screen name="destination" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="conversations" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="companion" />
+      </Stack>
     </SafeAreaProvider>
   );
 }
@@ -82,6 +104,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background.primary,
   },
 });

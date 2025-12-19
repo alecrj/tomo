@@ -1,5 +1,6 @@
 import { Coordinates, Spot } from '../types';
 import { config } from '../constants/config';
+import { useOfflineStore } from '../stores/useOfflineStore';
 
 /**
  * Google Places API (New) service
@@ -7,6 +8,11 @@ import { config } from '../constants/config';
  */
 
 const PLACES_API_BASE = 'https://places.googleapis.com/v1';
+
+// Check if online
+const checkOnline = (): boolean => {
+  return useOfflineStore.getState().isOnline;
+};
 
 interface PlaceSearchResult {
   id: string;
@@ -35,6 +41,12 @@ export async function searchNearby(
   type?: string,
   radius: number = 2000
 ): Promise<PlaceSearchResult[]> {
+  // Return empty if offline
+  if (!checkOnline()) {
+    console.log('[Places] Offline - returning empty results');
+    return [];
+  }
+
   try {
     const response = await fetch(`${PLACES_API_BASE}/places:searchNearby`, {
       method: 'POST',
@@ -154,12 +166,29 @@ export async function getPlacesByIds(placeIds: string[]): Promise<Spot[]> {
 }
 
 /**
+ * Search for nearby places by type (alias for searchNearby used by home screen)
+ */
+export async function searchNearbyPlaces(
+  coords: Coordinates,
+  type: string,
+  radius: number = 2000
+): Promise<PlaceSearchResult[]> {
+  return searchNearby(coords, '', type, radius);
+}
+
+/**
  * Search for specific place by name
  */
 export async function searchPlace(
   query: string,
   coords: Coordinates
 ): Promise<PlaceSearchResult | null> {
+  // Return null if offline
+  if (!checkOnline()) {
+    console.log('[Places] Offline - cannot search place');
+    return null;
+  }
+
   try {
     const response = await fetch(`${PLACES_API_BASE}/places:searchText`, {
       method: 'POST',

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -186,12 +186,26 @@ export function NotificationToast({ notification, onDismiss, onAction }: Notific
 
 // Container component that shows active notifications
 export function NotificationContainer() {
-  const notifications = useNotificationStore((state) => state.getActiveNotifications());
+  // Select raw notifications array (stable reference)
+  const allNotifications = useNotificationStore((state) => state.notifications);
   const dismissNotification = useNotificationStore((state) => state.dismissNotification);
 
+  // Filter active notifications in component (not in selector to avoid infinite loop)
+  const activeNotifications = useMemo(() => {
+    const now = Date.now();
+    return allNotifications.filter(
+      (n) =>
+        !n.dismissed &&
+        (!n.expiresAt || n.expiresAt > now) &&
+        (!n.scheduledFor || n.scheduledFor <= now)
+    );
+  }, [allNotifications]);
+
   // Only show the most recent urgent or first notification
-  const urgentNotifications = notifications.filter((n) => n.priority === 'urgent');
-  const notificationToShow = urgentNotifications[0] || notifications[0];
+  const notificationToShow = useMemo(() => {
+    const urgentNotifications = activeNotifications.filter((n) => n.priority === 'urgent');
+    return urgentNotifications[0] || activeNotifications[0];
+  }, [activeNotifications]);
 
   if (!notificationToShow) return null;
 

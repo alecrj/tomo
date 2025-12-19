@@ -2,9 +2,114 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useMemoryStore } from '../stores/useMemoryStore';
 import { useConversationStore } from '../stores/useConversationStore';
 import { useNotificationStore } from '../stores/useNotificationStore';
+import { useOfflineStore } from '../stores/useOfflineStore';
 import type { Memory, MemoryType, ChatMessage } from '../types';
 
-// Patterns to detect preferences and learnings from user messages
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+
+interface ExtractedMemory {
+  type: MemoryType;
+  category: string;
+  content: string;
+  confidence: number;
+}
+
+/**
+ * Use AI to extract preferences from a message
+ */
+async function extractMemoriesWithAI(message: string): Promise<ExtractedMemory[]> {
+  try {
+    const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+    if (!apiKey) return [];
+
+    // Check if online
+    if (!useOfflineStore.getState().isOnline) {
+      return [];
+    }
+
+    const response = await fetch(OPENAI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini', // Fast, cheap model for extraction
+        messages: [
+          {
+            role: 'system',
+            content: `You extract personal preferences, facts, and patterns from user messages for a travel app.
+
+Extract ONLY concrete, reusable preferences that would help personalize future travel recommendations.
+
+Categories to extract:
+- dietary: Food restrictions, allergies, diet type (vegetarian, vegan, etc.)
+- food: Cuisine preferences, flavor preferences
+- place_type: Prefers quiet/busy, local/touristy, etc.
+- activity: Hobbies, interests, things they enjoy doing
+- travel_style: Budget level, pace, crowd tolerance
+- personal_info: Traveling solo/with family, accessibility needs
+- place_feedback: Opinion about a specific place they visited
+
+Return JSON array. If no preferences found, return empty array.
+
+Example output:
+[
+  {"type": "preference", "category": "dietary", "content": "vegetarian", "confidence": 0.95},
+  {"type": "like", "category": "activity", "content": "enjoys hiking and nature", "confidence": 0.8}
+]
+
+Only extract if confidence > 0.7. Be conservative - only extract clear preferences.`
+          },
+          {
+            role: 'user',
+            content: `Extract preferences from this message:\n\n"${message}"`
+          }
+        ],
+        max_tokens: 300,
+        temperature: 0.3,
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('[MemoryExtraction] AI API error:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) return [];
+
+    const parsed = JSON.parse(content);
+
+    // Handle various response formats from the AI
+    let memories: ExtractedMemory[] = [];
+    if (Array.isArray(parsed)) {
+      memories = parsed;
+    } else if (Array.isArray(parsed.memories)) {
+      memories = parsed.memories;
+    } else if (Array.isArray(parsed.preferences)) {
+      memories = parsed.preferences;
+    } else if (Array.isArray(parsed.extracted)) {
+      memories = parsed.extracted;
+    }
+    // If still not an array, return empty
+    if (!Array.isArray(memories)) {
+      console.log('[MemoryExtraction] No memories extracted from response');
+      return [];
+    }
+
+    // Filter by confidence
+    return memories.filter((m: ExtractedMemory) => m.confidence >= 0.7);
+  } catch (error) {
+    console.error('[MemoryExtraction] AI extraction error:', error);
+    return [];
+  }
+}
+
+// Fallback regex patterns for when AI is unavailable
 interface ExtractionPattern {
   pattern: RegExp;
   type: MemoryType;
@@ -12,7 +117,7 @@ interface ExtractionPattern {
   extract: (match: RegExpMatchArray) => string;
 }
 
-const EXTRACTION_PATTERNS: ExtractionPattern[] = [
+const FALLBACK_PATTERNS: ExtractionPattern[] = [
   // Dietary restrictions
   {
     pattern: /i(?:'m|'m| am) (vegetarian|vegan|pescatarian|gluten[- ]free|lactose[- ]intolerant|kosher|halal)/i,
@@ -32,73 +137,6 @@ const EXTRACTION_PATTERNS: ExtractionPattern[] = [
     category: 'dietary',
     extract: (match) => `allergic to ${match[1]}`,
   },
-  {
-    pattern: /no (\w+) (?:please|for me)/i,
-    type: 'avoid',
-    category: 'dietary',
-    extract: (match) => `does not want ${match[1]}`,
-  },
-
-  // Food preferences
-  {
-    pattern: /i (?:love|really like|adore|enjoy) (\w+(?:\s+\w+)?) (?:food|cuisine|dishes)/i,
-    type: 'like',
-    category: 'food',
-    extract: (match) => `loves ${match[1]} food`,
-  },
-  {
-    pattern: /i (?:love|really like|adore) (spicy|sweet|sour|salty|bitter|umami) (?:food|things|dishes)?/i,
-    type: 'like',
-    category: 'food',
-    extract: (match) => `loves ${match[1]} flavors`,
-  },
-  {
-    pattern: /i (?:hate|dislike|can't stand|don't like) (\w+(?:\s+\w+)?) (?:food|cuisine|dishes)/i,
-    type: 'dislike',
-    category: 'food',
-    extract: (match) => `dislikes ${match[1]} food`,
-  },
-  {
-    pattern: /i (?:hate|dislike|can't stand) (spicy|sweet|sour|salty) (?:food|things)?/i,
-    type: 'dislike',
-    category: 'food',
-    extract: (match) => `dislikes ${match[1]} flavors`,
-  },
-
-  // Place preferences
-  {
-    pattern: /i (?:prefer|like|love) (quiet|loud|busy|crowded|peaceful|lively) (?:places|spots|restaurants|cafes)?/i,
-    type: 'preference',
-    category: 'place_type',
-    extract: (match) => `prefers ${match[1]} places`,
-  },
-  {
-    pattern: /i (?:don't like|hate|avoid) (crowds|crowded places|busy places|touristy spots)/i,
-    type: 'preference',
-    category: 'place_type',
-    extract: (match) => `avoids crowded/touristy places`,
-  },
-  {
-    pattern: /i (?:prefer|like) (local|authentic|traditional|modern|trendy) (?:places|spots|restaurants)?/i,
-    type: 'preference',
-    category: 'place_type',
-    extract: (match) => `prefers ${match[1]} places`,
-  },
-
-  // Activity preferences
-  {
-    pattern: /i (?:love|enjoy|like) (hiking|walking|biking|swimming|shopping|art|museums|history|architecture|photography|nature)/i,
-    type: 'like',
-    category: 'activity',
-    extract: (match) => `enjoys ${match[1]}`,
-  },
-  {
-    pattern: /i (?:don't like|hate|avoid) (hiking|walking|biking|swimming|shopping|museums|crowds)/i,
-    type: 'dislike',
-    category: 'activity',
-    extract: (match) => `avoids ${match[1]}`,
-  },
-
   // Travel companions
   {
     pattern: /(?:i(?:'m|'m| am) )?travel(?:l)?ing (?:with|alone|solo|with my )(\w+(?:\s+\w+)?)?/i,
@@ -112,35 +150,25 @@ const EXTRACTION_PATTERNS: ExtractionPattern[] = [
     category: 'travel_companion',
     extract: (match) => `traveling as ${match[0].replace(/^(we('re|'re| are)\s+)?/, '')}`,
   },
-
-  // Budget preferences
+  // Budget
   {
     pattern: /i(?:'m|'m| am) on a (?:tight|strict|limited) budget/i,
     type: 'preference',
     category: 'budget',
     extract: () => 'on a tight budget',
   },
+  // Place preferences
   {
-    pattern: /(?:money|budget|price) (?:is|isn't|isnt) (?:not )?(?:a|an) (?:issue|concern|problem)/i,
+    pattern: /i (?:prefer|like|love) (quiet|loud|busy|crowded|peaceful|lively) (?:places|spots|restaurants|cafes)?/i,
     type: 'preference',
-    category: 'budget',
-    extract: (match) => match[0].includes("isn't") || match[0].includes("isnt") || match[0].includes("not")
-      ? 'budget-conscious'
-      : 'flexible budget',
-  },
-
-  // Place feedback
-  {
-    pattern: /(\w+(?:\s+\w+)?) was (amazing|great|awesome|fantastic|terrible|bad|awful|overrated|underwhelming|disappointing)/i,
-    type: 'visited_feedback',
-    category: 'place_feedback',
-    extract: (match) => `${match[1]} was ${match[2]}`,
+    category: 'place_type',
+    extract: (match) => `prefers ${match[1]} places`,
   },
   {
-    pattern: /i (?:really )?(?:loved|enjoyed|hated|disliked) (\w+(?:\s+\w+)?)/i,
-    type: 'visited_feedback',
-    category: 'place_feedback',
-    extract: (match) => `${match[0].includes('loved') || match[0].includes('enjoyed') ? 'loved' : 'disliked'} ${match[1]}`,
+    pattern: /i (?:don't like|hate|avoid) (crowds|crowded places|busy places|touristy spots)/i,
+    type: 'preference',
+    category: 'place_type',
+    extract: (match) => `avoids crowded/touristy places`,
   },
 ];
 
@@ -159,9 +187,11 @@ function isSimilarMemoryExists(memories: Memory[], newContent: string): boolean 
 
 /**
  * Hook that automatically extracts memories/learnings from chat conversations
+ * Uses AI for extraction with fallback to regex patterns
  */
 export function useMemoryExtraction() {
   const processedMessagesRef = useRef<Set<string>>(new Set());
+  const aiProcessingRef = useRef<Set<string>>(new Set()); // Track messages being processed by AI
 
   // Memory store
   const memories = useMemoryStore((state) => state.memories);
@@ -175,14 +205,14 @@ export function useMemoryExtraction() {
   const addNotification = useNotificationStore((state) => state.addNotification);
 
   /**
-   * Extract memories from a single message
+   * Extract memories using fallback regex patterns
    */
-  const extractFromMessage = useCallback((message: ChatMessage): { type: MemoryType; content: string; category: string }[] => {
+  const extractWithPatterns = useCallback((message: ChatMessage): { type: MemoryType; content: string; category: string }[] => {
     if (message.role !== 'user') return [];
 
     const extracted: { type: MemoryType; content: string; category: string }[] = [];
 
-    for (const pattern of EXTRACTION_PATTERNS) {
+    for (const pattern of FALLBACK_PATTERNS) {
       const match = message.content.match(pattern.pattern);
       if (match) {
         const content = pattern.extract(match);
@@ -198,52 +228,103 @@ export function useMemoryExtraction() {
   }, []);
 
   /**
+   * Process a single message with AI extraction
+   */
+  const processMessageWithAI = useCallback(async (message: ChatMessage) => {
+    if (message.role !== 'user') return;
+    if (aiProcessingRef.current.has(message.id)) return;
+
+    aiProcessingRef.current.add(message.id);
+
+    try {
+      // Try AI extraction first
+      const aiMemories = await extractMemoriesWithAI(message.content);
+
+      if (aiMemories.length > 0) {
+        console.log('[MemoryExtraction] AI found memories:', aiMemories.length);
+
+        for (const memory of aiMemories) {
+          // Check if similar memory already exists
+          if (!isSimilarMemoryExists(memories, memory.content)) {
+            addMemory({
+              type: memory.type,
+              category: memory.category,
+              content: memory.content,
+            });
+
+            // Show "Tomo learned" notification
+            addNotification({
+              type: 'itinerary',
+              priority: 'info',
+              title: 'Tomo learned',
+              body: formatLearningForDisplay(memory.content),
+              expiresAt: Date.now() + 10000,
+            });
+
+            console.log('[MemoryExtraction] AI Learned:', memory.content);
+          }
+        }
+      } else {
+        // Fallback to pattern matching if AI found nothing
+        const patternMemories = extractWithPatterns(message);
+
+        for (const learning of patternMemories) {
+          if (!isSimilarMemoryExists(memories, learning.content)) {
+            addMemory({
+              type: learning.type,
+              category: learning.category,
+              content: learning.content,
+            });
+
+            addNotification({
+              type: 'itinerary',
+              priority: 'info',
+              title: 'Tomo learned',
+              body: formatLearningForDisplay(learning.content),
+              expiresAt: Date.now() + 10000,
+            });
+
+            console.log('[MemoryExtraction] Pattern Learned:', learning.content);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[MemoryExtraction] Error processing message:', error);
+      // Fallback to patterns on error
+      const patternMemories = extractWithPatterns(message);
+      for (const learning of patternMemories) {
+        if (!isSimilarMemoryExists(memories, learning.content)) {
+          addMemory({
+            type: learning.type,
+            category: learning.category,
+            content: learning.content,
+          });
+        }
+      }
+    }
+  }, [memories, addMemory, addNotification, extractWithPatterns]);
+
+  /**
    * Process new messages and extract memories
    */
   const processMessages = useCallback(() => {
     const currentConversation = conversations.find((c) => c.id === currentConversationId);
     if (!currentConversation) return;
 
-    const newLearnings: { type: MemoryType; content: string; category: string }[] = [];
-
     for (const message of currentConversation.messages) {
       // Skip if already processed
       if (processedMessagesRef.current.has(message.id)) continue;
 
-      // Extract memories from message
-      const extracted = extractFromMessage(message);
-
-      for (const learning of extracted) {
-        // Check if similar memory already exists
-        if (!isSimilarMemoryExists(memories, learning.content)) {
-          newLearnings.push(learning);
-        }
-      }
-
-      // Mark as processed
+      // Mark as processed immediately to prevent duplicate processing
       processedMessagesRef.current.add(message.id);
+
+      // Process with AI (async, non-blocking)
+      if (message.role === 'user' && message.content.length > 10) {
+        // Only process messages with meaningful content
+        processMessageWithAI(message);
+      }
     }
-
-    // Add new learnings to memory store and show notifications
-    for (const learning of newLearnings) {
-      addMemory({
-        type: learning.type,
-        category: learning.category,
-        content: learning.content,
-      });
-
-      // Show "Tomo learned" notification
-      addNotification({
-        type: 'itinerary', // Using itinerary type for general info
-        priority: 'info',
-        title: 'Tomo learned',
-        body: formatLearningForDisplay(learning.content),
-        expiresAt: Date.now() + 10000, // 10 seconds
-      });
-
-      console.log('[MemoryExtraction] Learned:', learning.content);
-    }
-  }, [conversations, currentConversationId, memories, extractFromMessage, addMemory, addNotification]);
+  }, [conversations, currentConversationId, processMessageWithAI]);
 
   // Process messages when conversation changes
   useEffect(() => {
@@ -252,7 +333,7 @@ export function useMemoryExtraction() {
 
   return {
     processMessages,
-    extractFromMessage,
+    extractWithPatterns,
   };
 }
 

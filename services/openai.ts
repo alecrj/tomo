@@ -1,11 +1,24 @@
 import { DestinationContext, ChatMessage, PlaceCardData, InlineMapData, MessageAction, Coordinates } from '../types';
 import { getPlacePhotoUrl, searchPlace } from './places';
 import { getWalkingDirections } from './routes';
+import { useOfflineStore } from '../stores/useOfflineStore';
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
 // Get API key from environment
 const getApiKey = () => process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
+
+// Check if online
+const checkOnline = (): boolean => {
+  return useOfflineStore.getState().isOnline;
+};
+
+// Offline response for when user is disconnected
+const getOfflineResponse = (): StructuredChatResponse => {
+  return {
+    content: "I'm currently offline. I've saved your message and will respond when you're back online. In the meantime, you can still view your saved places and cached data.",
+  };
+};
 
 /**
  * Verify if a place is currently open using Google Places API
@@ -203,6 +216,14 @@ export async function chat(
   image?: string
 ): Promise<StructuredChatResponse> {
   try {
+    // Check if offline
+    if (!checkOnline()) {
+      console.log('[OpenAI] Offline - returning cached response');
+      // Queue the message for later
+      useOfflineStore.getState().queueMessage(message, image);
+      return getOfflineResponse();
+    }
+
     const apiKey = getApiKey();
 
     if (!apiKey) {
@@ -486,6 +507,12 @@ export async function generateItinerary(
   customRequest?: string
 ): Promise<GeneratedItinerary | null> {
   try {
+    // Check if offline
+    if (!checkOnline()) {
+      console.log('[OpenAI] Offline - cannot generate itinerary');
+      return null;
+    }
+
     const apiKey = getApiKey();
 
     if (!apiKey) {
@@ -631,6 +658,11 @@ export async function navigationChat(
   navContext: NavigationContext
 ): Promise<NavigationChatResponse> {
   try {
+    // Check if offline
+    if (!checkOnline()) {
+      return { text: "I'm offline right now. Keep following the current route - I'll be back when you have connection." };
+    }
+
     const apiKey = getApiKey();
 
     if (!apiKey) {
@@ -814,6 +846,14 @@ export async function modifyItinerary(
   neighborhood: string
 ): Promise<ItineraryModificationResult> {
   try {
+    // Check if offline
+    if (!checkOnline()) {
+      return {
+        action: 'none',
+        message: "I'm offline right now. I'll help modify your itinerary when you're back online.",
+      };
+    }
+
     const apiKey = getApiKey();
 
     if (!apiKey) {
