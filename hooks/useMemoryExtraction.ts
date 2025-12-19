@@ -34,7 +34,7 @@ async function extractMemoriesWithAI(message: string): Promise<ExtractedMemory[]
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Fast, cheap model for extraction
+        model: 'gpt-5-mini', // Fast + capable model for extraction
         messages: [
           {
             role: 'system',

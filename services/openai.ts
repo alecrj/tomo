@@ -2,6 +2,7 @@ import { DestinationContext, ChatMessage, PlaceCardData, InlineMapData, MessageA
 import { getPlacePhotoUrl, searchPlace } from './places';
 import { getWalkingDirections } from './routes';
 import { useOfflineStore } from '../stores/useOfflineStore';
+import { useMemoryStore } from '../stores/useMemoryStore';
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
@@ -69,6 +70,9 @@ function buildSystemPrompt(context: DestinationContext): string {
     ? context.preferences.interests.join(', ')
     : null;
 
+  // Get learned memories from memory store
+  const memoryContext = useMemoryStore.getState().getMemoryContext();
+
   return `You are Tomo, a friendly AI assistant that can help with ANYTHING - but you have travel superpowers.
 
 WHO YOU ARE:
@@ -133,7 +137,7 @@ PLACE RULES:
 - ONLY suggest places that are OPEN at ${localTime}
 - Use REAL places that actually exist in ${context.neighborhood || 'the area'}
 - Include accurate GPS coordinates (critical for navigation)
-- priceLevel: 1=cheap, 2=moderate, 3=expensive, 4=luxury`;
+- priceLevel: 1=cheap, 2=moderate, 3=expensive, 4=luxury${memoryContext}`;
 }
 
 /**
@@ -275,7 +279,7 @@ export async function chat(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-5.2',
         messages,
         max_tokens: 1500,
         temperature: 0.7,
@@ -533,7 +537,7 @@ export async function generateItinerary(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-5.2',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -678,7 +682,7 @@ export async function navigationChat(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Use faster model for navigation
+        model: 'gpt-5-mini', // Fast + capable model for navigation
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: message },
@@ -872,7 +876,7 @@ export async function modifyItinerary(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Use faster model for modifications
+        model: 'gpt-5-mini', // Fast + capable model for modifications
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },

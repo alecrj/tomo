@@ -1,10 +1,32 @@
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../constants/theme';
+import { initNetworkListener } from '../stores/useOfflineStore';
+import { useMemoryExtraction } from '../hooks/useMemoryExtraction';
+import { useNotificationTriggers } from '../hooks/useNotificationTriggers';
+
+// Background services component
+function BackgroundServices() {
+  // Initialize memory extraction (auto-learns from chat)
+  useMemoryExtraction();
+
+  // Initialize notification triggers (background checks)
+  useNotificationTriggers();
+
+  // Initialize network listener
+  useEffect(() => {
+    const cleanup = initNetworkListener();
+    return cleanup;
+  }, []);
+
+  return null;
+}
 
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
+      <BackgroundServices />
       <Stack
         screenOptions={{
           headerShown: false,
