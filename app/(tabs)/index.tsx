@@ -68,31 +68,31 @@ function priceLevelToDollars(level?: 1 | 2 | 3 | 4): string {
   return '$'.repeat(level);
 }
 
-// Quick action chips configuration
+// Quick action chips configuration - changes by time of day
 const QUICK_ACTIONS = {
   morning: [
-    { id: 'eat', label: 'Eat', icon: Utensils, query: 'Find me a good breakfast spot nearby' },
-    { id: 'coffee', label: 'Coffee', icon: Coffee, query: 'Find a great coffee shop nearby' },
-    { id: 'explore', label: 'Explore', icon: Compass, query: 'What should I explore this morning?' },
-    { id: 'move', label: 'Move', icon: MapPin, query: 'Where should I go today?' },
+    { id: 'breakfast', label: 'Breakfast', icon: Utensils, query: 'Find me a good breakfast spot nearby' },
+    { id: 'coffee', label: 'Coffee', icon: Coffee, query: 'Where can I get great coffee right now?' },
+    { id: 'todo', label: 'What to do', icon: Compass, query: "What's worth seeing around here this morning?" },
+    { id: 'surprise', label: 'Surprise me', icon: MapPin, query: 'Surprise me with something cool nearby' },
   ],
   afternoon: [
-    { id: 'eat', label: 'Eat', icon: Utensils, query: 'Find me a good lunch spot nearby' },
-    { id: 'explore', label: 'Explore', icon: Compass, query: 'What interesting places are nearby?' },
-    { id: 'chill', label: 'Chill', icon: Coffee, query: 'Find a relaxing cafe or spot to chill' },
-    { id: 'move', label: 'Move', icon: MapPin, query: 'What else should I see today?' },
+    { id: 'lunch', label: 'Lunch', icon: Utensils, query: 'Find me a good lunch spot nearby' },
+    { id: 'walk', label: 'Nice walk', icon: Compass, query: 'Where can I take a nice walk from here?' },
+    { id: 'fun', label: 'Something fun', icon: MapPin, query: "What's something fun I could do right now?" },
+    { id: 'chill', label: 'Chill spot', icon: Coffee, query: 'Find a relaxing spot to hang out' },
   ],
   evening: [
-    { id: 'eat', label: 'Eat', icon: Utensils, query: 'Find me a great dinner spot nearby' },
-    { id: 'drinks', label: 'Drinks', icon: Wine, query: 'Find a good bar or place for drinks' },
-    { id: 'chill', label: 'Chill', icon: Moon, query: 'Find a chill spot for the evening' },
-    { id: 'ride', label: 'Ride', icon: Car, query: 'I need a ride back to my hotel' },
+    { id: 'dinner', label: 'Dinner', icon: Utensils, query: 'Find me a great dinner spot nearby' },
+    { id: 'drinks', label: 'Drinks', icon: Wine, query: 'Where should I go for drinks tonight?' },
+    { id: 'nearby', label: "What's near", icon: Compass, query: "What's interesting to do near me tonight?" },
+    { id: 'ride', label: 'Get home', icon: Car, query: 'I need a ride back to my hotel' },
   ],
   night: [
-    { id: 'eat', label: 'Eat', icon: Utensils, query: 'Find late night food nearby' },
-    { id: 'drinks', label: 'Drinks', icon: Wine, query: 'Find a bar or nightlife spot' },
-    { id: 'chill', label: 'Chill', icon: Moon, query: 'Find somewhere quiet and open late' },
-    { id: 'ride', label: 'Ride', icon: Car, query: 'I need a ride home' },
+    { id: 'latenight', label: 'Late bites', icon: Utensils, query: "What's still open for food nearby?" },
+    { id: 'bars', label: 'Bars', icon: Wine, query: 'Find a good bar or nightlife spot open now' },
+    { id: 'quick', label: 'Quick spot', icon: Coffee, query: 'Find somewhere chill and open late' },
+    { id: 'ride', label: 'Ride home', icon: Car, query: 'I need a ride home' },
   ],
 };
 
@@ -432,7 +432,7 @@ export default function TomoHomeScreen() {
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.textInput}
-              placeholder="Find food nearby"
+              placeholder="What's on your mind?"
               placeholderTextColor={colors.text.tertiary}
               value={inputText}
               onChangeText={setInputText}

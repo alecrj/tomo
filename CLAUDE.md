@@ -179,7 +179,17 @@ curl -X GET "https://api.openai.com/v1/models" \
 
 ## What Needs to Be Done
 
-### ✅ COMPLETED THIS SESSION
+### ✅ COMPLETED (Session 12)
+
+| Task | Status |
+|------|--------|
+| Fix crash on launch | ✅ Done - disabled New Architecture, downgraded maps |
+| Restore MapView in map tab | ✅ Done - full map explorer working |
+| Improve input placeholder | ✅ Done - "What's on your mind?" |
+| Improve quick action chips | ✅ Done - time-based, conversational |
+| Add phone testing docs | ✅ Done - see Testing section |
+
+### ✅ COMPLETED (Session 11)
 
 | Task | Status |
 |------|--------|
@@ -188,23 +198,33 @@ curl -X GET "https://api.openai.com/v1/models" \
 | Improve memory extraction (AI-based) | ✅ Done - uses gpt-4o-mini |
 | Document voice mode requirements | ✅ Done - see Voice Mode section |
 
-### HIGH PRIORITY (Remaining)
+### HIGH PRIORITY (Before Testing on Device)
 
-| Task | Impact | Effort |
-|------|--------|--------|
-| Test voice mode with Realtime API access | High | Low (just need to verify access) |
-| Test booking deep links on iOS/Android devices | Medium | Low |
-| Test itinerary modification flow E2E | Medium | Low |
-| Test offline mode on real device | Medium | Low |
+| Task | Impact | Effort | Notes |
+|------|--------|--------|-------|
+| **Build dev client** | Critical | Medium | `eas build --profile development --platform ios` |
+| Test maps on real device | High | Low | Verify Google Maps API key works |
+| Test voice mode with Realtime API | High | Low | Need OpenAI account with Realtime access |
+| Test navigation/compass | High | Low | Requires magnetometer |
 
 ### MEDIUM PRIORITY (Polish)
 
-| Task | Impact | Effort |
-|------|--------|--------|
-| Add initial data seeding for notifications to fire | Medium | Low |
-| Test navigation compass on real device | Medium | Low |
-| Test saved places flow E2E | Low | Low |
-| Deploy Whisper backend for push-to-talk (optional) | Low | Medium |
+| Task | Impact | Effort | Notes |
+|------|--------|--------|-------|
+| Test offline mode on device | Medium | Low | Toggle airplane mode |
+| Test booking deep links | Medium | Low | Uber, OpenTable etc. |
+| Test itinerary modification E2E | Medium | Low | Create → Modify → Verify |
+| Add sample data for notifications | Medium | Low | So triggers actually fire |
+| Test saved places flow | Low | Low | Save → View → Navigate |
+
+### LOW PRIORITY (Future)
+
+| Task | Impact | Effort | Notes |
+|------|--------|--------|-------|
+| Deploy Whisper backend | Low | Medium | Only if Realtime API not accessible |
+| Add true offline map tiles | High | High | Requires tile caching |
+| Multi-language support | Medium | Medium | i18n setup |
+| Push notifications | Medium | Medium | Expo notifications |
 
 ---
 
@@ -293,6 +313,38 @@ curl -X GET "https://api.openai.com/v1/models" \
 
 ## Session History
 
+### Session 12 (December 19, 2024) - CRASH FIXED + Map Restored
+
+**Root Cause Found:** React Native 0.81.5's New Architecture has a bug in `RCTLegacyViewManagerInteropComponentView` that crashes when setting props on legacy native views at startup.
+
+**The Fix:**
+1. **Disabled New Architecture** - Set `newArchEnabled: false` in app.json
+2. **Downgraded react-native-maps** - From v1.26 (requires New Arch) to v1.19.1 (works with Old Arch)
+3. **Removed maps plugin** - app.config.js no longer needs react-native-maps plugin (v1.19.1 doesn't have one)
+
+**Also Fixed:**
+- ✅ Restored full MapView in `app/(tabs)/map.tsx` (was placeholder "Coming soon")
+- ✅ Changed input placeholder from "Find food nearby" to "What's on your mind?"
+- ✅ Improved quick action chips with better time-based labels
+- ✅ Fixed Zustand anti-pattern in `app/(tabs)/index.tsx` (was causing re-render loops)
+
+**App Structure Now:**
+```
+app/
+├── index.tsx              # Root - redirects to (tabs) or onboarding
+├── onboarding.tsx         # First-time user flow
+├── chat.tsx               # Full chat screen
+├── voice.tsx              # Voice mode
+├── navigation.tsx         # Turn-by-turn navigation
+├── (tabs)/
+│   ├── _layout.tsx        # 5-tab navigator
+│   ├── index.tsx          # Tomo home "What do you want right now?"
+│   ├── plan.tsx           # Itinerary view
+│   ├── map.tsx            # Map explorer with MapView
+│   ├── saved.tsx          # Saved places list
+│   └── you.tsx            # Profile/settings hub
+```
+
 ### Session 11 (December 18, 2024) - Major Fixes + New Navigation
 **UI/UX Overhaul:**
 - Created new bottom tab navigation with 5 tabs: Plan, Map, Tomo, Saved, You
@@ -356,18 +408,60 @@ curl -X GET "https://api.openai.com/v1/models" \
 ## Quick Commands
 
 ```bash
-# Development
+# Development (simulator)
+npx expo start --dev-client
+
+# Development (with tunnel for physical device)
 npx expo start --dev-client --tunnel
 
 # Type check
 npx tsc --noEmit
 
-# Build dev client
+# Build dev client (first time or after native changes)
 eas build --profile development --platform ios
 
 # Git
 git add -A && git commit -m "message" && git push origin main
 ```
+
+---
+
+## Testing on Physical iPhone
+
+To test features like maps, location, compass, and voice on a real device:
+
+### Option 1: Development Build (Recommended)
+1. **Build the dev client once:**
+   ```bash
+   eas build --profile development --platform ios
+   ```
+2. **Install on iPhone:**
+   - Scan the QR code from EAS after build completes
+   - OR download the .ipa and install via TestFlight/AltStore
+3. **Run the app:**
+   ```bash
+   npx expo start --dev-client --tunnel
+   ```
+4. **Scan the QR code** in the Expo terminal with your iPhone camera
+
+### Option 2: Expo Go (Limited)
+- Expo Go won't work for this app because we use custom native modules (react-native-maps)
+- Use the development build approach above
+
+### What Requires Physical Device Testing
+| Feature | Why |
+|---------|-----|
+| **Maps** | Google Maps rendering, gestures |
+| **Location** | Real GPS, permissions |
+| **Compass/Navigation** | Magnetometer sensor |
+| **Voice** | Microphone, real-time audio |
+| **Offline mode** | Toggle airplane mode |
+| **Haptics** | Physical feedback |
+
+### Troubleshooting
+- **"Unable to resolve"**: Run `npx expo start --clear` to clear cache
+- **Build fails**: Check `eas build --platform ios --local` for detailed logs
+- **Maps not showing**: Verify Google Maps API key in environment variables
 
 ---
 
