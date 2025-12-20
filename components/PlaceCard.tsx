@@ -179,11 +179,25 @@ function PlaceCardComponent({
       {/* Place Name */}
       <Text style={styles.name}>{placeCard.name}</Text>
 
-      {/* Rating */}
+      {/* Rating with review count */}
       {placeCard.rating && (
-        <Text style={styles.rating}>
-          {'★'.repeat(Math.round(placeCard.rating))}{'☆'.repeat(5 - Math.round(placeCard.rating))} {placeCard.rating.toFixed(1)}
-        </Text>
+        <View style={styles.ratingRow}>
+          <Text style={styles.ratingStar}>★</Text>
+          <Text style={styles.ratingText}>{placeCard.rating.toFixed(1)}</Text>
+          {placeCard.reviewCount && (
+            <Text style={styles.reviewCount}>
+              ({placeCard.reviewCount >= 1000
+                ? `${(placeCard.reviewCount / 1000).toFixed(1)}k`
+                : placeCard.reviewCount})
+            </Text>
+          )}
+          {placeCard.cuisine && (
+            <>
+              <Text style={styles.ratingDot}>·</Text>
+              <Text style={styles.cuisineText}>{placeCard.cuisine}</Text>
+            </>
+          )}
+        </View>
       )}
 
       {/* Tomo's Description (if available) */}
@@ -310,10 +324,33 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     marginBottom: spacing.xs,
   },
-  rating: {
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  ratingStar: {
     fontSize: typography.sizes.sm,
     color: colors.status.warning,
-    marginBottom: spacing.sm,
+  },
+  ratingText: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.primary,
+    fontWeight: typography.weights.medium,
+  },
+  reviewCount: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.tertiary,
+  },
+  ratingDot: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.tertiary,
+    marginHorizontal: spacing.xs,
+  },
+  cuisineText: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.secondary,
   },
   description: {
     fontSize: typography.sizes.base,

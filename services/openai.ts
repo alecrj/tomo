@@ -1,5 +1,5 @@
 import { DestinationContext, ChatMessage, PlaceCardData, InlineMapData, MessageAction, Coordinates } from '../types';
-import { getPlacePhotoUrl, searchPlace } from './places';
+import { getPlacePhotoUrl, searchPlace, buildPhotoUrl } from './places';
 import { getWalkingDirections } from './routes';
 import { useOfflineStore } from '../stores/useOfflineStore';
 import { useMemoryStore } from '../stores/useMemoryStore';
@@ -293,7 +293,7 @@ export async function chat(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.2',
+        model: 'gpt-4o',
         messages,
         max_tokens: 1500,
         temperature: 0.7,
@@ -353,20 +353,32 @@ export async function chat(
         console.error('[OpenAI] Error fetching walking distance:', routeError);
       }
 
-      // Fetch real photo from Google Places
+      // Fetch real photos and review count from Google Places
       try {
-        console.log('[OpenAI] Fetching real photo for:', result.placeCard.name);
-        const photoUrl = await getPlacePhotoUrl(
-          result.placeCard.name,
-          context.location,
-          600
-        );
-        if (photoUrl) {
-          result.placeCard.photo = photoUrl;
-          console.log('[OpenAI] Photo URL fetched successfully');
+        console.log('[OpenAI] Fetching place data for:', result.placeCard.name);
+        const place = await searchPlace(result.placeCard.name, context.location);
+        if (place) {
+          // Get multiple photos (up to 5)
+          if (place.photos && place.photos.length > 0) {
+            const photoUrls = place.photos.slice(0, 5).map((p) =>
+              buildPhotoUrl(p.name, 600)
+            );
+            result.placeCard.photos = photoUrls;
+            result.placeCard.photo = photoUrls[0]; // Also set single photo for backward compatibility
+            console.log('[OpenAI] Fetched', photoUrls.length, 'photos');
+          }
+          // Get review count
+          if (place.userRatingCount) {
+            result.placeCard.reviewCount = place.userRatingCount;
+            console.log('[OpenAI] Review count:', place.userRatingCount);
+          }
+          // Get accurate rating from Google
+          if (place.rating) {
+            result.placeCard.rating = place.rating;
+          }
         }
       } catch (photoError) {
-        console.error('[OpenAI] Error fetching place photo:', photoError);
+        console.error('[OpenAI] Error fetching place data:', photoError);
       }
     }
 
@@ -551,7 +563,7 @@ export async function generateItinerary(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.2',
+        model: 'gpt-4o',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -707,7 +719,7 @@ export async function navigationChat(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5-mini', // Fast + capable model for navigation
+        model: 'gpt-4o', // Fast + capable model for navigation
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: message },
@@ -904,7 +916,7 @@ export async function modifyItinerary(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5-mini', // Fast + capable model for modifications
+        model: 'gpt-4o', // Fast + capable model for modifications
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -1023,7 +1035,7 @@ Keep summary conversational and warm, like a friend reflecting on shared memorie
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5-mini', // Fast + capable
+        model: 'gpt-4o', // Fast + capable
         messages: [
           { role: 'system', content: 'You generate trip summaries in JSON format. Be warm and specific.' },
           { role: 'user', content: prompt },

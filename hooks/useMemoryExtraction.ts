@@ -35,7 +35,7 @@ async function extractMemoriesWithAI(message: string, signal?: AbortSignal): Pro
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5-mini', // Fast + capable model for extraction
+        model: 'gpt-4o', // Fast + capable model for extraction
         messages: [
           {
             role: 'system',

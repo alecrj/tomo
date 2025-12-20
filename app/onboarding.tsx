@@ -5,15 +5,17 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MapPin, Mic, ArrowRight, Globe, Compass, MessageSquare } from 'lucide-react-native';
+import { MapPin, Mic, ArrowRight, Globe, Compass, MessageSquare, Check, Languages } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { Audio } from 'expo-av';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import { colors, spacing, borders, shadows } from '../constants/theme';
 import { useOnboardingStore } from '../stores/useOnboardingStore';
+import { usePreferencesStore, Language, LANGUAGE_NAMES } from '../stores/usePreferencesStore';
 
 interface OnboardingStep {
   icon: React.ReactNode;
@@ -27,6 +29,7 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState<Language>('en');
   const fadeAnim = useState(new Animated.Value(1))[0];
 
   const {
@@ -34,6 +37,8 @@ export default function OnboardingScreen() {
     setLocationPermission,
     setMicrophonePermission,
   } = useOnboardingStore();
+
+  const { setLanguage } = usePreferencesStore();
 
   const requestLocation = async () => {
     setIsLoading(true);
@@ -67,6 +72,12 @@ export default function OnboardingScreen() {
     goToNextStep();
   };
 
+  const saveLanguage = async () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
+    setLanguage(selectedLanguage);
+    goToNextStep();
+  };
+
   const finishOnboarding = async () => {
     safeHaptics.notification(NotificationFeedbackType.Success);
     completeOnboarding();
@@ -95,12 +106,12 @@ export default function OnboardingScreen() {
 
   const steps: OnboardingStep[] = [
     {
-      icon: <Globe size={64} color={colors.accent.primary} />,
-      title: 'Welcome to Tomo',
+      icon: <Languages size={64} color={colors.accent.primary} />,
+      title: 'Choose Your Language',
       description:
-        "Your AI travel companion that knows where you are, shows maps, navigates you anywhere, and remembers everything about your trip.",
-      buttonText: 'Get Started',
-      action: async () => goToNextStep(),
+        "Tomo will speak and respond in your preferred language. You can always change this later in settings.",
+      buttonText: 'Continue',
+      action: saveLanguage,
     },
     {
       icon: <MapPin size={64} color={colors.status.success} />,
@@ -155,22 +166,39 @@ export default function OnboardingScreen() {
           <Text style={styles.description}>{currentStepData.description}</Text>
         </Animated.View>
 
-        {/* Features preview on welcome step */}
+        {/* Language selection on first step */}
         {currentStep === 0 && (
-          <View style={styles.featuresContainer}>
-            <View style={styles.featureRow}>
-              <MapPin size={20} color={colors.status.success} />
-              <Text style={styles.featureText}>Always knows your location</Text>
-            </View>
-            <View style={styles.featureRow}>
-              <Compass size={20} color={colors.accent.secondary} />
-              <Text style={styles.featureText}>Navigate anywhere with maps</Text>
-            </View>
-            <View style={styles.featureRow}>
-              <MessageSquare size={20} color={colors.status.warning} />
-              <Text style={styles.featureText}>Remembers your preferences</Text>
-            </View>
-          </View>
+          <ScrollView
+            style={styles.languageContainer}
+            contentContainerStyle={styles.languageContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {(Object.keys(LANGUAGE_NAMES) as Language[]).map((lang) => (
+              <TouchableOpacity
+                key={lang}
+                style={[
+                  styles.languageOption,
+                  selectedLanguage === lang && styles.languageOptionSelected,
+                ]}
+                onPress={() => {
+                  safeHaptics.selection();
+                  setSelectedLanguage(lang);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.languageText,
+                    selectedLanguage === lang && styles.languageTextSelected,
+                  ]}
+                >
+                  {LANGUAGE_NAMES[lang]}
+                </Text>
+                {selectedLanguage === lang && (
+                  <Check size={20} color={colors.text.inverse} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         )}
 
         {/* Action button */}
@@ -317,5 +345,37 @@ const styles = StyleSheet.create({
   skipText: {
     color: colors.text.secondary,
     fontSize: 15,
+  },
+  // Language selection
+  languageContainer: {
+    maxHeight: 300,
+    marginBottom: spacing.lg,
+  },
+  languageContent: {
+    gap: spacing.sm,
+  },
+  languageOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.background.secondary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: borders.radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.muted,
+  },
+  languageOptionSelected: {
+    backgroundColor: colors.accent.primary,
+    borderColor: colors.accent.primary,
+  },
+  languageText: {
+    fontSize: 16,
+    color: colors.text.primary,
+    fontWeight: '500',
+  },
+  languageTextSelected: {
+    color: colors.text.inverse,
+    fontWeight: '600',
   },
 });

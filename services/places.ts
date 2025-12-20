@@ -20,6 +20,7 @@ interface PlaceSearchResult {
   formattedAddress: string;
   location: { latitude: number; longitude: number };
   rating?: number;
+  userRatingCount?: number;
   priceLevel?: string;
   regularOpeningHours?: {
     openNow: boolean;
@@ -53,7 +54,7 @@ export async function searchNearby(
       headers: {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': config.googlePlacesApiKey,
-        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.priceLevel,places.regularOpeningHours',
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.priceLevel,places.regularOpeningHours,places.photos',
       },
       body: JSON.stringify({
         includedTypes: type ? [type] : undefined,
@@ -141,6 +142,7 @@ export function placeToSpot(place: PlaceSearchResult, description: string = ''):
     name: place.displayName.text,
     description,
     rating: place.rating,
+    reviewCount: place.userRatingCount,
     priceLevel: mapPriceLevel(place.priceLevel),
     photos: place.photos?.map((p) => getPhotoUrl(p.name)),
     hours: place.regularOpeningHours?.weekdayDescriptions?.join('\n'),

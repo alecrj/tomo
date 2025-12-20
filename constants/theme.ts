@@ -1,137 +1,125 @@
-// === TOMO DARK THEME - Explorer Teal ===
-// A modern, travel-focused dark theme with teal accents
+// === TOMO CLEAN DARK THEME ===
+// Minimal, elegant dark mode with blacks, greys, and whites
+// No accent colors - clean and professional
 
 export const colors = {
   // Core dark mode colors
   background: {
-    primary: '#0D1117',      // Main background
-    secondary: '#161B22',    // Cards, surfaces
-    tertiary: '#21262D',     // Elevated surfaces, modals
-    elevated: '#30363D',     // Highest elevation
+    primary: '#000000',      // Pure black main background
+    secondary: '#0A0A0A',    // Slightly lighter for cards
+    tertiary: '#141414',     // Elevated surfaces
+    elevated: '#1A1A1A',     // Highest elevation
   },
 
   // Text colors
   text: {
-    primary: '#F0F6FC',      // Main text
-    secondary: '#8B949E',    // Muted text
-    tertiary: '#6E7681',     // Disabled, hints
-    inverse: '#0D1117',      // Text on light backgrounds
-    // Legacy support for components using colors.text.light.xxx
+    primary: '#FFFFFF',      // Pure white for main text
+    secondary: '#A0A0A0',    // Grey for muted text
+    tertiary: '#666666',     // Darker grey for hints
+    inverse: '#000000',      // Black text on light backgrounds
+    // Light theme text colors (for backward compatibility)
     light: {
-      primary: '#F0F6FC',
-      secondary: '#8B949E',
-      tertiary: '#6E7681',
+      primary: '#FFFFFF',
+      secondary: '#A0A0A0',
+      tertiary: '#666666',
     },
+    // Dark theme text colors (for backward compatibility)
     dark: {
-      primary: '#F0F6FC',
-      secondary: '#8B949E',
-      tertiary: '#6E7681',
+      primary: '#000000',
+      secondary: '#333333',
+      tertiary: '#666666',
     },
   },
 
-  // Brand accent - Teal
+  // Accent - Clean white/grey instead of teal
   accent: {
-    primary: '#00D4AA',      // Main accent (buttons, links, user bubbles)
-    secondary: '#58A6FF',    // Secondary accent (links, highlights)
-    muted: 'rgba(0, 212, 170, 0.15)',  // Subtle accent backgrounds
-    gradient: ['#00D4AA', '#00B894'],   // Gradient for special elements
+    primary: '#FFFFFF',      // White for primary actions
+    secondary: '#E0E0E0',    // Light grey for secondary
+    muted: 'rgba(255, 255, 255, 0.08)',  // Subtle backgrounds
   },
 
-  // Semantic colors
+  // Semantic colors (muted versions)
   status: {
-    success: '#3FB950',
-    successMuted: 'rgba(63, 185, 80, 0.15)',
-    successLight: 'rgba(63, 185, 80, 0.2)',  // Legacy support
-    warning: '#D29922',
-    warningMuted: 'rgba(210, 153, 34, 0.15)',
-    warningLight: 'rgba(210, 153, 34, 0.2)',  // Legacy support
-    error: '#F85149',
-    errorMuted: 'rgba(248, 81, 73, 0.15)',
-    errorLight: 'rgba(248, 81, 73, 0.2)',    // Legacy support
-    info: '#58A6FF',
-    infoMuted: 'rgba(88, 166, 255, 0.15)',
+    success: '#4ADE80',      // Soft green
+    successMuted: 'rgba(74, 222, 128, 0.15)',
+    successLight: 'rgba(74, 222, 128, 0.25)',
+    warning: '#FBBF24',      // Soft amber
+    warningMuted: 'rgba(251, 191, 36, 0.15)',
+    warningLight: 'rgba(251, 191, 36, 0.25)',
+    error: '#F87171',        // Soft red
+    errorMuted: 'rgba(248, 113, 113, 0.15)',
+    errorLight: 'rgba(248, 113, 113, 0.25)',
+    info: '#60A5FA',         // Soft blue
+    infoMuted: 'rgba(96, 165, 250, 0.15)',
+    infoLight: 'rgba(96, 165, 250, 0.25)',
   },
 
   // Chat specific
   chat: {
-    userBubble: '#00D4AA',
-    userText: '#0D1117',
-    assistantBubble: '#21262D',
-    assistantText: '#F0F6FC',
-    systemBubble: '#161B22',
-    systemText: '#8B949E',
+    userBubble: '#FFFFFF',   // White user bubble
+    userText: '#000000',     // Black text on white
+    assistantBubble: '#141414', // Dark grey assistant bubble
+    assistantText: '#FFFFFF',   // White text
+    systemBubble: '#0A0A0A',
+    systemText: '#A0A0A0',
   },
 
-  // Surface colors for cards, inputs, etc.
+  // Surface colors
   surface: {
-    card: '#161B22',
-    cardHover: '#21262D',
-    cardBorder: '#30363D',
-    input: '#0D1117',
-    inputBorder: '#30363D',
-    inputFocused: '#00D4AA',
-    modal: '#161B22',
-    modalOverlay: 'rgba(0, 0, 0, 0.7)',
+    card: '#0A0A0A',
+    cardHover: '#141414',
+    cardBorder: '#1A1A1A',
+    input: '#0A0A0A',
+    inputBorder: '#1A1A1A',
+    inputFocused: '#FFFFFF',
+    modal: '#0A0A0A',
+    modalOverlay: 'rgba(0, 0, 0, 0.85)',
   },
 
   // Interactive elements
   interactive: {
-    primary: '#00D4AA',
-    primaryHover: '#00E4B8',
-    primaryPressed: '#00C49A',
-    secondary: '#21262D',
-    secondaryHover: '#30363D',
-    secondaryPressed: '#161B22',
-    disabled: '#21262D',
-    disabledText: '#6E7681',
+    primary: '#FFFFFF',
+    primaryHover: '#E0E0E0',
+    primaryPressed: '#C0C0C0',
+    secondary: '#141414',
+    secondaryHover: '#1A1A1A',
+    secondaryPressed: '#0A0A0A',
+    disabled: '#1A1A1A',
+    disabledText: '#666666',
   },
 
   // Map specific
   map: {
-    route: '#00D4AA',
-    routeAlt: '#58A6FF',
-    marker: '#F85149',
-    markerSelected: '#00D4AA',
-    userLocation: '#58A6FF',
+    route: '#FFFFFF',
+    routeAlt: '#A0A0A0',
+    marker: '#FFFFFF',
+    markerSelected: '#FFFFFF',
+    userLocation: '#60A5FA',
   },
 
   // Budget colors
   budget: {
-    onTrack: '#3FB950',
-    warning: '#D29922',
-    over: '#F85149',
-    track: '#30363D',
-    trackBg: '#21262D', // Legacy support
+    onTrack: '#4ADE80',
+    warning: '#FBBF24',
+    over: '#F87171',
+    track: '#1A1A1A',
+    trackBg: '#141414',
   },
 
   // Border colors
   border: {
-    default: '#30363D',
-    muted: '#21262D',
-    accent: '#00D4AA',
+    default: '#1A1A1A',
+    muted: '#141414',
+    accent: '#333333',
   },
 
-  // Legacy support - keeping for backwards compatibility
+  // Legacy support
   backgrounds: {
-    morning: ['#0D1117', '#161B22', '#21262D'],
-    afternoon: ['#0D1117', '#161B22', '#21262D'],
-    evening: ['#0D1117', '#161B22', '#21262D'],
-    night: ['#0D1117', '#161B22', '#21262D'],
-    rain: ['#0D1117', '#161B22', '#21262D'],
-  },
-
-  // Legacy text colors (for backwards compatibility)
-  text_legacy: {
-    light: {
-      primary: '#1A1A1A',
-      secondary: 'rgba(0,0,0,0.6)',
-      tertiary: 'rgba(0,0,0,0.4)',
-    },
-    dark: {
-      primary: '#F0F6FC',
-      secondary: '#8B949E',
-      tertiary: '#6E7681',
-    },
+    morning: ['#000000', '#0A0A0A', '#141414'],
+    afternoon: ['#000000', '#0A0A0A', '#141414'],
+    evening: ['#000000', '#0A0A0A', '#141414'],
+    night: ['#000000', '#0A0A0A', '#141414'],
+    rain: ['#000000', '#0A0A0A', '#141414'],
   },
 };
 
@@ -153,7 +141,6 @@ export const typography = {
     semibold: '600' as const,
     bold: '700' as const,
   },
-  // Preset combinations
   presets: {
     greeting: { fontSize: 28, fontWeight: '700' as const, letterSpacing: -0.5 },
     title: { fontSize: 20, fontWeight: '600' as const, letterSpacing: -0.3 },
@@ -199,31 +186,31 @@ export const borders = {
   },
 };
 
-// === SHADOWS (adjusted for dark mode) ===
+// === SHADOWS ===
 export const shadows = {
   sm: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.4,
     shadowRadius: 4,
     elevation: 2,
   },
   md: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.5,
     shadowRadius: 8,
     elevation: 4,
   },
   lg: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.6,
     shadowRadius: 16,
     elevation: 8,
   },
   glow: {
-    shadowColor: '#00D4AA',
+    shadowColor: '#FFFFFF',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -242,80 +229,80 @@ export const animation = {
   },
 };
 
-// === MAP STYLES (Google Maps dark mode) ===
+// === MAP STYLES (Clean dark mode) ===
 export const mapStyle = [
-  { elementType: 'geometry', stylers: [{ color: '#0D1117' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#0D1117' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#8B949E' }] },
+  { elementType: 'geometry', stylers: [{ color: '#000000' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#000000' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#666666' }] },
   {
     featureType: 'administrative.locality',
     elementType: 'labels.text.fill',
-    stylers: [{ color: '#F0F6FC' }],
+    stylers: [{ color: '#FFFFFF' }],
   },
   {
     featureType: 'poi',
     elementType: 'labels.text.fill',
-    stylers: [{ color: '#8B949E' }],
+    stylers: [{ color: '#666666' }],
   },
   {
     featureType: 'poi.park',
     elementType: 'geometry',
-    stylers: [{ color: '#161B22' }],
+    stylers: [{ color: '#0A0A0A' }],
   },
   {
     featureType: 'poi.park',
     elementType: 'labels.text.fill',
-    stylers: [{ color: '#3FB950' }],
+    stylers: [{ color: '#4ADE80' }],
   },
   {
     featureType: 'road',
     elementType: 'geometry',
-    stylers: [{ color: '#21262D' }],
+    stylers: [{ color: '#141414' }],
   },
   {
     featureType: 'road',
     elementType: 'geometry.stroke',
-    stylers: [{ color: '#30363D' }],
+    stylers: [{ color: '#1A1A1A' }],
   },
   {
     featureType: 'road',
     elementType: 'labels.text.fill',
-    stylers: [{ color: '#8B949E' }],
+    stylers: [{ color: '#666666' }],
   },
   {
     featureType: 'road.highway',
     elementType: 'geometry',
-    stylers: [{ color: '#30363D' }],
+    stylers: [{ color: '#1A1A1A' }],
   },
   {
     featureType: 'road.highway',
     elementType: 'geometry.stroke',
-    stylers: [{ color: '#21262D' }],
+    stylers: [{ color: '#141414' }],
   },
   {
     featureType: 'road.highway',
     elementType: 'labels.text.fill',
-    stylers: [{ color: '#F0F6FC' }],
+    stylers: [{ color: '#FFFFFF' }],
   },
   {
     featureType: 'transit',
     elementType: 'geometry',
-    stylers: [{ color: '#21262D' }],
+    stylers: [{ color: '#141414' }],
   },
   {
     featureType: 'transit.station',
     elementType: 'labels.text.fill',
-    stylers: [{ color: '#58A6FF' }],
+    stylers: [{ color: '#A0A0A0' }],
   },
   {
     featureType: 'water',
     elementType: 'geometry',
-    stylers: [{ color: '#161B22' }],
+    stylers: [{ color: '#0A0A0A' }],
   },
   {
     featureType: 'water',
     elementType: 'labels.text.fill',
-    stylers: [{ color: '#6E7681' }],
+    stylers: [{ color: '#666666' }],
   },
 ];
 
@@ -330,15 +317,18 @@ export function getTimeOfDay(hour: number): TimeOfDay {
   return 'night';
 }
 
-// For backwards compatibility - now always returns dark theme colors
 export function getBackgroundColors(time: TimeOfDay, weather?: WeatherCondition): string[] {
   return [colors.background.primary, colors.background.secondary, colors.background.tertiary];
 }
 
 export function isLightBackground(time: TimeOfDay): boolean {
-  return false; // Always dark mode now
+  return false; // Always dark mode
 }
 
 export function getTextColors(time: TimeOfDay) {
-  return colors.text_legacy.dark;
+  return {
+    primary: colors.text.primary,
+    secondary: colors.text.secondary,
+    tertiary: colors.text.tertiary,
+  };
 }

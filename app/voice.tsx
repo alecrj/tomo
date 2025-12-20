@@ -37,6 +37,7 @@ import {
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import { colors, spacing, borders, typography } from '../constants/theme';
 import { useLocationStore } from '../stores/useLocationStore';
+import { usePreferencesStore, LANGUAGE_NAMES } from '../stores/usePreferencesStore';
 import {
   initRealtimeSession,
   closeRealtimeSession,
@@ -53,6 +54,10 @@ export default function VoiceScreen() {
   // Location context for system prompt
   const neighborhood = useLocationStore((state) => state.neighborhood);
   const coordinates = useLocationStore((state) => state.coordinates);
+
+  // Language preference
+  const language = usePreferencesStore((state) => state.language);
+  const languageName = LANGUAGE_NAMES[language] || 'English';
 
   // Connection and voice state
   const [connectionState, setConnectionState] = useState<RealtimeConnectionState>('disconnected');
@@ -86,6 +91,11 @@ export default function VoiceScreen() {
 
     return `You are Tomo, a friendly AI travel companion helping a traveler via voice.
 
+CRITICAL LANGUAGE RULE:
+- ALWAYS respond in ${languageName}. This is the user's preferred language.
+- Never switch to another language unless the user explicitly asks.
+- Even if you detect they're in Japan/Thailand/Korea, still respond in ${languageName}.
+
 ${locationContext}
 
 VOICE RESPONSE RULES:
@@ -103,7 +113,7 @@ You can help with:
 - Local customs and tips
 - General questions about travel
 - Anything else a helpful friend would help with`;
-  }, [coordinates, neighborhood]);
+  }, [coordinates, neighborhood, languageName]);
 
   // Initialize session on mount
   useEffect(() => {

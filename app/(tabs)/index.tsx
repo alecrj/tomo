@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,48 +7,60 @@ import {
   TextInput,
   StatusBar,
   Keyboard,
-  ActivityIndicator,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  Image,
+  ActionSheetIOS,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   Mic,
   Camera,
-  Navigation,
-  Heart,
+  Send,
+  MapPin,
   Moon,
   Sun,
   CloudRain,
-  MapPin,
 } from 'lucide-react-native';
 import { colors, spacing, typography, borders } from '../../constants/theme';
 import { useLocationStore } from '../../stores/useLocationStore';
 import { useWeatherStore } from '../../stores/useWeatherStore';
 import { usePreferencesStore } from '../../stores/usePreferencesStore';
-import { useSavedPlacesStore } from '../../stores/useSavedPlacesStore';
+import { useConversationStore } from '../../stores/useConversationStore';
 import { useNavigationStore } from '../../stores/useNavigationStore';
 import { useMemoryStore } from '../../stores/useMemoryStore';
+import { useTripStore } from '../../stores/useTripStore';
+import { useBudgetStore } from '../../stores/useBudgetStore';
+import { useSavedPlacesStore } from '../../stores/useSavedPlacesStore';
+import { useItineraryStore } from '../../stores/useItineraryStore';
 import { useTimeOfDay } from '../../hooks/useTimeOfDay';
 import { useLocation } from '../../hooks/useLocation';
 import { useWeather } from '../../hooks/useWeather';
-import { searchNearbyPlaces } from '../../services/places';
-import { getWalkingDirections } from '../../services/routes';
 import { useOfflineStore } from '../../stores/useOfflineStore';
-import { safeHaptics, ImpactFeedbackStyle } from '../../utils/haptics';
+import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../../utils/haptics';
 import { NotificationContainer } from '../../components/NotificationToast';
 import { OfflineBanner } from '../../components/OfflineBanner';
-import type { PlaceCardData } from '../../types';
+import { TypingIndicator } from '../../components/TypingIndicator';
+import { PlaceCard } from '../../components/PlaceCard';
+import { chat, generateItinerary } from '../../services/openai';
+import { takePhoto, pickPhoto } from '../../services/camera';
+import { detectCurrency } from '../../utils/currency';
+import type { ChatMessage, DestinationContext, Destination, MessageAction } from '../../types';
 
-// Smart recommendation with personalized reason
-interface SmartRecommendation {
-  place: PlaceCardData;
-  reason: string; // Personalized explanation
-  walkTime: string;
-  isOpen: boolean;
-}
+// Category chips - simple shortcuts
+const CATEGORY_CHIPS = [
+  { label: 'Food nearby', message: 'Find me something good to eat nearby' },
+  { label: 'Coffee', message: 'Where can I get good coffee around here?' },
+  { label: 'Things to do', message: 'What are some interesting things to do near me?' },
+  { label: 'Nightlife', message: 'Where should I go for drinks tonight?' },
+];
 
-export default function TomoHomeScreen() {
+export default function HomeScreen() {
   const router = useRouter();
+  const scrollViewRef = useRef<ScrollView>(null);
   const timeOfDay = useTimeOfDay();
 
   // Hooks
@@ -61,26 +73,71 @@ export default function TomoHomeScreen() {
   const weatherCondition = useWeatherStore((state) => state.condition);
   const weatherTemperature = useWeatherStore((state) => state.temperature);
   const temperatureUnit = usePreferencesStore((state) => state.temperatureUnit);
-  const savedPlaces = useSavedPlacesStore((state) => state.places);
-  const savePlace = useSavedPlacesStore((state) => state.savePlace);
-  const isPlaceSavedFn = useSavedPlacesStore((state) => state.isPlaceSaved);
+  const homeBase = usePreferencesStore((state) => state.homeBase);
+  const walkingTolerance = usePreferencesStore((state) => state.walkingTolerance);
+  const budgetLevel = usePreferencesStore((state) => state.budgetLevel);
+  const dietary = usePreferencesStore((state) => state.dietary);
+  const interests = usePreferencesStore((state) => state.interests);
+  const avoidCrowds = usePreferencesStore((state) => state.avoidCrowds);
+
+  // Trip/budget state
+  const visits = useTripStore((state) => state.visits);
+  const totalWalkingMinutes = useTripStore((state) => state.totalWalkingMinutes);
+  const currentTrip = useTripStore((state) => state.currentTrip);
+  const budgetStore = useBudgetStore();
+  const dailyBudget = budgetStore.dailyBudget;
+  const budgetRemaining = budgetStore.remainingToday();
+
+  // Conversation state
+  const getMemoryContext = useMemoryStore((state) => state.getMemoryContext);
+  const addMessage = useConversationStore((state) => state.addMessage);
+  const startNewConversation = useConversationStore((state) => state.startNewConversation);
+  const currentConversationId = useConversationStore((state) => state.currentConversationId);
+  const conversations = useConversationStore((state) => state.conversations);
+
+  const currentConversation = useMemo(() => {
+    return conversations.find((c) => c.id === currentConversationId) || null;
+  }, [conversations, currentConversationId]);
+
+  const messages = useMemo(() => {
+    return currentConversation?.messages || [];
+  }, [currentConversation]);
+
+  // Navigation
   const viewDestination = useNavigationStore((state) => state.viewDestination);
-  const memories = useMemoryStore((state) => state.memories);
+
+  // Saved places
+  const savePlace = useSavedPlacesStore((state) => state.savePlace);
+  const isPlaceSaved = useSavedPlacesStore((state) => state.isPlaceSaved);
+
+  // Offline
   const isOnline = useOfflineStore((state) => state.isOnline);
+  const queueMessage = useOfflineStore((state) => state.queueMessage);
 
   // Local state
   const [inputText, setInputText] = useState('');
-  const [recommendation, setRecommendation] = useState<SmartRecommendation | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaved, setIsSaved] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
-  // Get user preferences from memory
-  const userPreferences = useMemo(() => {
-    const likes = memories.filter(m => m.type === 'like').map(m => m.content);
-    const dislikes = memories.filter(m => m.type === 'dislike').map(m => m.content);
-    const personalInfo = memories.filter(m => m.type === 'personal_info').map(m => m.content);
-    return { likes, dislikes, personalInfo };
-  }, [memories]);
+  // Currency detection
+  const currency = coordinates
+    ? detectCurrency(coordinates)
+    : { code: 'USD', symbol: '$', name: 'US Dollar' };
+
+  // Initialize conversation
+  useEffect(() => {
+    if (!currentConversationId && coordinates) {
+      startNewConversation(neighborhood || undefined, currentTrip?.id);
+    }
+  }, [currentConversationId, coordinates]);
+
+  // Auto-scroll when new messages
+  useEffect(() => {
+    if (messages.length > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [messages]);
 
   // Format temperature
   const displayTemperature = weatherTemperature
@@ -104,194 +161,301 @@ export default function TomoHomeScreen() {
     if (!weatherCondition) return null;
     const condition = weatherCondition.toLowerCase();
     if (condition.includes('rain') || condition.includes('drizzle')) {
-      return <CloudRain size={16} color={colors.text.secondary} />;
+      return <CloudRain size={14} color={colors.text.tertiary} />;
     }
     if (timeOfDay === 'night') {
-      return <Moon size={16} color={colors.text.secondary} />;
+      return <Moon size={14} color={colors.text.tertiary} />;
     }
-    return <Sun size={16} color={colors.text.secondary} />;
+    return <Sun size={14} color={colors.text.tertiary} />;
   };
 
-  // Get food emoji based on time
-  const getFoodEmoji = () => {
-    switch (timeOfDay) {
-      case 'morning': return '☕';
-      case 'afternoon': return '🍜';
-      case 'evening': return '🍽️';
-      case 'night': return '🍺';
-      default: return '🍴';
-    }
-  };
-
-  // Generate ONE smart recommendation
-  const generateSmartRecommendation = useCallback(async () => {
-    if (!coordinates || !isOnline) {
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      // Determine search type based on time
-      const searchType = timeOfDay === 'morning' ? 'cafe' :
-                         timeOfDay === 'night' ? 'bar' : 'restaurant';
-
-      // Search for places
-      const places = await searchNearbyPlaces(coordinates, searchType, 1000);
-
-      if (!places || places.length === 0) {
-        setRecommendation(null);
-        setIsLoading(false);
-        return;
-      }
-
-      // Pick the best match (first result from Google is usually good)
-      const topPlace = places[0];
-
-      // Get walking time
-      let walkTime = '5 min walk';
-      if (topPlace.location) {
-        try {
-          const route = await getWalkingDirections(
-            coordinates,
-            { latitude: topPlace.location.latitude, longitude: topPlace.location.longitude }
-          );
-          if (route?.totalDuration) {
-            walkTime = `${Math.round(route.totalDuration)} min walk`;
-          }
-        } catch {
-          // Keep default walk time
-        }
-      }
-
-      // Generate personalized reason
-      let reason = '';
-      const placeName = topPlace.displayName?.text || 'This spot';
-
-      if (userPreferences.likes.length > 0) {
-        const likedThing = userPreferences.likes[0];
-        reason = `${placeName} — might match your love for ${likedThing}.`;
-      } else if (timeOfDay === 'morning') {
-        reason = `${placeName} — great way to start your ${getGreeting().toLowerCase()}.`;
-      } else if (timeOfDay === 'evening') {
-        reason = `${placeName} — popular for ${getGreeting().toLowerCase()} dining.`;
-      } else if (timeOfDay === 'night') {
-        reason = `${placeName} — good vibes for tonight.`;
-      } else {
-        reason = `${placeName} — highly rated and close by.`;
-      }
-
-      // Build the recommendation
-      const rec: SmartRecommendation = {
-        place: {
-          placeId: topPlace.id,
-          name: topPlace.displayName?.text || 'Nearby spot',
-          address: topPlace.formattedAddress || '',
-          coordinates: {
-            latitude: topPlace.location?.latitude || coordinates.latitude,
-            longitude: topPlace.location?.longitude || coordinates.longitude,
-          },
-          rating: topPlace.rating,
-          priceLevel: mapPriceLevel(topPlace.priceLevel),
-          openNow: topPlace.regularOpeningHours?.openNow,
-          photo: topPlace.photos?.[0]?.name,
-        },
-        reason,
-        walkTime,
-        isOpen: topPlace.regularOpeningHours?.openNow ?? true,
-      };
-
-      setRecommendation(rec);
-      setIsSaved(isPlaceSavedFn(rec.place.name, rec.place.coordinates));
-    } catch (error) {
-      console.error('[TomoHome] Error generating recommendation:', error);
-      setRecommendation(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [coordinates, timeOfDay, userPreferences, isOnline, isPlaceSavedFn]);
-
-  // Generate recommendation on mount and when context changes
-  useEffect(() => {
-    generateSmartRecommendation();
-  }, [coordinates, timeOfDay]);
-
-  // Handle "Take me there" - direct to navigation
-  const handleTakeMeThere = useCallback(() => {
-    if (!recommendation?.place) return;
-
-    safeHaptics.impact(ImpactFeedbackStyle.Medium);
-
-    // Create destination and navigate
-    const destination = {
-      id: recommendation.place.placeId || `place-${Date.now()}`,
-      title: recommendation.place.name,
-      description: recommendation.reason,
-      whatItIs: recommendation.place.name,
-      whenToGo: 'Now',
-      neighborhood: neighborhood || '',
-      category: 'food' as const,
-      whyNow: recommendation.reason,
-      placeId: recommendation.place.placeId,
-      address: recommendation.place.address || '',
-      coordinates: recommendation.place.coordinates,
-      priceLevel: recommendation.place.priceLevel || 2,
-      transitPreview: {
-        method: 'walk' as const,
-        totalMinutes: parseInt(recommendation.walkTime) || 5,
-        description: recommendation.walkTime,
+  // Build context for AI
+  const buildContext = useCallback((): DestinationContext => {
+    return {
+      location: coordinates || { latitude: 0, longitude: 0 },
+      neighborhood: neighborhood || 'unknown location',
+      timeOfDay,
+      weather: weatherCondition && weatherTemperature ? {
+        condition: weatherCondition,
+        temperature: weatherTemperature,
+        description: `${weatherCondition}, ${weatherTemperature}°C`,
+        humidity: 0,
+      } : null,
+      budgetRemaining,
+      dailyBudget,
+      preferences: {
+        homeBase,
+        walkingTolerance: walkingTolerance === 'medium' ? 'moderate' : walkingTolerance,
+        budget: budgetLevel,
+        dietary,
+        interests,
+        avoidCrowds,
       },
-      spots: [],
-      rating: recommendation.place.rating,
-      isOpen: recommendation.isOpen,
+      visitedPlaces: visits.slice(-10),
+      completedStamps: [],
+      excludedToday: [],
+      totalWalkingToday: totalWalkingMinutes,
     };
+  }, [coordinates, neighborhood, timeOfDay, weatherCondition, weatherTemperature, budgetRemaining, dailyBudget, homeBase, walkingTolerance, budgetLevel, dietary, interests, avoidCrowds, visits, totalWalkingMinutes]);
 
-    viewDestination(destination);
-    router.push('/navigation');
-  }, [recommendation, viewDestination, router, neighborhood]);
-
-  // Handle save
-  const handleSave = useCallback(() => {
-    if (!recommendation?.place) return;
-
-    safeHaptics.impact(ImpactFeedbackStyle.Light);
-
-    if (!isSaved) {
-      savePlace(recommendation.place);
-      setIsSaved(true);
-    }
-  }, [recommendation, isSaved, savePlace]);
-
-  // Handle text input submission
-  const handleSubmit = useCallback(() => {
-    if (!inputText.trim()) return;
+  // Send message
+  const handleSendMessage = useCallback(async (messageText?: string, imageBase64?: string) => {
+    const text = messageText || inputText.trim();
+    if ((!text && !imageBase64) || isSending) return;
 
     safeHaptics.impact(ImpactFeedbackStyle.Light);
     Keyboard.dismiss();
 
-    router.push({
-      pathname: '/chat',
-      params: { initialMessage: inputText.trim() },
-    });
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: text || '[Image]',
+      timestamp: Date.now(),
+      image: imageBase64,
+    };
 
+    addMessage(userMessage);
     setInputText('');
-  }, [inputText, router]);
+    setIsSending(true);
 
-  // Handle voice button
+    // Check if offline
+    if (!isOnline) {
+      queueMessage(text, imageBase64);
+      const offlineMessage: ChatMessage = {
+        id: `offline-${Date.now()}`,
+        role: 'assistant',
+        content: "I'm offline right now. I've saved your message and will respond when you're back online.",
+        timestamp: Date.now(),
+      };
+      addMessage(offlineMessage);
+      setIsSending(false);
+      return;
+    }
+
+    try {
+      const context = buildContext();
+      const memoryContext = getMemoryContext();
+      const systemContext = coordinates
+        ? `\n\n[SYSTEM CONTEXT: User is at GPS ${coordinates.latitude.toFixed(6)}, ${coordinates.longitude.toFixed(6)} in ${neighborhood || 'unknown'}. Local currency: ${currency.name} (${currency.symbol}). Current time: ${timeOfDay}. Weather: ${weatherCondition || 'unknown'}. Budget remaining today: ${currency.symbol}${budgetRemaining}. Use local currency for ALL prices. Be conversational, helpful, and specific. Include exact places with addresses when relevant.]${memoryContext}`
+        : '';
+
+      const enhancedMessage = text + systemContext;
+      const response = await chat(enhancedMessage, context, messages, imageBase64);
+
+      const assistantMessage: ChatMessage = {
+        id: `assistant-${Date.now()}`,
+        role: 'assistant',
+        content: response.content,
+        timestamp: Date.now(),
+        placeCard: response.placeCard,
+        inlineMap: response.inlineMap,
+        actions: response.actions,
+      };
+
+      safeHaptics.notification(NotificationFeedbackType.Success);
+      addMessage(assistantMessage);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      const errorMessage: ChatMessage = {
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        content: "Sorry, I'm having trouble responding. Please try again.",
+        timestamp: Date.now(),
+      };
+      addMessage(errorMessage);
+    } finally {
+      setIsSending(false);
+    }
+  }, [inputText, isSending, isOnline, queueMessage, addMessage, buildContext, getMemoryContext, coordinates, neighborhood, currency, timeOfDay, weatherCondition, budgetRemaining, messages]);
+
+  // Handle chip tap
+  const handleChipPress = useCallback((message: string) => {
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
+    handleSendMessage(message);
+  }, [handleSendMessage]);
+
+  // Handle action buttons
+  const handleAction = useCallback((action: MessageAction, placeCard?: ChatMessage['placeCard']) => {
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
+
+    switch (action.type) {
+      case 'navigate':
+        if (placeCard) {
+          const destination: Destination = {
+            id: `dest-${Date.now()}`,
+            title: placeCard.name,
+            description: placeCard.address,
+            whatItIs: placeCard.address,
+            whenToGo: '',
+            neighborhood: neighborhood || '',
+            category: 'food',
+            whyNow: '',
+            address: placeCard.address,
+            coordinates: placeCard.coordinates,
+            priceLevel: placeCard.priceLevel || 2,
+            transitPreview: {
+              method: 'walk',
+              totalMinutes: parseInt(placeCard.distance?.replace(/\D/g, '') || '10'),
+              description: placeCard.distance || '10 min walk',
+            },
+            spots: [],
+          };
+          viewDestination(destination);
+          router.push('/navigation');
+        }
+        break;
+      case 'regenerate':
+        handleSendMessage('Show me something else');
+        break;
+      case 'view_itinerary':
+        router.push('/(tabs)/plan');
+        break;
+    }
+  }, [neighborhood, viewDestination, router, handleSendMessage]);
+
+  // Handle voice
   const handleVoice = useCallback(() => {
     safeHaptics.impact(ImpactFeedbackStyle.Medium);
     router.push('/voice');
   }, [router]);
 
-  // Handle camera button
+  // Handle camera
   const handleCamera = useCallback(() => {
     safeHaptics.impact(ImpactFeedbackStyle.Light);
-    router.push({
-      pathname: '/chat',
-      params: { openCamera: 'true' },
-    });
-  }, [router]);
+
+    const promptOptions = [
+      'Translate this text/menu for me',
+      'What is this place?',
+      'Tell me about this',
+      'How much does this cost?',
+    ];
+
+    const handleImageWithPrompt = async (image: string) => {
+      if (Platform.OS === 'ios') {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            title: 'What do you want to know?',
+            options: ['Cancel', ...promptOptions],
+            cancelButtonIndex: 0,
+          },
+          (buttonIndex) => {
+            if (buttonIndex > 0 && buttonIndex <= promptOptions.length) {
+              handleSendMessage(promptOptions[buttonIndex - 1], image);
+            }
+          }
+        );
+      } else {
+        Alert.alert('What do you want to know?', undefined, [
+          { text: 'Cancel', style: 'cancel' },
+          ...promptOptions.map((prompt) => ({
+            text: prompt,
+            onPress: () => handleSendMessage(prompt, image),
+          })),
+        ]);
+      }
+    };
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Take Photo', 'Choose from Library'],
+          cancelButtonIndex: 0,
+        },
+        async (buttonIndex) => {
+          if (buttonIndex === 1) {
+            const image = await takePhoto();
+            if (image) handleImageWithPrompt(image);
+          } else if (buttonIndex === 2) {
+            const image = await pickPhoto();
+            if (image) handleImageWithPrompt(image);
+          }
+        }
+      );
+    } else {
+      Alert.alert('Add Photo', 'Choose an option', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Take Photo',
+          onPress: async () => {
+            const image = await takePhoto();
+            if (image) handleImageWithPrompt(image);
+          },
+        },
+        {
+          text: 'Choose from Library',
+          onPress: async () => {
+            const image = await pickPhoto();
+            if (image) handleImageWithPrompt(image);
+          },
+        },
+      ]);
+    }
+  }, [handleSendMessage]);
+
+  // Render empty state (no messages)
+  const renderEmptyState = () => (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyGreeting}>
+        {getGreeting()}.
+      </Text>
+      <Text style={styles.emptySubtext}>
+        What would you like to explore?
+      </Text>
+    </View>
+  );
+
+  // Render messages
+  const renderMessages = () => (
+    <>
+      {messages.map((message) => (
+        <View key={message.id}>
+          {/* User messages */}
+          {message.role === 'user' && (
+            <View style={styles.userBubble}>
+              {message.image && (
+                <Image
+                  source={{ uri: `data:image/jpeg;base64,${message.image}` }}
+                  style={styles.messageImage}
+                  resizeMode="cover"
+                />
+              )}
+              <Text style={styles.userText}>{message.content}</Text>
+            </View>
+          )}
+
+          {/* Assistant messages */}
+          {message.role === 'assistant' && (
+            <View style={styles.assistantContainer}>
+              <Text style={styles.assistantText}>{message.content}</Text>
+
+              {message.placeCard && (
+                <PlaceCard
+                  placeCard={message.placeCard}
+                  currencySymbol={currency.symbol}
+                  onTakeMeThere={() =>
+                    handleAction({ label: 'Take me there', type: 'navigate' }, message.placeCard)
+                  }
+                  onSomethingElse={() =>
+                    handleAction({ label: 'Something else', type: 'regenerate' })
+                  }
+                  onSave={() => {
+                    if (message.placeCard) {
+                      savePlace(message.placeCard, neighborhood || undefined);
+                      safeHaptics.notification(NotificationFeedbackType.Success);
+                    }
+                  }}
+                  isSaved={message.placeCard ? isPlaceSaved(message.placeCard.name, message.placeCard.coordinates) : false}
+                />
+              )}
+            </View>
+          )}
+        </View>
+      ))}
+
+      {/* Typing indicator */}
+      {isSending && <TypingIndicator />}
+    </>
+  );
 
   return (
     <View style={styles.container}>
@@ -300,149 +464,103 @@ export default function TomoHomeScreen() {
       <NotificationContainer />
 
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <View style={styles.content}>
-          {/* Header - Location & Weather */}
+        <KeyboardAvoidingView
+          style={styles.keyboardView}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={0}
+        >
+          {/* Header - Minimal location context */}
           <View style={styles.header}>
             <View style={styles.locationRow}>
-              <MapPin size={14} color={colors.text.secondary} />
+              <MapPin size={12} color={colors.text.tertiary} />
               <Text style={styles.locationText}>
-                {getGreeting()} in {neighborhood || 'Loading...'}
+                {neighborhood || 'Loading...'}
               </Text>
-            </View>
-            {displayTemperature && (
-              <View style={styles.weatherRow}>
-                {getWeatherIcon()}
-                <Text style={styles.weatherText}>
-                  {displayTemperature}°{temperatureUnit}
-                  {weatherCondition ? ` · ${weatherCondition}` : ''}
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Smart Recommendation Card */}
-          <View style={styles.recommendationSection}>
-            {isLoading ? (
-              <View style={styles.loadingCard}>
-                <ActivityIndicator size="large" color={colors.accent.primary} />
-                <Text style={styles.loadingText}>Finding the perfect spot...</Text>
-              </View>
-            ) : recommendation ? (
-              <View style={styles.recommendationCard}>
-                {/* Place name with emoji */}
-                <Text style={styles.placeEmoji}>{getFoodEmoji()}</Text>
-                <Text style={styles.placeName}>{recommendation.place.name}</Text>
-
-                {/* Personalized reason */}
-                <Text style={styles.placeReason}>{recommendation.reason}</Text>
-
-                {/* Meta info */}
-                <View style={styles.placeMeta}>
-                  <Text style={styles.metaText}>{recommendation.walkTime}</Text>
-                  <Text style={styles.metaDot}>·</Text>
-                  {recommendation.place.priceLevel && (
-                    <>
-                      <Text style={styles.metaText}>
-                        {'$'.repeat(recommendation.place.priceLevel)}
-                      </Text>
-                      <Text style={styles.metaDot}>·</Text>
-                    </>
-                  )}
-                  <Text style={[
-                    styles.metaText,
-                    { color: recommendation.isOpen ? colors.status.success : colors.status.error }
-                  ]}>
-                    {recommendation.isOpen ? 'Open now' : 'Closed'}
+              {displayTemperature && (
+                <>
+                  <Text style={styles.separator}>·</Text>
+                  {getWeatherIcon()}
+                  <Text style={styles.weatherText}>
+                    {displayTemperature}°
                   </Text>
-                </View>
-
-                {/* Action buttons */}
-                <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={styles.primaryButton}
-                    onPress={handleTakeMeThere}
-                    activeOpacity={0.8}
-                  >
-                    <Navigation size={18} color={colors.text.inverse} />
-                    <Text style={styles.primaryButtonText}>Take me there</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.secondaryButton, isSaved && styles.savedButton]}
-                    onPress={handleSave}
-                    activeOpacity={0.8}
-                  >
-                    <Heart
-                      size={20}
-                      color={isSaved ? colors.status.error : colors.text.primary}
-                      fill={isSaved ? colors.status.error : 'transparent'}
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : !isOnline ? (
-              <View style={styles.offlineCard}>
-                <Text style={styles.offlineEmoji}>📡</Text>
-                <Text style={styles.offlineTitle}>You're offline</Text>
-                <Text style={styles.offlineText}>
-                  {savedPlaces.length > 0
-                    ? `You have ${savedPlaces.length} saved places to explore`
-                    : "Recommendations will appear when you're back online"}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyText}>
-                  Ask Tomo for recommendations
-                </Text>
-              </View>
-            )}
+                </>
+              )}
+            </View>
           </View>
 
-          {/* Spacer to push input to bottom */}
-          <View style={styles.spacer} />
+          {/* Scrollable content */}
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {messages.length === 0 ? renderEmptyState() : renderMessages()}
+          </ScrollView>
 
-          {/* Input bar - at bottom */}
+          {/* Category chips - show when no messages */}
+          {messages.length === 0 && (
+            <View style={styles.chipsContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipsScroll}
+              >
+                {CATEGORY_CHIPS.map((chip) => (
+                  <TouchableOpacity
+                    key={chip.label}
+                    style={styles.chip}
+                    onPress={() => handleChipPress(chip.message)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.chipText}>{chip.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Input bar */}
           <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Ask Tomo anything..."
-              placeholderTextColor={colors.text.tertiary}
-              value={inputText}
-              onChangeText={setInputText}
-              onSubmitEditing={handleSubmit}
-              returnKeyType="send"
-              keyboardAppearance="dark"
-            />
-            <TouchableOpacity style={styles.inputButton} onPress={handleVoice}>
-              <Mic size={22} color={colors.text.secondary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.inputButton} onPress={handleCamera}>
-              <Camera size={22} color={colors.text.secondary} />
-            </TouchableOpacity>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Ask me anything..."
+                placeholderTextColor={colors.text.tertiary}
+                value={inputText}
+                onChangeText={setInputText}
+                onSubmitEditing={() => handleSendMessage()}
+                returnKeyType="send"
+                multiline
+                maxLength={1000}
+                keyboardAppearance="dark"
+              />
+
+              {inputText.trim() ? (
+                <TouchableOpacity
+                  style={styles.sendButton}
+                  onPress={() => handleSendMessage()}
+                  disabled={isSending}
+                >
+                  <Send size={16} color={colors.text.inverse} />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.inputActions}>
+                  <TouchableOpacity style={styles.inputIconButton} onPress={handleVoice}>
+                    <Mic size={20} color={colors.text.secondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.inputIconButton} onPress={handleCamera}>
+                    <Camera size={20} color={colors.text.secondary} />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
   );
-}
-
-// Helper to map Google Places price level string to number
-function mapPriceLevel(googlePriceLevel?: string): 1 | 2 | 3 | 4 | undefined {
-  if (!googlePriceLevel) return undefined;
-  switch (googlePriceLevel) {
-    case 'PRICE_LEVEL_FREE':
-    case 'PRICE_LEVEL_INEXPENSIVE':
-      return 1;
-    case 'PRICE_LEVEL_MODERATE':
-      return 2;
-    case 'PRICE_LEVEL_EXPENSIVE':
-      return 3;
-    case 'PRICE_LEVEL_VERY_EXPENSIVE':
-      return 4;
-    default:
-      return undefined;
-  }
 }
 
 const styles = StyleSheet.create({
@@ -453,16 +571,14 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  content: {
+  keyboardView: {
     flex: 1,
-    paddingHorizontal: spacing.lg,
   },
 
   // Header
   header: {
-    alignItems: 'center',
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
   locationRow: {
     flexDirection: 'row',
@@ -470,182 +586,141 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   locationText: {
-    fontSize: typography.sizes.lg,
-    color: colors.text.primary,
+    fontSize: typography.sizes.sm,
+    color: colors.text.tertiary,
     fontWeight: typography.weights.medium,
   },
-  weatherRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    marginTop: spacing.xs,
+  separator: {
+    color: colors.text.tertiary,
+    marginHorizontal: spacing.xs,
   },
   weatherText: {
     fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
+    color: colors.text.tertiary,
   },
 
-  // Recommendation
-  recommendationSection: {
+  // Scroll content
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
+
+  // Empty state
+  emptyState: {
     flex: 1,
     justifyContent: 'center',
-    paddingBottom: spacing['2xl'],
+    paddingBottom: 100,
   },
-  recommendationCard: {
-    backgroundColor: colors.surface.card,
-    borderRadius: borders.radius.xl,
-    padding: spacing.xl,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border.muted,
-  },
-  placeEmoji: {
-    fontSize: 48,
-    marginBottom: spacing.md,
-  },
-  placeName: {
-    fontSize: typography.sizes['2xl'],
+  emptyGreeting: {
+    fontSize: 32,
     fontWeight: typography.weights.bold,
     color: colors.text.primary,
-    textAlign: 'center',
     marginBottom: spacing.sm,
   },
-  placeReason: {
-    fontSize: typography.sizes.base,
-    color: colors.text.secondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: spacing.lg,
-    paddingHorizontal: spacing.md,
-  },
-  placeMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  metaText: {
-    fontSize: typography.sizes.sm,
+  emptySubtext: {
+    fontSize: typography.sizes.lg,
     color: colors.text.secondary,
   },
-  metaDot: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.tertiary,
-    marginHorizontal: spacing.sm,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    width: '100%',
-  },
-  primaryButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.accent.primary,
-    paddingVertical: spacing.lg,
-    borderRadius: borders.radius.lg,
-  },
-  primaryButtonText: {
-    color: colors.text.inverse,
-    fontSize: typography.sizes.base,
-    fontWeight: typography.weights.semibold,
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface.input,
+
+  // Messages
+  userBubble: {
+    alignSelf: 'flex-end',
+    maxWidth: '85%',
+    backgroundColor: colors.chat.userBubble,
     paddingHorizontal: spacing.lg,
-    borderRadius: borders.radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border.default,
-  },
-  savedButton: {
-    backgroundColor: colors.status.errorMuted,
-    borderColor: colors.status.error,
-  },
-
-  // Loading
-  loadingCard: {
-    backgroundColor: colors.surface.card,
+    paddingVertical: spacing.md,
     borderRadius: borders.radius.xl,
-    padding: spacing['3xl'],
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border.muted,
-  },
-  loadingText: {
-    fontSize: typography.sizes.base,
-    color: colors.text.secondary,
-    marginTop: spacing.lg,
-  },
-
-  // Offline
-  offlineCard: {
-    backgroundColor: colors.surface.card,
-    borderRadius: borders.radius.xl,
-    padding: spacing.xl,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border.muted,
-  },
-  offlineEmoji: {
-    fontSize: 48,
+    borderBottomRightRadius: borders.radius.xs,
     marginBottom: spacing.md,
   },
-  offlineTitle: {
-    fontSize: typography.sizes.xl,
-    fontWeight: typography.weights.semibold,
-    color: colors.text.primary,
+  userText: {
+    fontSize: typography.sizes.base,
+    color: colors.chat.userText,
+    lineHeight: 22,
+  },
+  messageImage: {
+    width: '100%',
+    height: 150,
+    borderRadius: borders.radius.md,
     marginBottom: spacing.sm,
   },
-  offlineText: {
+  assistantContainer: {
+    marginBottom: spacing.lg,
+    paddingRight: spacing['2xl'],
+  },
+  assistantText: {
     fontSize: typography.sizes.base,
-    color: colors.text.secondary,
-    textAlign: 'center',
+    color: colors.text.primary,
+    lineHeight: 24,
   },
 
-  // Empty
-  emptyCard: {
+  // Chips
+  chipsContainer: {
+    paddingBottom: spacing.md,
+  },
+  chipsScroll: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  chip: {
     backgroundColor: colors.surface.card,
-    borderRadius: borders.radius.xl,
-    padding: spacing.xl,
-    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: borders.radius.full,
     borderWidth: 1,
     borderColor: colors.border.muted,
   },
-  emptyText: {
-    fontSize: typography.sizes.base,
-    color: colors.text.tertiary,
-  },
-
-  // Spacer
-  spacer: {
-    flex: 1,
+  chipText: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.primary,
+    fontWeight: typography.weights.medium,
   },
 
   // Input
   inputContainer: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  inputWrapper: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     backgroundColor: colors.surface.input,
     borderRadius: borders.radius.xl,
     borderWidth: 1,
     borderColor: colors.surface.inputBorder,
     paddingHorizontal: spacing.md,
-    marginBottom: spacing.xl,
+    paddingVertical: spacing.xs,
+    minHeight: 48,
   },
   textInput: {
     flex: 1,
-    height: 52,
     fontSize: typography.sizes.base,
     color: colors.text.primary,
+    paddingVertical: spacing.sm,
+    maxHeight: 100,
   },
-  inputButton: {
-    width: 44,
-    height: 44,
+  inputActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  inputIconButton: {
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  sendButton: {
+    width: 32,
+    height: 32,
+    backgroundColor: colors.accent.primary,
+    borderRadius: borders.radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
   },
 });

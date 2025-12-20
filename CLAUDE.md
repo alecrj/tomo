@@ -8,11 +8,13 @@
 
 When someone lands in a new city, they open Tomo - not Google Maps, not TripAdvisor, not ChatGPT. Tomo gives them ONE confident recommendation, they tap "Take me there", and they're walking. No decision fatigue. A local friend in their pocket.
 
-**The Home Screen Philosophy:**
-- Show ONE smart recommendation with direct actions
-- Location/weather context
-- Input bar for anything else
-- That's it. Calm, confident, actionable.
+**The Home Screen Philosophy (Home IS Chat):**
+- Starts quiet: greeting + "Ask me anything" + category chips
+- Chips are shortcuts - tapping sends that message
+- When user asks something, show conversation inline
+- Response shows 2-3 PlaceCard options (first expanded, rest collapsed)
+- One expanded at a time - tap to toggle
+- No proactive recommendations - user initiates
 
 ---
 
@@ -20,27 +22,21 @@ When someone lands in a new city, they open Tomo - not Google Maps, not TripAdvi
 
 ### ⚠️ CRITICAL: ALWAYS USE THESE EXACT MODEL NAMES ⚠️
 
-**These are the CORRECT, CURRENT model names. DO NOT change them. DO NOT use old names.**
+**These are the CORRECT, CURRENT model names. DO NOT change them.**
 
 | Purpose | Model ID | API Endpoint | Notes |
 |---------|----------|--------------|-------|
-| **Main Chat AI** | `gpt-5.2` | `/v1/chat/completions` | Flagship reasoning model |
-| **Fast Tasks** | `gpt-5-mini` | `/v1/chat/completions` | Memory extraction, quick parsing |
-| **Voice/Realtime** | `gpt-realtime` | WebRTC or `/v1/realtime` | GA model (Aug 2025), replaces preview |
-| **Vision** | `gpt-5.2` | `/v1/chat/completions` | Has vision capabilities built-in |
-
-### ❌ DEPRECATED - DO NOT USE:
-- `gpt-4o` → Use `gpt-5.2` instead
-- `gpt-4o-mini` → Use `gpt-5-mini` instead
-- `gpt-4o-realtime-preview` → Use `gpt-realtime` instead (deprecated Feb 2026)
-- `gpt-4o-realtime-preview-2024-*` → Use `gpt-realtime` instead
+| **Main Chat AI** | `gpt-4o` | `/v1/chat/completions` | Latest flagship model |
+| **Fast Tasks** | `gpt-4o` | `/v1/chat/completions` | Memory extraction, quick parsing |
+| **Voice/Realtime** | `gpt-realtime` | WebRTC or `/v1/realtime` | GA model, voice conversations |
+| **Vision** | `gpt-4o` | `/v1/chat/completions` | Has vision capabilities built-in |
 
 ### Files That Use OpenAI Models:
 | File | Model | Purpose |
 |------|-------|---------|
-| `services/openai.ts` | `gpt-5.2` | Main chat, vision, trip summaries |
+| `services/openai.ts` | `gpt-4o` | Main chat, vision, trip summaries |
 | `services/realtime.ts` | `gpt-realtime` | Voice conversations |
-| `hooks/useMemoryExtraction.ts` | `gpt-5-mini` | Fast preference extraction |
+| `hooks/useMemoryExtraction.ts` | `gpt-4o` | Preference extraction |
 
 ---
 
@@ -399,31 +395,32 @@ A travel companion that:
 
 | Feature | Status | Confidence | Notes |
 |---------|--------|------------|-------|
-| **Core Chat AI** | ✅ 95% | HIGH | **GPT-5.2**, structured responses, context-aware + memory |
+| **Core Chat AI** | ✅ 95% | HIGH | **GPT-4o**, structured responses, context-aware + memory |
 | **Place Discovery** | ✅ 90% | HIGH | Google Places, photos, ratings, open status |
 | **Navigation** | ✅ 85% | MEDIUM | Needs real device testing (compass) |
 | **Map Explorer** | ✅ 85% | HIGH | Categories, search, selection |
-| **Settings** | ✅ 90% | HIGH | All preferences persist |
+| **Settings** | ✅ 90% | HIGH | All preferences + language selection |
 | **Saved Places** | ✅ 85% | MEDIUM | Complete, wired into chat |
-| **Memory System** | ✅ 90% | HIGH | **gpt-5-mini extraction → feeds back into chat** |
+| **Memory System** | ✅ 90% | HIGH | **gpt-4o extraction → feeds back into chat** |
 | **Offline Mode** | ✅ 85% | MEDIUM | Network detection + graceful fallbacks |
-| **Voice Mode** | ✅ 85% | MEDIUM | **gpt-realtime** - needs device testing |
-| **Camera/Translation** | ✅ 90% | HIGH | GPT-5.2 vision + smart prompt selection |
+| **Voice Mode** | ✅ 85% | MEDIUM | **gpt-realtime** + language preference |
+| **Camera/Translation** | ✅ 90% | HIGH | GPT-4o vision + smart prompt selection |
 | **Itinerary Map** | ✅ 90% | HIGH | Day's activities on map with route polyline |
 | **Route Optimization** | ✅ 90% | HIGH | Reorder waypoints for minimal walking |
 | **Expense Tracking** | ✅ 90% | HIGH | Full UI with budget progress, categories |
 | **Weather Forecast** | ✅ 85% | HIGH | 5-day forecast from OpenWeatherMap |
-| **Trip Recap** | ✅ 90% | HIGH | AI-generated summaries via GPT-5.2 |
+| **Trip Recap** | ✅ 90% | HIGH | AI-generated summaries via GPT-4o |
 | **Currency Converter** | ✅ 85% | HIGH | 25 currencies with swap/convert |
-| **Itinerary from Chat** | ✅ 90% | HIGH | **NEW** "Plan my day" creates full itinerary |
-| **Intelligent Home** | 🔄 REFACTORING | MEDIUM | Simplifying to one smart recommendation |
+| **Itinerary from Chat** | ✅ 90% | HIGH | "Plan my day" creates full itinerary |
+| **Conversational Home** | ✅ 90% | HIGH | **NEW** Home = Chat, category chips, no proactive |
+| **Language Preference** | ✅ 90% | HIGH | **NEW** 10 languages for voice + text |
 
 ### Needs Device Testing
 
 | Feature | Code Status | Notes |
 |---------|-------------|-------|
-| **Voice Realtime** | ✅ 100% | Uses `gpt-realtime`, full WebSocket implementation |
-| **Camera Translation** | ✅ 100% | Take photo → select prompt → GPT-5.2 vision → response |
+| **Voice Realtime** | ✅ 100% | Uses `gpt-realtime`, WebRTC implementation + language pref |
+| **Camera Translation** | ✅ 100% | Take photo → select prompt → GPT-4o vision → response |
 | **Notification Triggers** | ✅ 100% | All triggers wired, running every 30s |
 | **Compass Navigation** | ✅ 90% | Magnetometer-based, needs real device |
 | **Booking Links** | ✅ 80% | Deep links with web fallbacks |
@@ -721,6 +718,81 @@ generateTripSummary(tripData: TripSummaryInput): Promise<TripSummaryResult>
 ```
 
 **Status:** ~95% Complete. All core features now implemented. Ready for device testing.
+
+---
+
+### Session 18 (December 20, 2024) - Major Redesign: Home as Conversation
+
+**Philosophy Change: "Home IS Chat"**
+- Removed all proactive recommendations
+- Home screen now starts quiet with greeting + "Ask me anything" input
+- Category chips are shortcuts that send messages when tapped
+- Conversation happens inline on home screen
+- Clean dark theme (blacks, greys, whites - no teal)
+
+**Critical Fixes:**
+- ✅ **Fixed Model Names**: All instances of gpt-5.2/gpt-5-mini → gpt-4o
+- ✅ **Fixed Voice Language**: Added language preference so Tomo speaks user's chosen language
+- ✅ **Fixed Theme**: Removed teal accent, clean monochrome dark mode
+- ✅ **Language First in Onboarding**: Language selection is now the first step
+
+**New Features:**
+- ✅ **Language Preference**: Select from 10 languages (en, ja, ko, zh, es, fr, de, it, pt, th)
+- ✅ **PlaceCard Review Counts**: Now shows "★ 4.5 (2.3k)" format with cuisine type
+- ✅ **Multiple Photos**: PlaceCards now fetch up to 5 photos from Google Places
+- ✅ **Conversation-First Home**: Complete rewrite of `app/(tabs)/index.tsx`
+- ✅ **Language in Onboarding**: First thing users see is language selection
+
+**Files Modified:**
+- `services/openai.ts` - model: gpt-4o, multiple photos, reviewCount
+- `services/places.ts` - reviewCount in placeToSpot, buildPhotoUrl export
+- `hooks/useMemoryExtraction.ts` - model: gpt-4o
+- `app/(tabs)/index.tsx` - Complete rewrite as conversation screen
+- `app/(tabs)/_layout.tsx` - Clean tab styling, no teal
+- `app/voice.tsx` - Language preference in system prompt
+- `app/settings.tsx` - Language selector UI
+- `app/onboarding.tsx` - Language selection as first step
+- `stores/usePreferencesStore.ts` - Language type and LANGUAGE_NAMES
+- `constants/theme.ts` - Clean monochrome dark theme
+- `types/index.ts` - reviewCount and cuisine in PlaceCardData
+- `components/PlaceCard.tsx` - Rating with review count display
+
+---
+
+## 🚀 SESSION 19 PLAN: Polish & Ship
+
+### Priority 1: Device Testing
+Test on real iPhone to verify:
+- [ ] Voice mode speaks in selected language
+- [ ] Onboarding language selection works
+- [ ] Home screen conversation flow
+- [ ] PlaceCards show real photos
+- [ ] Navigation/compass works
+- [ ] Offline mode graceful fallbacks
+
+### Priority 2: Multiple PlaceCard Options
+Currently returns 1 place. Need to:
+- [ ] Update OpenAI prompt to return 2-3 options
+- [ ] Create collapsible PlaceCard component (first expanded, rest collapsed)
+- [ ] Add "one expanded at a time" behavior
+
+### Priority 3: Voice Navigation
+User reported voice can't navigate. Need to:
+- [ ] Wire navigation commands into realtime voice
+- [ ] Add "Take me to X" voice command handling
+- [ ] Test voice → navigation flow
+
+### Priority 4: Photo Carousel
+PlaceCards have multiple photos but need carousel UI:
+- [ ] Add horizontal photo carousel in PlaceCard
+- [ ] Swipe between photos
+- [ ] Pagination dots
+
+### Priority 5: Final Polish
+- [ ] Fix any keyboard issues (user reported blocking)
+- [ ] Test all flows end-to-end
+- [ ] Performance audit (no jank)
+- [ ] Ship to TestFlight
 
 ---
 

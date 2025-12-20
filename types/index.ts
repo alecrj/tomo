@@ -37,6 +37,7 @@ export interface Spot {
   name: string;
   description: string;
   rating?: number;
+  reviewCount?: number;
   priceLevel?: 1 | 2 | 3 | 4;
   photos?: string[];
   hours?: string;
@@ -229,7 +230,9 @@ export interface PlaceCardData {
   photo?: string;
   photos?: string[]; // Multiple photos for carousel
   rating?: number;
+  reviewCount?: number;
   priceLevel?: 1 | 2 | 3 | 4;
+  cuisine?: string; // "Thai", "Japanese", etc.
   address: string;
   distance?: string;
   walkTime?: string; // "8 min walk"

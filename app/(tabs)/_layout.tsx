@@ -2,11 +2,11 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
 import {
-  MessageSquare,
-  Map,
+  Feather,
+  MapPin,
+  MessageCircle,
   Heart,
   User,
-  Pencil,
 } from 'lucide-react-native';
 import { colors, spacing } from '../../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,14 +19,14 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: colors.background.secondary,
+          backgroundColor: colors.background.primary,
           borderTopColor: colors.border.muted,
           borderTopWidth: 1,
           height: 60 + insets.bottom,
           paddingBottom: insets.bottom,
           paddingTop: spacing.sm,
         },
-        tabBarActiveTintColor: colors.accent.primary,
+        tabBarActiveTintColor: colors.text.primary,
         tabBarInactiveTintColor: colors.text.tertiary,
         tabBarShowLabel: true,
         tabBarLabelStyle: {
@@ -39,30 +39,32 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Tomo',
+          title: 'Home',
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.centerTab, focused && styles.centerTabActive]}>
-              <MessageSquare
-                size={22}
-                color={focused ? colors.text.inverse : color}
-                fill={focused ? colors.text.inverse : 'transparent'}
-              />
-            </View>
+            <Feather size={22} color={color} />
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="plan"
-        options={{
-          title: 'Plan',
-          tabBarIcon: ({ color }) => <Pencil size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="map"
         options={{
           title: 'Map',
-          tabBarIcon: ({ color }) => <Map size={22} color={color} />,
+          tabBarIcon: ({ color }) => <MapPin size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="plan"
+        options={{
+          title: 'Chat',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.chatTab, focused && styles.chatTabActive]}>
+              <MessageCircle
+                size={20}
+                color={focused ? colors.text.inverse : color}
+                fill={focused ? colors.text.primary : 'transparent'}
+              />
+            </View>
+          ),
         }}
       />
       <Tabs.Screen
@@ -84,14 +86,14 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  centerTab: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  chatTab: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  centerTabActive: {
-    backgroundColor: colors.accent.primary,
+  chatTabActive: {
+    backgroundColor: colors.text.primary,
   },
 });

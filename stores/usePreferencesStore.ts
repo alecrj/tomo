@@ -8,6 +8,21 @@ export type EmojiUsage = 'lots' | 'some' | 'none';
 export type ResponseLength = 'brief' | 'balanced' | 'detailed';
 export type NotificationLevel = 'minimal' | 'balanced' | 'full';
 
+// Supported languages for Tomo voice responses
+export type Language = 'en' | 'ja' | 'ko' | 'zh' | 'es' | 'fr' | 'de' | 'it' | 'pt' | 'th';
+export const LANGUAGE_NAMES: Record<Language, string> = {
+  en: 'English',
+  ja: '日本語 (Japanese)',
+  ko: '한국어 (Korean)',
+  zh: '中文 (Chinese)',
+  es: 'Español (Spanish)',
+  fr: 'Français (French)',
+  de: 'Deutsch (German)',
+  it: 'Italiano (Italian)',
+  pt: 'Português (Portuguese)',
+  th: 'ไทย (Thai)',
+};
+
 interface PreferencesState {
   homeBase: HomeBase | null;
   walkingTolerance: 'low' | 'medium' | 'high';
@@ -16,6 +31,9 @@ interface PreferencesState {
   interests: string[];
   avoidCrowds: boolean;
   temperatureUnit: 'C' | 'F';
+
+  // Language preference (for voice and text responses)
+  language: Language;
 
   // Tomo Personality
   tomoTone: TomoTone;
@@ -40,6 +58,7 @@ interface PreferencesState {
   removeInterest: (interest: string) => void;
   setAvoidCrowds: (avoid: boolean) => void;
   setTemperatureUnit: (unit: 'C' | 'F') => void;
+  setLanguage: (language: Language) => void;
   setTomoTone: (tone: TomoTone) => void;
   setEmojiUsage: (usage: EmojiUsage) => void;
   setResponseLength: (length: ResponseLength) => void;
@@ -60,6 +79,8 @@ const initialState = {
   interests: [] as string[],
   avoidCrowds: false,
   temperatureUnit: 'C' as const,
+  // Language preference - default to English
+  language: 'en' as Language,
   // Tomo Personality
   tomoTone: 'friendly' as TomoTone,
   emojiUsage: 'some' as EmojiUsage,
@@ -104,6 +125,7 @@ export const usePreferencesStore = create<PreferencesState>()(
 
       setAvoidCrowds: (avoid) => set({ avoidCrowds: avoid }),
       setTemperatureUnit: (unit) => set({ temperatureUnit: unit }),
+      setLanguage: (language) => set({ language }),
       setTomoTone: (tone) => set({ tomoTone: tone }),
       setEmojiUsage: (usage) => set({ emojiUsage: usage }),
       setResponseLength: (length) => set({ responseLength: length }),

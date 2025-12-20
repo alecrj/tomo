@@ -13,9 +13,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
-import { ArrowLeft, MapPin, DollarSign, Utensils, Heart, Users, Check, Navigation, Brain, Thermometer, MessageCircle, Bell, Smile, AlignLeft, Train, Clock, CloudRain, Wallet, Calendar } from 'lucide-react-native';
+import { ArrowLeft, MapPin, DollarSign, Utensils, Heart, Users, Check, Navigation, Brain, Thermometer, MessageCircle, Bell, Smile, AlignLeft, Train, Clock, CloudRain, Wallet, Calendar, Globe } from 'lucide-react-native';
 import { colors, spacing, typography, shadows, borders } from '../constants/theme';
-import { usePreferencesStore, TomoTone, EmojiUsage, ResponseLength } from '../stores/usePreferencesStore';
+import { usePreferencesStore, TomoTone, EmojiUsage, ResponseLength, Language, LANGUAGE_NAMES } from '../stores/usePreferencesStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useOnboardingStore } from '../stores/useOnboardingStore';
@@ -51,6 +51,7 @@ export default function SettingsScreen() {
   const [dietary, setDietary] = useState<Set<string>>(new Set(preferences.dietary));
   const dietaryOptions = ['vegetarian', 'vegan', 'gluten-free', 'halal', 'kosher', 'none'];
   const [temperatureUnit, setTemperatureUnit] = useState<'C' | 'F'>(preferences.temperatureUnit);
+  const [language, setLanguage] = useState<Language>(preferences.language);
 
   const [interests, setInterests] = useState<Set<string>>(new Set(preferences.interests));
   const interestOptions = ['food', 'culture', 'nightlife', 'nature', 'shopping', 'iconic'];
@@ -156,6 +157,7 @@ export default function SettingsScreen() {
     preferences.setBudgetLevel(budgetLevel);
     preferences.setAvoidCrowds(avoidCrowds);
     preferences.setTemperatureUnit(temperatureUnit);
+    preferences.setLanguage(language);
     preferences.setTomoTone(tomoTone);
     preferences.setEmojiUsage(emojiUsage);
     preferences.setResponseLength(responseLength);
@@ -604,6 +606,37 @@ export default function SettingsScreen() {
                 trackColor={{ false: colors.background.tertiary, true: colors.accent.primary }}
                 thumbColor={colors.text.primary}
               />
+            </View>
+          </View>
+
+          {/* Language Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Globe size={20} color={colors.accent.primary} />
+              <Text style={styles.sectionTitle}>Language</Text>
+            </View>
+            <Text style={styles.sectionDescription}>
+              Tomo will speak and respond in this language.
+            </Text>
+
+            <View style={styles.chipGroup}>
+              {(Object.keys(LANGUAGE_NAMES) as Language[]).map((lang) => (
+                <TouchableOpacity
+                  key={lang}
+                  style={[styles.chip, language === lang && styles.chipSelected]}
+                  onPress={() => {
+                    safeHaptics.selection();
+                    setLanguage(lang);
+                  }}
+                >
+                  {language === lang && (
+                    <Check size={16} color={colors.text.inverse} style={styles.chipIcon} />
+                  )}
+                  <Text style={[styles.chipText, language === lang && styles.chipTextSelected]}>
+                    {LANGUAGE_NAMES[lang]}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
 
