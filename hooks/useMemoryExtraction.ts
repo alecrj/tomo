@@ -35,7 +35,7 @@ async function extractMemoriesWithAI(message: string, signal?: AbortSignal): Pro
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Fast + capable model for extraction
+        model: 'gpt-5-mini', // Fast + capable model for extraction
         messages: [
           {
             role: 'system',
@@ -197,7 +197,10 @@ function isSimilarMemoryExists(memories: Memory[], newContent: string): boolean 
 export function useMemoryExtraction() {
   const processedMessagesRef = useRef<Set<string>>(new Set());
   const aiProcessingRef = useRef<Set<string>>(new Set()); // Track messages being processed by AI
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // Use a Map to track AbortControllers per message ID to avoid race conditions
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
+  // Track last cleanup to prevent memory leaks
+  const lastCleanupRef = useRef<number>(Date.now());
 
   // Memory store
   const memories = useMemoryStore((state) => state.memories);
@@ -234,6 +237,22 @@ export function useMemoryExtraction() {
   }, []);
 
   /**
+   * Cleanup old processed messages to prevent memory leaks
+   */
+  const cleanupProcessedMessages = useCallback(() => {
+    const now = Date.now();
+    const oneHourMs = 60 * 60 * 1000;
+
+    // Clean up if it's been more than an hour OR if Sets are too large
+    if (now - lastCleanupRef.current > oneHourMs || processedMessagesRef.current.size > 500) {
+      console.log('[MemoryExtraction] Cleaning up processed messages tracker');
+      processedMessagesRef.current.clear();
+      aiProcessingRef.current.clear();
+      lastCleanupRef.current = now;
+    }
+  }, []);
+
+  /**
    * Process a single message with AI extraction
    */
   const processMessageWithAI = useCallback(async (message: ChatMessage) => {
@@ -242,9 +261,10 @@ export function useMemoryExtraction() {
 
     aiProcessingRef.current.add(message.id);
 
-    // Create new abort controller for this request
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
+    // Create new abort controller for THIS specific message (avoids race condition)
+    const abortController = new AbortController();
+    abortControllersRef.current.set(message.id, abortController);
+    const signal = abortController.signal;
 
     try {
       // Try AI extraction first
@@ -299,18 +319,25 @@ export function useMemoryExtraction() {
         }
       }
     } catch (error) {
-      console.error('[MemoryExtraction] Error processing message:', error);
-      // Fallback to patterns on error
-      const patternMemories = extractWithPatterns(message);
-      for (const learning of patternMemories) {
-        if (!isSimilarMemoryExists(memories, learning.content)) {
-          addMemory({
-            type: learning.type,
-            category: learning.category,
-            content: learning.content,
-          });
+      // Don't log abort errors - they're intentional
+      if (error instanceof Error && error.name !== 'AbortError') {
+        console.error('[MemoryExtraction] Error processing message:', error);
+        // Fallback to patterns on error
+        const patternMemories = extractWithPatterns(message);
+        for (const learning of patternMemories) {
+          if (!isSimilarMemoryExists(memories, learning.content)) {
+            addMemory({
+              type: learning.type,
+              category: learning.category,
+              content: learning.content,
+            });
+          }
         }
       }
+    } finally {
+      // Always cleanup: remove from processing set and abort controller map
+      aiProcessingRef.current.delete(message.id);
+      abortControllersRef.current.delete(message.id);
     }
   }, [memories, addMemory, addNotification, extractWithPatterns]);
 
@@ -318,6 +345,9 @@ export function useMemoryExtraction() {
    * Process new messages and extract memories
    */
   const processMessages = useCallback(() => {
+    // Periodically cleanup to prevent memory leaks
+    cleanupProcessedMessages();
+
     const currentConversation = conversations.find((c) => c.id === currentConversationId);
     if (!currentConversation) return;
 
@@ -334,19 +364,21 @@ export function useMemoryExtraction() {
         processMessageWithAI(message);
       }
     }
-  }, [conversations, currentConversationId, processMessageWithAI]);
+  }, [conversations, currentConversationId, processMessageWithAI, cleanupProcessedMessages]);
 
   // Process messages when conversation changes
   useEffect(() => {
     processMessages();
   }, [processMessages]);
 
-  // Cleanup: abort any pending requests on unmount
+  // Cleanup: abort ALL pending requests on unmount
   useEffect(() => {
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      // Abort all in-flight requests
+      abortControllersRef.current.forEach((controller) => {
+        controller.abort();
+      });
+      abortControllersRef.current.clear();
     };
   }, []);
 

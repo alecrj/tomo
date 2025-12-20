@@ -16,6 +16,7 @@ interface NotificationTracker {
   lastWeatherCondition: WeatherCondition | null;
   notifiedActivityIds: Set<string>;
   notifiedClosingPlaces: Set<string>;
+  lastCleanup: number; // Timestamp of last cleanup to prevent memory leaks
 }
 
 /**
@@ -32,7 +33,32 @@ export function useNotificationTriggers() {
     lastWeatherCondition: null,
     notifiedActivityIds: new Set(),
     notifiedClosingPlaces: new Set(),
+    lastCleanup: Date.now(),
   });
+
+  /**
+   * Cleanup old tracked notifications to prevent memory leaks
+   * Runs daily or when Sets exceed 100 items
+   */
+  const cleanupTrackedNotifications = useCallback(() => {
+    const tracker = trackerRef.current;
+    const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+
+    // Clean up if it's been more than a day OR if Sets are too large
+    const shouldCleanup =
+      now - tracker.lastCleanup > oneDayMs ||
+      tracker.notifiedActivityIds.size > 100 ||
+      tracker.notifiedClosingPlaces.size > 100;
+
+    if (shouldCleanup) {
+      console.log('[NotificationTriggers] Cleaning up tracked notifications');
+      tracker.notifiedActivityIds.clear();
+      tracker.notifiedClosingPlaces.clear();
+      tracker.lastBudgetWarningPercent = null;
+      tracker.lastCleanup = now;
+    }
+  }, []);
 
   // Notification store
   const {
@@ -233,11 +259,15 @@ export function useNotificationTriggers() {
    * Run all triggers
    */
   const runAllTriggers = useCallback(() => {
+    // First, cleanup old tracked data to prevent memory leaks
+    cleanupTrackedNotifications();
+
+    // Then run all checks
     checkBudgetTrigger();
     checkWeatherTrigger();
     checkItineraryTrigger();
     checkPlaceClosingTrigger();
-  }, [checkBudgetTrigger, checkWeatherTrigger, checkItineraryTrigger, checkPlaceClosingTrigger]);
+  }, [cleanupTrackedNotifications, checkBudgetTrigger, checkWeatherTrigger, checkItineraryTrigger, checkPlaceClosingTrigger]);
 
   // Run triggers on mount and at interval
   useEffect(() => {

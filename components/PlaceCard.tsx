@@ -38,7 +38,7 @@ const { width: screenWidth } = Dimensions.get('window');
 const IMAGE_WIDTH = screenWidth - spacing.lg * 4; // Account for message padding
 const IMAGE_HEIGHT = 180;
 
-export function PlaceCard({
+function PlaceCardComponent({
   placeCard,
   currencySymbol = '$',
   onTakeMeThere,
@@ -422,3 +422,26 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
 });
+
+// Custom comparison for React.memo - only re-render when data changes
+function arePropsEqual(prevProps: PlaceCardProps, nextProps: PlaceCardProps): boolean {
+  // Compare primitive props
+  if (prevProps.currencySymbol !== nextProps.currencySymbol) return false;
+  if (prevProps.isSaved !== nextProps.isSaved) return false;
+  if (prevProps.showBookingOptions !== nextProps.showBookingOptions) return false;
+
+  // Compare placeCard by ID and key fields (avoid deep comparison)
+  const prevCard = prevProps.placeCard;
+  const nextCard = nextProps.placeCard;
+  if (prevCard.placeId !== nextCard.placeId) return false;
+  if (prevCard.name !== nextCard.name) return false;
+  if (prevCard.rating !== nextCard.rating) return false;
+  if (prevCard.openNow !== nextCard.openNow) return false;
+  if (prevCard.photo !== nextCard.photo) return false;
+  if (prevCard.photos?.length !== nextCard.photos?.length) return false;
+
+  // Callbacks are stable if parent uses useCallback, skip deep comparison
+  return true;
+}
+
+export const PlaceCard = React.memo(PlaceCardComponent, arePropsEqual);

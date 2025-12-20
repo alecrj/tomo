@@ -36,10 +36,12 @@ function getOpenTableUrl(placeName: string, coordinates: Coordinates): string {
 
 /**
  * Generate booking URL for Resy
+ * Note: Resy search URL is location-agnostic when using direct search
  */
-function getResyUrl(placeName: string, coordinates: Coordinates): string {
+function getResyUrl(placeName: string, _coordinates: Coordinates): string {
   const searchQuery = encodeURIComponent(placeName);
-  return `https://resy.com/cities/ny?query=${searchQuery}`;
+  // Use Resy's location-agnostic search - it will auto-detect or show results from all cities
+  return `https://resy.com/s/${searchQuery}`;
 }
 
 /**

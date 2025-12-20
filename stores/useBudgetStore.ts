@@ -9,9 +9,12 @@ interface BudgetState {
   dailyBudget: number;
   expenses: Expense[];
 
-  // Computed getters
+  // Computed getters - these are methods, call outside of selectors
   spentToday: () => number;
   remainingToday: () => number;
+
+  // Optimized derived selectors (use these in React components)
+  getTodayExpenses: () => Expense[];
 
   // Actions
   setTripBudget: (total: number, days: number) => void;
@@ -33,23 +36,24 @@ export const useBudgetStore = create<BudgetState>()(
     (set, get) => ({
       ...initialState,
 
-      // Computed values
-      spentToday: () => {
+      // Helper to get today's date range (cached per call)
+      getTodayExpenses: () => {
         const expenses = get().expenses;
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const todayEnd = todayStart + 86400000 - 1; // 24 hours - 1ms
 
-        return expenses
-          .filter((e) => e.timestamp >= todayStart.getTime() && e.timestamp <= todayEnd.getTime())
-          .reduce((sum, e) => sum + e.amount, 0);
+        return expenses.filter((e) => e.timestamp >= todayStart && e.timestamp <= todayEnd);
+      },
+
+      // Computed values - optimized to reuse getTodayExpenses
+      spentToday: () => {
+        return get().getTodayExpenses().reduce((sum, e) => sum + e.amount, 0);
       },
 
       remainingToday: () => {
-        const dailyBudget = get().dailyBudget;
-        const spentToday = get().spentToday();
-        return dailyBudget - spentToday;
+        const { dailyBudget, spentToday } = get();
+        return dailyBudget - spentToday();
       },
 
       // Actions

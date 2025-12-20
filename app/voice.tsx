@@ -1,3 +1,17 @@
+/**
+ * Voice Mode Screen
+ *
+ * Real-time voice conversation with Tomo using OpenAI's gpt-realtime model.
+ * Uses WebRTC for low-latency, natural voice-to-voice interaction.
+ *
+ * How it works:
+ * 1. Screen opens → WebRTC connection established
+ * 2. User speaks → Server VAD detects speech → Audio streamed to OpenAI
+ * 3. OpenAI responds → Audio streams back → Plays automatically
+ * 4. User can interrupt Tomo mid-sentence
+ * 5. No push-to-talk needed - natural conversation flow
+ */
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -17,17 +31,17 @@ import {
   Volume2,
   Loader2,
   MessageSquare,
+  Phone,
+  PhoneOff,
 } from 'lucide-react-native';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import { colors, spacing, borders, typography } from '../constants/theme';
 import { useLocationStore } from '../stores/useLocationStore';
-import { usePreferencesStore } from '../stores/usePreferencesStore';
 import {
   initRealtimeSession,
   closeRealtimeSession,
-  startListening,
-  stopListening,
-  sendTextMessage,
+  setMicrophoneMuted,
+  interruptResponse,
   RealtimeConnectionState,
   VoiceActivityState,
   RealtimeMessage,
@@ -36,13 +50,16 @@ import {
 export default function VoiceScreen() {
   const router = useRouter();
 
-  // Location context
+  // Location context for system prompt
   const neighborhood = useLocationStore((state) => state.neighborhood);
   const coordinates = useLocationStore((state) => state.coordinates);
 
-  // State
+  // Connection and voice state
   const [connectionState, setConnectionState] = useState<RealtimeConnectionState>('disconnected');
   const [voiceState, setVoiceState] = useState<VoiceActivityState>('idle');
+  const [isMuted, setIsMuted] = useState(false);
+
+  // Conversation
   const [transcript, setTranscript] = useState<string>('');
   const [assistantText, setAssistantText] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +70,10 @@ export default function VoiceScreen() {
   const waveAnim1 = useRef(new Animated.Value(0)).current;
   const waveAnim2 = useRef(new Animated.Value(0)).current;
   const waveAnim3 = useRef(new Animated.Value(0)).current;
+
+  // Animation refs for cleanup
+  const pulseAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const waveAnimationsRef = useRef<Animated.CompositeAnimation[]>([]);
 
   // Scroll ref
   const scrollRef = useRef<ScrollView>(null);
@@ -87,16 +108,23 @@ You can help with:
   // Initialize session on mount
   useEffect(() => {
     const initSession = async () => {
+      console.log('[VoiceScreen] Initializing realtime session...');
+
       const success = await initRealtimeSession(
         {
           onConnectionStateChange: (state) => {
+            console.log('[VoiceScreen] Connection state:', state);
             setConnectionState(state);
             if (state === 'connected') {
               safeHaptics.notification(NotificationFeedbackType.Success);
             }
           },
-          onVoiceActivityChange: setVoiceState,
+          onVoiceActivityChange: (state) => {
+            console.log('[VoiceScreen] Voice activity:', state);
+            setVoiceState(state);
+          },
           onTranscript: (text, isFinal) => {
+            console.log('[VoiceScreen] Transcript:', text, 'final:', isFinal);
             setTranscript(text);
             if (isFinal && text) {
               setMessages((prev) => [
@@ -110,6 +138,7 @@ You can help with:
             setAssistantText((prev) => prev + text);
           },
           onError: (err) => {
+            console.error('[VoiceScreen] Error:', err);
             setError(err);
             safeHaptics.notification(NotificationFeedbackType.Error);
           },
@@ -125,6 +154,7 @@ You can help with:
     initSession();
 
     return () => {
+      console.log('[VoiceScreen] Cleaning up...');
       closeRealtimeSession();
     };
   }, [buildSystemPrompt]);
@@ -145,35 +175,52 @@ You can help with:
     scrollRef.current?.scrollToEnd({ animated: true });
   }, [messages, transcript, assistantText]);
 
-  // Pulse animation for mic button
+  // Pulse animation for listening state
   useEffect(() => {
+    if (pulseAnimationRef.current) {
+      pulseAnimationRef.current.stop();
+      pulseAnimationRef.current = null;
+    }
+
     if (voiceState === 'listening') {
-      Animated.loop(
+      const animation = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.2,
-            duration: 500,
+            toValue: 1.15,
+            duration: 600,
             easing: Easing.ease,
             useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
             toValue: 1,
-            duration: 500,
+            duration: 600,
             easing: Easing.ease,
             useNativeDriver: true,
           }),
         ])
-      ).start();
+      );
+      pulseAnimationRef.current = animation;
+      animation.start();
     } else {
       pulseAnim.setValue(1);
     }
+
+    return () => {
+      if (pulseAnimationRef.current) {
+        pulseAnimationRef.current.stop();
+        pulseAnimationRef.current = null;
+      }
+    };
   }, [voiceState, pulseAnim]);
 
   // Wave animation for speaking state
   useEffect(() => {
+    waveAnimationsRef.current.forEach((anim) => anim.stop());
+    waveAnimationsRef.current = [];
+
     if (voiceState === 'speaking') {
-      const animateWave = (anim: Animated.Value, delay: number) => {
-        Animated.loop(
+      const animateWave = (anim: Animated.Value, delay: number): Animated.CompositeAnimation => {
+        return Animated.loop(
           Animated.sequence([
             Animated.delay(delay),
             Animated.timing(anim, {
@@ -183,74 +230,128 @@ You can help with:
               useNativeDriver: true,
             }),
             Animated.timing(anim, {
-              toValue: 0,
+              toValue: 0.3,
               duration: 300,
               easing: Easing.ease,
               useNativeDriver: true,
             }),
           ])
-        ).start();
+        );
       };
 
-      animateWave(waveAnim1, 0);
-      animateWave(waveAnim2, 100);
-      animateWave(waveAnim3, 200);
+      const anim1 = animateWave(waveAnim1, 0);
+      const anim2 = animateWave(waveAnim2, 100);
+      const anim3 = animateWave(waveAnim3, 200);
+
+      waveAnimationsRef.current = [anim1, anim2, anim3];
+      anim1.start();
+      anim2.start();
+      anim3.start();
     } else {
-      waveAnim1.setValue(0);
-      waveAnim2.setValue(0);
-      waveAnim3.setValue(0);
+      waveAnim1.setValue(0.3);
+      waveAnim2.setValue(0.3);
+      waveAnim3.setValue(0.3);
     }
+
+    return () => {
+      waveAnimationsRef.current.forEach((anim) => anim.stop());
+      waveAnimationsRef.current = [];
+    };
   }, [voiceState, waveAnim1, waveAnim2, waveAnim3]);
 
-  const handleMicPress = useCallback(async () => {
-    safeHaptics.impact(ImpactFeedbackStyle.Medium);
+  // Handle mute toggle
+  const handleMuteToggle = useCallback(() => {
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    setMicrophoneMuted(newMuted);
+  }, [isMuted]);
 
-    if (voiceState === 'listening') {
-      await stopListening();
-    } else if (voiceState === 'idle' && connectionState === 'connected') {
-      await startListening();
+  // Handle interrupt (tap during speaking to stop Tomo)
+  const handleInterrupt = useCallback(() => {
+    if (voiceState === 'speaking') {
+      safeHaptics.impact(ImpactFeedbackStyle.Medium);
+      interruptResponse();
     }
-  }, [voiceState, connectionState]);
+  }, [voiceState]);
 
+  // Handle close
   const handleClose = () => {
     safeHaptics.impact(ImpactFeedbackStyle.Light);
     closeRealtimeSession();
     router.back();
   };
 
+  // Get status text
   const getStatusText = () => {
+    if (error) return error;
+
     switch (connectionState) {
       case 'connecting':
-        return 'Connecting...';
+        return 'Connecting to Tomo...';
       case 'error':
-        return error || 'Connection error';
+        return 'Connection failed';
       case 'disconnected':
         return 'Disconnected';
       case 'connected':
+        if (isMuted) return 'Microphone muted';
         switch (voiceState) {
           case 'listening':
             return 'Listening...';
           case 'processing':
-            return 'Processing...';
+            return 'Thinking...';
           case 'speaking':
-            return 'Tomo is speaking...';
+            return 'Tomo is speaking (tap to interrupt)';
           default:
-            return 'Tap to speak';
+            return 'Ready — just start talking';
         }
     }
   };
 
-  const getMicIcon = () => {
-    if (voiceState === 'listening') {
-      return <MicOff size={32} color={colors.status.error} />;
+  // Get main indicator icon
+  const getMainIndicator = () => {
+    if (connectionState === 'connecting') {
+      return <Loader2 size={40} color={colors.text.secondary} />;
     }
+
+    if (connectionState !== 'connected') {
+      return <PhoneOff size={40} color={colors.status.error} />;
+    }
+
     if (voiceState === 'speaking') {
-      return <Volume2 size={32} color={colors.accent.primary} />;
+      return (
+        <View style={styles.waveContainer}>
+          <Animated.View
+            style={[
+              styles.wave,
+              { transform: [{ scaleY: waveAnim1 }] },
+            ]}
+          />
+          <Animated.View
+            style={[
+              styles.wave,
+              { transform: [{ scaleY: waveAnim2 }] },
+            ]}
+          />
+          <Animated.View
+            style={[
+              styles.wave,
+              { transform: [{ scaleY: waveAnim3 }] },
+            ]}
+          />
+        </View>
+      );
     }
+
+    if (voiceState === 'listening') {
+      return <Mic size={40} color={colors.status.success} />;
+    }
+
     if (voiceState === 'processing') {
-      return <Loader2 size={32} color={colors.text.secondary} />;
+      return <Loader2 size={40} color={colors.accent.primary} />;
     }
-    return <Mic size={32} color={colors.text.primary} />;
+
+    return <Mic size={40} color={colors.text.primary} />;
   };
 
   return (
@@ -261,8 +362,21 @@ You can help with:
           <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
             <X size={24} color={colors.text.primary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Voice Mode</Text>
-          <View style={styles.headerSpacer} />
+          <View style={styles.headerCenter}>
+            <Phone size={16} color={connectionState === 'connected' ? colors.status.success : colors.text.tertiary} />
+            <Text style={styles.headerTitle}>Voice Mode</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.muteButton, isMuted && styles.muteButtonActive]}
+            onPress={handleMuteToggle}
+            disabled={connectionState !== 'connected'}
+          >
+            {isMuted ? (
+              <MicOff size={20} color={colors.status.error} />
+            ) : (
+              <Mic size={20} color={colors.text.secondary} />
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Conversation */}
@@ -272,14 +386,12 @@ You can help with:
           contentContainerStyle={styles.conversationContent}
           showsVerticalScrollIndicator={false}
         >
-          {messages.length === 0 && !transcript && !assistantText && (
+          {messages.length === 0 && !transcript && !assistantText && connectionState === 'connected' && (
             <View style={styles.emptyState}>
               <MessageSquare size={48} color={colors.text.tertiary} />
-              <Text style={styles.emptyText}>
-                Tap the microphone and start speaking
-              </Text>
+              <Text style={styles.emptyText}>Just start talking</Text>
               <Text style={styles.emptySubtext}>
-                Ask me anything - directions, recommendations, translations...
+                Ask me anything — directions, recommendations, translations, or just chat.
               </Text>
             </View>
           )}
@@ -295,7 +407,7 @@ You can help with:
               <Text
                 style={[
                   styles.messageText,
-                  msg.type === 'user' ? styles.userText : styles.assistantText,
+                  msg.type === 'user' ? styles.userText : styles.assistantTextStyle,
                 ]}
               >
                 {msg.content}
@@ -306,73 +418,54 @@ You can help with:
           {/* Live transcript */}
           {transcript && (
             <View style={[styles.messageBubble, styles.userBubble, styles.liveBubble]}>
-              <Text style={[styles.messageText, styles.userText]}>
-                {transcript}...
-              </Text>
+              <Text style={[styles.messageText, styles.userText]}>{transcript}...</Text>
             </View>
           )}
 
           {/* Live assistant response */}
           {assistantText && (
             <View style={[styles.messageBubble, styles.assistantBubble, styles.liveBubble]}>
-              <Text style={[styles.messageText, styles.assistantText]}>
-                {assistantText}
-              </Text>
+              <Text style={[styles.messageText, styles.assistantTextStyle]}>{assistantText}</Text>
             </View>
           )}
         </ScrollView>
 
-        {/* Voice Activity Indicator */}
-        <View style={styles.voiceIndicator}>
-          {voiceState === 'speaking' && (
-            <View style={styles.waveContainer}>
-              <Animated.View
-                style={[
-                  styles.wave,
-                  {
-                    transform: [{ scaleY: waveAnim1.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }],
-                  },
-                ]}
-              />
-              <Animated.View
-                style={[
-                  styles.wave,
-                  {
-                    transform: [{ scaleY: waveAnim2.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }],
-                  },
-                ]}
-              />
-              <Animated.View
-                style={[
-                  styles.wave,
-                  {
-                    transform: [{ scaleY: waveAnim3.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }],
-                  },
-                ]}
-              />
-            </View>
-          )}
-        </View>
+        {/* Main Voice Indicator */}
+        <TouchableOpacity
+          style={styles.voiceIndicatorContainer}
+          onPress={handleInterrupt}
+          disabled={voiceState !== 'speaking'}
+          activeOpacity={voiceState === 'speaking' ? 0.7 : 1}
+        >
+          <Animated.View
+            style={[
+              styles.voiceIndicator,
+              connectionState === 'connected' && voiceState === 'listening' && styles.voiceIndicatorActive,
+              { transform: [{ scale: pulseAnim }] },
+            ]}
+          >
+            {getMainIndicator()}
+          </Animated.View>
+        </TouchableOpacity>
 
         {/* Status Text */}
-        <Text style={styles.statusText}>{getStatusText()}</Text>
+        <Text style={[styles.statusText, error && styles.statusTextError]}>
+          {getStatusText()}
+        </Text>
 
-        {/* Mic Button */}
-        <View style={styles.micContainer}>
-          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-            <TouchableOpacity
-              style={[
-                styles.micButton,
-                voiceState === 'listening' && styles.micButtonActive,
-                connectionState !== 'connected' && styles.micButtonDisabled,
-              ]}
-              onPress={handleMicPress}
-              disabled={connectionState !== 'connected' || voiceState === 'processing' || voiceState === 'speaking'}
-              activeOpacity={0.8}
-            >
-              {getMicIcon()}
-            </TouchableOpacity>
-          </Animated.View>
+        {/* Connection indicator */}
+        <View style={styles.connectionIndicator}>
+          <View
+            style={[
+              styles.connectionDot,
+              connectionState === 'connected' && styles.connectionDotConnected,
+              connectionState === 'connecting' && styles.connectionDotConnecting,
+              connectionState === 'error' && styles.connectionDotError,
+            ]}
+          />
+          <Text style={styles.connectionText}>
+            {connectionState === 'connected' ? 'Connected to gpt-realtime' : connectionState}
+          </Text>
         </View>
       </SafeAreaView>
     </View>
@@ -401,16 +494,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: {
+  headerCenter: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  headerTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
     color: colors.text.primary,
-    textAlign: 'center',
   },
-  headerSpacer: {
+  muteButton: {
     width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
   },
+  muteButtonActive: {
+    backgroundColor: colors.status.errorMuted,
+  },
+
+  // Conversation
   conversationContainer: {
     flex: 1,
   },
@@ -424,11 +531,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing['4xl'],
   },
   emptyText: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.medium,
-    color: colors.text.secondary,
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.semibold,
+    color: colors.text.primary,
     marginTop: spacing.lg,
-    textAlign: 'center',
   },
   emptySubtext: {
     fontSize: typography.sizes.base,
@@ -436,6 +542,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     textAlign: 'center',
     maxWidth: 280,
+    lineHeight: 22,
   },
   messageBubble: {
     maxWidth: '85%',
@@ -464,13 +571,28 @@ const styles = StyleSheet.create({
   userText: {
     color: colors.chat.userText,
   },
-  assistantText: {
+  assistantTextStyle: {
     color: colors.text.primary,
   },
+
+  // Voice Indicator
+  voiceIndicatorContainer: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+  },
   voiceIndicator: {
-    height: 60,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.background.secondary,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: colors.border.default,
+  },
+  voiceIndicatorActive: {
+    borderColor: colors.status.success,
+    backgroundColor: colors.status.successMuted,
   },
   waveContainer: {
     flexDirection: 'row',
@@ -485,32 +607,44 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent.primary,
     borderRadius: 3,
   },
+
+  // Status
   statusText: {
     fontSize: typography.sizes.base,
     color: colors.text.secondary,
     textAlign: 'center',
-    marginBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
-  micContainer: {
-    alignItems: 'center',
-    paddingBottom: spacing['2xl'],
+  statusTextError: {
+    color: colors.status.error,
   },
-  micButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.background.secondary,
+
+  // Connection indicator
+  connectionIndicator: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: colors.accent.primary,
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    paddingBottom: spacing['2xl'],
   },
-  micButtonActive: {
-    backgroundColor: colors.status.errorMuted,
-    borderColor: colors.status.error,
+  connectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.text.tertiary,
   },
-  micButtonDisabled: {
-    opacity: 0.5,
-    borderColor: colors.text.tertiary,
+  connectionDotConnected: {
+    backgroundColor: colors.status.success,
+  },
+  connectionDotConnecting: {
+    backgroundColor: colors.status.warning,
+  },
+  connectionDotError: {
+    backgroundColor: colors.status.error,
+  },
+  connectionText: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.tertiary,
   },
 });

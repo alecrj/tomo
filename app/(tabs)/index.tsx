@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   StatusBar,
@@ -15,97 +14,37 @@ import { useRouter } from 'expo-router';
 import {
   Mic,
   Camera,
-  ChevronRight,
-  Clock,
-  MapPin,
-  Utensils,
-  Coffee,
-  Wine,
-  Compass,
-  Car,
+  Navigation,
+  Heart,
   Moon,
   Sun,
   CloudRain,
+  MapPin,
 } from 'lucide-react-native';
-import { colors, spacing, typography, borders, shadows } from '../../constants/theme';
+import { colors, spacing, typography, borders } from '../../constants/theme';
 import { useLocationStore } from '../../stores/useLocationStore';
 import { useWeatherStore } from '../../stores/useWeatherStore';
 import { usePreferencesStore } from '../../stores/usePreferencesStore';
 import { useSavedPlacesStore } from '../../stores/useSavedPlacesStore';
-import { useItineraryStore } from '../../stores/useItineraryStore';
-import { useConversationStore } from '../../stores/useConversationStore';
+import { useNavigationStore } from '../../stores/useNavigationStore';
 import { useMemoryStore } from '../../stores/useMemoryStore';
 import { useTimeOfDay } from '../../hooks/useTimeOfDay';
 import { useLocation } from '../../hooks/useLocation';
 import { useWeather } from '../../hooks/useWeather';
-import { chat } from '../../services/openai';
 import { searchNearbyPlaces } from '../../services/places';
+import { getWalkingDirections } from '../../services/routes';
 import { useOfflineStore } from '../../stores/useOfflineStore';
 import { safeHaptics, ImpactFeedbackStyle } from '../../utils/haptics';
 import { NotificationContainer } from '../../components/NotificationToast';
 import { OfflineBanner } from '../../components/OfflineBanner';
-import type { PlaceCardData, DestinationContext } from '../../types';
+import type { PlaceCardData } from '../../types';
 
-// Helper to map Google Places price level string to number
-function mapPriceLevel(googlePriceLevel?: string): 1 | 2 | 3 | 4 | undefined {
-  if (!googlePriceLevel) return undefined;
-  switch (googlePriceLevel) {
-    case 'PRICE_LEVEL_FREE':
-    case 'PRICE_LEVEL_INEXPENSIVE':
-      return 1;
-    case 'PRICE_LEVEL_MODERATE':
-      return 2;
-    case 'PRICE_LEVEL_EXPENSIVE':
-      return 3;
-    case 'PRICE_LEVEL_VERY_EXPENSIVE':
-      return 4;
-    default:
-      return undefined;
-  }
-}
-
-// Helper to convert price level to dollar signs
-function priceLevelToDollars(level?: 1 | 2 | 3 | 4): string {
-  if (!level) return '$';
-  return '$'.repeat(level);
-}
-
-// Quick action chips configuration - changes by time of day
-const QUICK_ACTIONS = {
-  morning: [
-    { id: 'breakfast', label: 'Breakfast', icon: Utensils, query: 'Find me a good breakfast spot nearby' },
-    { id: 'coffee', label: 'Coffee', icon: Coffee, query: 'Where can I get great coffee right now?' },
-    { id: 'todo', label: 'What to do', icon: Compass, query: "What's worth seeing around here this morning?" },
-    { id: 'surprise', label: 'Surprise me', icon: MapPin, query: 'Surprise me with something cool nearby' },
-  ],
-  afternoon: [
-    { id: 'lunch', label: 'Lunch', icon: Utensils, query: 'Find me a good lunch spot nearby' },
-    { id: 'walk', label: 'Nice walk', icon: Compass, query: 'Where can I take a nice walk from here?' },
-    { id: 'fun', label: 'Something fun', icon: MapPin, query: "What's something fun I could do right now?" },
-    { id: 'chill', label: 'Chill spot', icon: Coffee, query: 'Find a relaxing spot to hang out' },
-  ],
-  evening: [
-    { id: 'dinner', label: 'Dinner', icon: Utensils, query: 'Find me a great dinner spot nearby' },
-    { id: 'drinks', label: 'Drinks', icon: Wine, query: 'Where should I go for drinks tonight?' },
-    { id: 'nearby', label: "What's near", icon: Compass, query: "What's interesting to do near me tonight?" },
-    { id: 'ride', label: 'Get home', icon: Car, query: 'I need a ride back to my hotel' },
-  ],
-  night: [
-    { id: 'latenight', label: 'Late bites', icon: Utensils, query: "What's still open for food nearby?" },
-    { id: 'bars', label: 'Bars', icon: Wine, query: 'Find a good bar or nightlife spot open now' },
-    { id: 'quick', label: 'Quick spot', icon: Coffee, query: 'Find somewhere chill and open late' },
-    { id: 'ride', label: 'Ride home', icon: Car, query: 'I need a ride home' },
-  ],
-};
-
-interface RightNowSuggestion {
-  id: string;
-  title: string;
-  subtitle: string;
+// Smart recommendation with personalized reason
+interface SmartRecommendation {
+  place: PlaceCardData;
+  reason: string; // Personalized explanation
   walkTime: string;
-  priceLevel?: string;
-  openStatus?: string;
-  place?: PlaceCardData;
+  isOpen: boolean;
 }
 
 export default function TomoHomeScreen() {
@@ -113,8 +52,8 @@ export default function TomoHomeScreen() {
   const timeOfDay = useTimeOfDay();
 
   // Hooks
-  const { location } = useLocation();
-  const { weather } = useWeather();
+  useLocation();
+  useWeather();
 
   // Store state
   const coordinates = useLocationStore((state) => state.coordinates);
@@ -123,29 +62,25 @@ export default function TomoHomeScreen() {
   const weatherTemperature = useWeatherStore((state) => state.temperature);
   const temperatureUnit = usePreferencesStore((state) => state.temperatureUnit);
   const savedPlaces = useSavedPlacesStore((state) => state.places);
-  // Get raw data and compute active itinerary with useMemo to avoid Zustand anti-pattern
-  const itineraries = useItineraryStore((state) => state.itineraries);
-  const activeItineraryId = useItineraryStore((state) => state.activeItineraryId);
-  const activeItinerary = useMemo(() => {
-    return itineraries.find((i) => i.id === activeItineraryId) || null;
-  }, [itineraries, activeItineraryId]);
-  const addMessage = useConversationStore((state) => state.addMessage);
-  const startNewConversation = useConversationStore((state) => state.startNewConversation);
+  const savePlace = useSavedPlacesStore((state) => state.savePlace);
+  const isPlaceSavedFn = useSavedPlacesStore((state) => state.isPlaceSaved);
+  const viewDestination = useNavigationStore((state) => state.viewDestination);
   const memories = useMemoryStore((state) => state.memories);
-  const getMemoriesByType = useMemoryStore((state) => state.getMemoriesByType);
   const isOnline = useOfflineStore((state) => state.isOnline);
 
   // Local state
   const [inputText, setInputText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [suggestions, setSuggestions] = useState<RightNowSuggestion[]>([]);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(true);
-  const [aiTip, setAiTip] = useState<string | null>(null);
+  const [recommendation, setRecommendation] = useState<SmartRecommendation | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaved, setIsSaved] = useState(false);
 
-  // Get quick actions based on time of day
-  const quickActions = useMemo(() => {
-    return QUICK_ACTIONS[timeOfDay] || QUICK_ACTIONS.afternoon;
-  }, [timeOfDay]);
+  // Get user preferences from memory
+  const userPreferences = useMemo(() => {
+    const likes = memories.filter(m => m.type === 'like').map(m => m.content);
+    const dislikes = memories.filter(m => m.type === 'dislike').map(m => m.content);
+    const personalInfo = memories.filter(m => m.type === 'personal_info').map(m => m.content);
+    return { likes, dislikes, personalInfo };
+  }, [memories]);
 
   // Format temperature
   const displayTemperature = weatherTemperature
@@ -169,280 +104,164 @@ export default function TomoHomeScreen() {
     if (!weatherCondition) return null;
     const condition = weatherCondition.toLowerCase();
     if (condition.includes('rain') || condition.includes('drizzle')) {
-      return <CloudRain size={14} color={colors.text.secondary} />;
+      return <CloudRain size={16} color={colors.text.secondary} />;
     }
     if (timeOfDay === 'night') {
-      return <Moon size={14} color={colors.text.secondary} />;
+      return <Moon size={16} color={colors.text.secondary} />;
     }
-    return <Sun size={14} color={colors.text.secondary} />;
+    return <Sun size={16} color={colors.text.secondary} />;
   };
 
-  // Get user dislikes and likes from memory
-  const userDislikes = useMemo(() => {
-    return getMemoriesByType('dislike').map(m => m.content.toLowerCase());
-  }, [memories, getMemoriesByType]);
+  // Get food emoji based on time
+  const getFoodEmoji = () => {
+    switch (timeOfDay) {
+      case 'morning': return '☕';
+      case 'afternoon': return '🍜';
+      case 'evening': return '🍽️';
+      case 'night': return '🍺';
+      default: return '🍴';
+    }
+  };
 
-  const userLikes = useMemo(() => {
-    return getMemoriesByType('like').map(m => m.content.toLowerCase());
-  }, [memories, getMemoriesByType]);
-
-  // Generate personalized AI tip
-  const generateAiTip = useCallback(async () => {
-    if (!isOnline) {
-      setAiTip(null);
+  // Generate ONE smart recommendation
+  const generateSmartRecommendation = useCallback(async () => {
+    if (!coordinates || !isOnline) {
+      setIsLoading(false);
       return;
     }
 
+    setIsLoading(true);
+
     try {
-      // Build a concise context for the tip
-      const context = {
-        timeOfDay,
-        weather: weatherCondition,
-        temp: displayTemperature,
-        neighborhood: neighborhood || 'Unknown',
-        hasItinerary: !!activeItinerary,
-        savedPlacesNearby: savedPlaces.filter(p => {
-          if (!p.coordinates || !coordinates) return false;
-          const dist = Math.sqrt(
-            Math.pow(p.coordinates.latitude - coordinates.latitude, 2) +
-            Math.pow(p.coordinates.longitude - coordinates.longitude, 2)
+      // Determine search type based on time
+      const searchType = timeOfDay === 'morning' ? 'cafe' :
+                         timeOfDay === 'night' ? 'bar' : 'restaurant';
+
+      // Search for places
+      const places = await searchNearbyPlaces(coordinates, searchType, 1000);
+
+      if (!places || places.length === 0) {
+        setRecommendation(null);
+        setIsLoading(false);
+        return;
+      }
+
+      // Pick the best match (first result from Google is usually good)
+      const topPlace = places[0];
+
+      // Get walking time
+      let walkTime = '5 min walk';
+      if (topPlace.location) {
+        try {
+          const route = await getWalkingDirections(
+            coordinates,
+            { latitude: topPlace.location.latitude, longitude: topPlace.location.longitude }
           );
-          return dist < 0.01;
-        }).length,
-        likes: userLikes.slice(0, 3),
-        dislikes: userDislikes.slice(0, 3),
+          if (route?.totalDuration) {
+            walkTime = `${Math.round(route.totalDuration)} min walk`;
+          }
+        } catch {
+          // Keep default walk time
+        }
+      }
+
+      // Generate personalized reason
+      let reason = '';
+      const placeName = topPlace.displayName?.text || 'This spot';
+
+      if (userPreferences.likes.length > 0) {
+        const likedThing = userPreferences.likes[0];
+        reason = `${placeName} — might match your love for ${likedThing}.`;
+      } else if (timeOfDay === 'morning') {
+        reason = `${placeName} — great way to start your ${getGreeting().toLowerCase()}.`;
+      } else if (timeOfDay === 'evening') {
+        reason = `${placeName} — popular for ${getGreeting().toLowerCase()} dining.`;
+      } else if (timeOfDay === 'night') {
+        reason = `${placeName} — good vibes for tonight.`;
+      } else {
+        reason = `${placeName} — highly rated and close by.`;
+      }
+
+      // Build the recommendation
+      const rec: SmartRecommendation = {
+        place: {
+          placeId: topPlace.id,
+          name: topPlace.displayName?.text || 'Nearby spot',
+          address: topPlace.formattedAddress || '',
+          coordinates: {
+            latitude: topPlace.location?.latitude || coordinates.latitude,
+            longitude: topPlace.location?.longitude || coordinates.longitude,
+          },
+          rating: topPlace.rating,
+          priceLevel: mapPriceLevel(topPlace.priceLevel),
+          openNow: topPlace.regularOpeningHours?.openNow,
+          photo: topPlace.photos?.[0]?.name,
+        },
+        reason,
+        walkTime,
+        isOpen: topPlace.regularOpeningHours?.openNow ?? true,
       };
 
-      // Quick chat call for a tip - uses gpt-4o-mini for speed/cost
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: `You are Tomo, a friendly travel companion. Generate a SINGLE short sentence (max 15 words) giving a personalized tip or observation based on context. Be warm but not cheesy. Sound like a helpful local friend.`
-            },
-            {
-              role: 'user',
-              content: `Context: ${JSON.stringify(context)}
-
-Generate one short personalized tip for right now. Examples:
-- "Perfect coffee weather - there's a great spot around the corner"
-- "The bars are just opening up, good time to explore"
-- "You saved a place nearby - want to check it out?"
-- "Rainy day = perfect for that museum you've been meaning to visit"`
-            }
-          ],
-          max_tokens: 50,
-          temperature: 0.8,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const tip = data.choices?.[0]?.message?.content?.trim();
-        if (tip) {
-          setAiTip(tip.replace(/^["']|["']$/g, '')); // Remove quotes if present
-        }
-      }
+      setRecommendation(rec);
+      setIsSaved(isPlaceSavedFn(rec.place.name, rec.place.coordinates));
     } catch (error) {
-      console.log('[TomoHome] AI tip generation skipped:', error);
-      // Don't show error - just skip the tip
-    }
-  }, [timeOfDay, weatherCondition, displayTemperature, neighborhood, activeItinerary, savedPlaces, coordinates, userLikes, userDislikes, isOnline]);
-
-  // Generate "Right Now" suggestions
-  useEffect(() => {
-    generateSuggestions();
-    generateAiTip();
-  }, [coordinates, timeOfDay, weatherCondition]);
-
-  const generateSuggestions = async () => {
-    if (!coordinates) return;
-
-    setLoadingSuggestions(true);
-
-    try {
-      const newSuggestions: RightNowSuggestion[] = [];
-
-      // 1. Time-appropriate food suggestion
-      const foodType = timeOfDay === 'morning' ? 'breakfast' :
-                       timeOfDay === 'afternoon' ? 'lunch' :
-                       timeOfDay === 'evening' ? 'dinner' : 'late night food';
-
-      const foodPlaces = await searchNearbyPlaces(coordinates, 'restaurant', 1000);
-      if (foodPlaces && foodPlaces.length > 0) {
-        const topFood = foodPlaces[0];
-        const foodPriceLevel = mapPriceLevel(topFood.priceLevel);
-        newSuggestions.push({
-          id: 'food-suggestion',
-          title: topFood.displayName?.text || 'Local spot',
-          subtitle: `Popular for ${foodType}`,
-          walkTime: '5 min',
-          priceLevel: priceLevelToDollars(foodPriceLevel),
-          openStatus: topFood.regularOpeningHours?.openNow ? 'Open now' : 'Check hours',
-          place: {
-            name: topFood.displayName?.text || '',
-            address: topFood.formattedAddress || '',
-            coordinates: {
-              latitude: topFood.location?.latitude || coordinates.latitude,
-              longitude: topFood.location?.longitude || coordinates.longitude,
-            },
-            rating: topFood.rating,
-            priceLevel: foodPriceLevel,
-            openNow: topFood.regularOpeningHours?.openNow,
-          },
-        });
-      }
-
-      // 2. Check for nearby saved places
-      const nearbySaved = savedPlaces.filter(place => {
-        if (!place.coordinates || !coordinates) return false;
-        const distance = Math.sqrt(
-          Math.pow(place.coordinates.latitude - coordinates.latitude, 2) +
-          Math.pow(place.coordinates.longitude - coordinates.longitude, 2)
-        );
-        return distance < 0.01; // Roughly 1km
-      });
-
-      if (nearbySaved.length > 0) {
-        const saved = nearbySaved[0];
-        newSuggestions.push({
-          id: 'saved-nearby',
-          title: saved.name,
-          subtitle: 'Saved place nearby',
-          walkTime: '3 min',
-          place: saved,
-        });
-      }
-
-      // 3. Evening-specific: bars/nightlife
-      if (timeOfDay === 'evening' || timeOfDay === 'night') {
-        const barPlaces = await searchNearbyPlaces(coordinates, 'bar', 1000);
-        if (barPlaces && barPlaces.length > 0) {
-          const topBar = barPlaces[0];
-          const barPriceLevel = mapPriceLevel(topBar.priceLevel);
-          newSuggestions.push({
-            id: 'bar-suggestion',
-            title: topBar.displayName?.text || 'Local bar',
-            subtitle: 'Low-key spot nearby',
-            walkTime: '5 min',
-            priceLevel: priceLevelToDollars(barPriceLevel || 2),
-            openStatus: 'Open now',
-            place: {
-              name: topBar.displayName?.text || '',
-              address: topBar.formattedAddress || '',
-              coordinates: {
-                latitude: topBar.location?.latitude || coordinates.latitude,
-                longitude: topBar.location?.longitude || coordinates.longitude,
-              },
-              rating: topBar.rating,
-              priceLevel: barPriceLevel,
-              openNow: topBar.regularOpeningHours?.openNow,
-            },
-          });
-        }
-      }
-
-      // 4. Morning-specific: coffee
-      if (timeOfDay === 'morning') {
-        const cafePlaces = await searchNearbyPlaces(coordinates, 'cafe', 800);
-        if (cafePlaces && cafePlaces.length > 0) {
-          const topCafe = cafePlaces[0];
-          const cafePriceLevel = mapPriceLevel(topCafe.priceLevel);
-          newSuggestions.push({
-            id: 'coffee-suggestion',
-            title: topCafe.displayName?.text || 'Nearby cafe',
-            subtitle: 'Great for morning coffee',
-            walkTime: '4 min',
-            priceLevel: priceLevelToDollars(cafePriceLevel || 1),
-            openStatus: 'Open now',
-            place: {
-              name: topCafe.displayName?.text || '',
-              address: topCafe.formattedAddress || '',
-              coordinates: {
-                latitude: topCafe.location?.latitude || coordinates.latitude,
-                longitude: topCafe.location?.longitude || coordinates.longitude,
-              },
-              rating: topCafe.rating,
-              priceLevel: cafePriceLevel,
-              openNow: topCafe.regularOpeningHours?.openNow,
-            },
-          });
-        }
-      }
-
-      // 5. Check itinerary for upcoming activities
-      if (activeItinerary) {
-        const now = new Date();
-        const currentHour = now.getHours();
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-        const todayActivities = activeItinerary.days
-          .find(d => d.date >= todayStart && d.date < todayStart + 86400000)?.activities;
-
-        if (todayActivities && todayActivities.length > 0) {
-          // Find next activity based on current time slot
-          const currentSlot = currentHour < 12 ? 'morning' :
-                              currentHour < 17 ? 'afternoon' :
-                              currentHour < 21 ? 'evening' : 'night';
-          const slotOrder = ['morning', 'afternoon', 'evening', 'night'];
-          const currentSlotIndex = slotOrder.indexOf(currentSlot);
-
-          // Find next upcoming activity in current or future time slots
-          const nextActivity = todayActivities.find(a => {
-            const activitySlotIndex = slotOrder.indexOf(a.timeSlot);
-            return activitySlotIndex >= currentSlotIndex;
-          });
-
-          if (nextActivity) {
-            newSuggestions.push({
-              id: 'itinerary-next',
-              title: nextActivity.title,
-              subtitle: `Planned for ${nextActivity.timeSlot}`,
-              walkTime: nextActivity.place?.distance || '10 min',
-              place: nextActivity.place,
-            });
-          }
-        }
-      }
-
-      setSuggestions(newSuggestions.slice(0, 3)); // Max 3 suggestions
-    } catch (error) {
-      console.error('[TomoHome] Error generating suggestions:', error);
+      console.error('[TomoHome] Error generating recommendation:', error);
+      setRecommendation(null);
     } finally {
-      setLoadingSuggestions(false);
+      setIsLoading(false);
     }
-  };
+  }, [coordinates, timeOfDay, userPreferences, isOnline, isPlaceSavedFn]);
 
-  // Handle quick action tap
-  const handleQuickAction = useCallback(async (action: typeof quickActions[0]) => {
+  // Generate recommendation on mount and when context changes
+  useEffect(() => {
+    generateSmartRecommendation();
+  }, [coordinates, timeOfDay]);
+
+  // Handle "Take me there" - direct to navigation
+  const handleTakeMeThere = useCallback(() => {
+    if (!recommendation?.place) return;
+
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
+
+    // Create destination and navigate
+    const destination = {
+      id: recommendation.place.placeId || `place-${Date.now()}`,
+      title: recommendation.place.name,
+      description: recommendation.reason,
+      whatItIs: recommendation.place.name,
+      whenToGo: 'Now',
+      neighborhood: neighborhood || '',
+      category: 'food' as const,
+      whyNow: recommendation.reason,
+      placeId: recommendation.place.placeId,
+      address: recommendation.place.address || '',
+      coordinates: recommendation.place.coordinates,
+      priceLevel: recommendation.place.priceLevel || 2,
+      transitPreview: {
+        method: 'walk' as const,
+        totalMinutes: parseInt(recommendation.walkTime) || 5,
+        description: recommendation.walkTime,
+      },
+      spots: [],
+      rating: recommendation.place.rating,
+      isOpen: recommendation.isOpen,
+    };
+
+    viewDestination(destination);
+    router.push('/navigation');
+  }, [recommendation, viewDestination, router, neighborhood]);
+
+  // Handle save
+  const handleSave = useCallback(() => {
+    if (!recommendation?.place) return;
+
     safeHaptics.impact(ImpactFeedbackStyle.Light);
-    Keyboard.dismiss();
 
-    // Navigate to chat with the query
-    router.push({
-      pathname: '/chat',
-      params: { initialMessage: action.query },
-    });
-  }, [router]);
-
-  // Handle suggestion tap
-  const handleSuggestionTap = useCallback((suggestion: RightNowSuggestion) => {
-    safeHaptics.impact(ImpactFeedbackStyle.Light);
-
-    if (suggestion.place) {
-      // Navigate to place detail or start navigation
-      router.push({
-        pathname: '/chat',
-        params: { initialMessage: `Tell me about ${suggestion.title}` },
-      });
+    if (!isSaved) {
+      savePlace(recommendation.place);
+      setIsSaved(true);
     }
-  }, [router]);
+  }, [recommendation, isSaved, savePlace]);
 
   // Handle text input submission
   const handleSubmit = useCallback(() => {
@@ -451,7 +270,6 @@ Generate one short personalized tip for right now. Examples:
     safeHaptics.impact(ImpactFeedbackStyle.Light);
     Keyboard.dismiss();
 
-    // Navigate to chat with the message
     router.push({
       pathname: '/chat',
       params: { initialMessage: inputText.trim() },
@@ -482,50 +300,113 @@ Generate one short personalized tip for right now. Examples:
       <NotificationContainer />
 
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Header with location and weather */}
+        <View style={styles.content}>
+          {/* Header - Location & Weather */}
           <View style={styles.header}>
-            <Text style={styles.locationText}>
-              {neighborhood || 'Loading...'}
-            </Text>
-            <View style={styles.weatherRow}>
-              {getWeatherIcon()}
-              <Text style={styles.weatherText}>
-                {displayTemperature ? `${displayTemperature}°` : ''}
-                {displayTemperature && ' · '}
-                {getGreeting()}
-                {weatherCondition ? ` · ${weatherCondition}` : ''}
+            <View style={styles.locationRow}>
+              <MapPin size={14} color={colors.text.secondary} />
+              <Text style={styles.locationText}>
+                {getGreeting()} in {neighborhood || 'Loading...'}
               </Text>
             </View>
+            {displayTemperature && (
+              <View style={styles.weatherRow}>
+                {getWeatherIcon()}
+                <Text style={styles.weatherText}>
+                  {displayTemperature}°{temperatureUnit}
+                  {weatherCondition ? ` · ${weatherCondition}` : ''}
+                </Text>
+              </View>
+            )}
           </View>
 
-          {/* AI-generated personalized tip */}
-          {aiTip && (
-            <View style={styles.aiTipContainer}>
-              <Text style={styles.aiTipText}>{aiTip}</Text>
-            </View>
-          )}
+          {/* Smart Recommendation Card */}
+          <View style={styles.recommendationSection}>
+            {isLoading ? (
+              <View style={styles.loadingCard}>
+                <ActivityIndicator size="large" color={colors.accent.primary} />
+                <Text style={styles.loadingText}>Finding the perfect spot...</Text>
+              </View>
+            ) : recommendation ? (
+              <View style={styles.recommendationCard}>
+                {/* Place name with emoji */}
+                <Text style={styles.placeEmoji}>{getFoodEmoji()}</Text>
+                <Text style={styles.placeName}>{recommendation.place.name}</Text>
 
-          {/* Main prompt */}
-          <View style={styles.promptSection}>
-            <Text style={styles.mainPrompt}>
-              What do you want{'\n'}right now?
-            </Text>
-            <Text style={styles.subPrompt}>
-              Food, places, rides, help — just ask.
-            </Text>
+                {/* Personalized reason */}
+                <Text style={styles.placeReason}>{recommendation.reason}</Text>
+
+                {/* Meta info */}
+                <View style={styles.placeMeta}>
+                  <Text style={styles.metaText}>{recommendation.walkTime}</Text>
+                  <Text style={styles.metaDot}>·</Text>
+                  {recommendation.place.priceLevel && (
+                    <>
+                      <Text style={styles.metaText}>
+                        {'$'.repeat(recommendation.place.priceLevel)}
+                      </Text>
+                      <Text style={styles.metaDot}>·</Text>
+                    </>
+                  )}
+                  <Text style={[
+                    styles.metaText,
+                    { color: recommendation.isOpen ? colors.status.success : colors.status.error }
+                  ]}>
+                    {recommendation.isOpen ? 'Open now' : 'Closed'}
+                  </Text>
+                </View>
+
+                {/* Action buttons */}
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={styles.primaryButton}
+                    onPress={handleTakeMeThere}
+                    activeOpacity={0.8}
+                  >
+                    <Navigation size={18} color={colors.text.inverse} />
+                    <Text style={styles.primaryButtonText}>Take me there</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.secondaryButton, isSaved && styles.savedButton]}
+                    onPress={handleSave}
+                    activeOpacity={0.8}
+                  >
+                    <Heart
+                      size={20}
+                      color={isSaved ? colors.status.error : colors.text.primary}
+                      fill={isSaved ? colors.status.error : 'transparent'}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : !isOnline ? (
+              <View style={styles.offlineCard}>
+                <Text style={styles.offlineEmoji}>📡</Text>
+                <Text style={styles.offlineTitle}>You're offline</Text>
+                <Text style={styles.offlineText}>
+                  {savedPlaces.length > 0
+                    ? `You have ${savedPlaces.length} saved places to explore`
+                    : "Recommendations will appear when you're back online"}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>
+                  Ask Tomo for recommendations
+                </Text>
+              </View>
+            )}
           </View>
 
-          {/* Input bar */}
+          {/* Spacer to push input to bottom */}
+          <View style={styles.spacer} />
+
+          {/* Input bar - at bottom */}
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.textInput}
-              placeholder="What's on your mind?"
+              placeholder="Ask Tomo anything..."
               placeholderTextColor={colors.text.tertiary}
               value={inputText}
               onChangeText={setInputText}
@@ -534,89 +415,34 @@ Generate one short personalized tip for right now. Examples:
               keyboardAppearance="dark"
             />
             <TouchableOpacity style={styles.inputButton} onPress={handleVoice}>
-              <Mic size={20} color={colors.text.secondary} />
+              <Mic size={22} color={colors.text.secondary} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.inputButton} onPress={handleCamera}>
-              <Camera size={20} color={colors.text.secondary} />
+              <Camera size={22} color={colors.text.secondary} />
             </TouchableOpacity>
           </View>
-
-          {/* Quick action chips */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipsContainer}
-            contentContainerStyle={styles.chipsContent}
-          >
-            {quickActions.map((action) => (
-              <TouchableOpacity
-                key={action.id}
-                style={styles.chip}
-                onPress={() => handleQuickAction(action)}
-              >
-                <action.icon size={16} color={colors.text.primary} />
-                <Text style={styles.chipText}>{action.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* Right Now suggestions */}
-          <View style={styles.suggestionsSection}>
-            <Text style={styles.sectionTitle}>Right now</Text>
-
-            {loadingSuggestions ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color={colors.accent.primary} />
-              </View>
-            ) : suggestions.length > 0 ? (
-              suggestions.map((suggestion) => (
-                <TouchableOpacity
-                  key={suggestion.id}
-                  style={styles.suggestionCard}
-                  onPress={() => handleSuggestionTap(suggestion)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.suggestionContent}>
-                    <Text style={styles.suggestionTitle}>{suggestion.title}</Text>
-                    <Text style={styles.suggestionSubtitle}>{suggestion.subtitle}</Text>
-                    <View style={styles.suggestionMeta}>
-                      <View style={styles.metaItem}>
-                        <Clock size={12} color={colors.text.tertiary} />
-                        <Text style={styles.metaText}>{suggestion.walkTime}</Text>
-                      </View>
-                      {suggestion.priceLevel && (
-                        <View style={styles.metaItem}>
-                          <Text style={styles.priceText}>{suggestion.priceLevel}</Text>
-                        </View>
-                      )}
-                      {suggestion.openStatus && (
-                        <View style={styles.metaItem}>
-                          <Clock size={12} color={colors.status.success} />
-                          <Text style={[styles.metaText, { color: colors.status.success }]}>
-                            {suggestion.openStatus}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                  <ChevronRight size={20} color={colors.text.tertiary} />
-                </TouchableOpacity>
-              ))
-            ) : (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyText}>
-                  No suggestions yet. Ask Tomo anything!
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Spacer for tab bar */}
-          <View style={{ height: 100 }} />
-        </ScrollView>
+        </View>
       </SafeAreaView>
     </View>
   );
+}
+
+// Helper to map Google Places price level string to number
+function mapPriceLevel(googlePriceLevel?: string): 1 | 2 | 3 | 4 | undefined {
+  if (!googlePriceLevel) return undefined;
+  switch (googlePriceLevel) {
+    case 'PRICE_LEVEL_FREE':
+    case 'PRICE_LEVEL_INEXPENSIVE':
+      return 1;
+    case 'PRICE_LEVEL_MODERATE':
+      return 2;
+    case 'PRICE_LEVEL_EXPENSIVE':
+      return 3;
+    case 'PRICE_LEVEL_VERY_EXPENSIVE':
+      return 4;
+    default:
+      return undefined;
+  }
 }
 
 const styles = StyleSheet.create({
@@ -627,21 +453,24 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  scrollView: {
+  content: {
     flex: 1,
-  },
-  scrollContent: {
     paddingHorizontal: spacing.lg,
   },
 
   // Header
   header: {
     alignItems: 'center',
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   locationText: {
-    fontSize: typography.sizes.base,
+    fontSize: typography.sizes.lg,
     color: colors.text.primary,
     fontWeight: typography.weights.medium,
   },
@@ -656,40 +485,144 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
 
-  // AI Tip
-  aiTipContainer: {
-    backgroundColor: colors.accent.primary + '15',
-    borderLeftWidth: 3,
-    borderLeftColor: colors.accent.primary,
-    borderRadius: borders.radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginTop: spacing.md,
+  // Recommendation
+  recommendationSection: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingBottom: spacing['2xl'],
   },
-  aiTipText: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.primary,
-    fontStyle: 'italic',
-    lineHeight: 20,
-  },
-
-  // Prompt section
-  promptSection: {
+  recommendationCard: {
+    backgroundColor: colors.surface.card,
+    borderRadius: borders.radius.xl,
+    padding: spacing.xl,
     alignItems: 'center',
-    paddingTop: spacing['2xl'],
-    paddingBottom: spacing.xl,
+    borderWidth: 1,
+    borderColor: colors.border.muted,
   },
-  mainPrompt: {
-    fontSize: typography.sizes['3xl'],
+  placeEmoji: {
+    fontSize: 48,
+    marginBottom: spacing.md,
+  },
+  placeName: {
+    fontSize: typography.sizes['2xl'],
     fontWeight: typography.weights.bold,
     color: colors.text.primary,
     textAlign: 'center',
-    lineHeight: 36,
+    marginBottom: spacing.sm,
   },
-  subPrompt: {
+  placeReason: {
     fontSize: typography.sizes.base,
     color: colors.text.secondary,
-    marginTop: spacing.sm,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: spacing.lg,
+    paddingHorizontal: spacing.md,
+  },
+  placeMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  metaText: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.secondary,
+  },
+  metaDot: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.tertiary,
+    marginHorizontal: spacing.sm,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    width: '100%',
+  },
+  primaryButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.accent.primary,
+    paddingVertical: spacing.lg,
+    borderRadius: borders.radius.lg,
+  },
+  primaryButtonText: {
+    color: colors.text.inverse,
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+  },
+  secondaryButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface.input,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borders.radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+  },
+  savedButton: {
+    backgroundColor: colors.status.errorMuted,
+    borderColor: colors.status.error,
+  },
+
+  // Loading
+  loadingCard: {
+    backgroundColor: colors.surface.card,
+    borderRadius: borders.radius.xl,
+    padding: spacing['3xl'],
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border.muted,
+  },
+  loadingText: {
+    fontSize: typography.sizes.base,
+    color: colors.text.secondary,
+    marginTop: spacing.lg,
+  },
+
+  // Offline
+  offlineCard: {
+    backgroundColor: colors.surface.card,
+    borderRadius: borders.radius.xl,
+    padding: spacing.xl,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border.muted,
+  },
+  offlineEmoji: {
+    fontSize: 48,
+    marginBottom: spacing.md,
+  },
+  offlineTitle: {
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.semibold,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+  },
+  offlineText: {
+    fontSize: typography.sizes.base,
+    color: colors.text.secondary,
+    textAlign: 'center',
+  },
+
+  // Empty
+  emptyCard: {
+    backgroundColor: colors.surface.card,
+    borderRadius: borders.radius.xl,
+    padding: spacing.xl,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border.muted,
+  },
+  emptyText: {
+    fontSize: typography.sizes.base,
+    color: colors.text.tertiary,
+  },
+
+  // Spacer
+  spacer: {
+    flex: 1,
   },
 
   // Input
@@ -701,114 +634,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.surface.inputBorder,
     paddingHorizontal: spacing.md,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xl,
   },
   textInput: {
     flex: 1,
-    height: 48,
+    height: 52,
     fontSize: typography.sizes.base,
     color: colors.text.primary,
   },
   inputButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  // Chips
-  chipsContainer: {
-    marginBottom: spacing.xl,
-  },
-  chipsContent: {
-    gap: spacing.sm,
-    paddingRight: spacing.lg,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.surface.card,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borders.radius.full,
-    borderWidth: 1,
-    borderColor: colors.border.default,
-  },
-  chipText: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.primary,
-    fontWeight: typography.weights.medium,
-  },
-
-  // Suggestions
-  suggestionsSection: {
-    marginTop: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.semibold,
-    color: colors.text.secondary,
-    marginBottom: spacing.md,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  suggestionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface.card,
-    borderRadius: borders.radius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border.muted,
-  },
-  suggestionContent: {
-    flex: 1,
-  },
-  suggestionTitle: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.semibold,
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-  },
-  suggestionSubtitle: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-    marginBottom: spacing.sm,
-  },
-  suggestionMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  metaText: {
-    fontSize: typography.sizes.xs,
-    color: colors.text.tertiary,
-  },
-  priceText: {
-    fontSize: typography.sizes.xs,
-    color: colors.status.warning,
-    fontWeight: typography.weights.medium,
-  },
-
-  // Loading & Empty
-  loadingContainer: {
-    padding: spacing.xl,
-    alignItems: 'center',
-  },
-  emptyState: {
-    padding: spacing.xl,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.tertiary,
-    textAlign: 'center',
   },
 });

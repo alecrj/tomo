@@ -137,19 +137,28 @@ export default function NavigationScreen() {
   }, [currentDestination?.id, selectedMode]);
 
   // Subscribe to compass heading for Google Maps-style navigation
+  // Reduced from 100ms (10x/sec) to 300ms (3x/sec) to prevent excessive re-renders
   useEffect(() => {
     let subscription: { remove: () => void } | null = null;
+    let lastHeading = 0;
 
     const subscribe = async () => {
-      // Update heading 10 times per second for smooth rotation
-      Magnetometer.setUpdateInterval(100);
+      // Update heading 3 times per second (was 10x/sec - too frequent)
+      Magnetometer.setUpdateInterval(300);
       subscription = Magnetometer.addListener((data: { x: number; y: number; z: number }) => {
         // Calculate heading from magnetometer data
         let angle = Math.atan2(data.y, data.x) * (180 / Math.PI);
         // Normalize to 0-360
         if (angle < 0) angle += 360;
         // Invert for map rotation (map rotates opposite to device)
-        setHeading(360 - angle);
+        const newHeading = 360 - angle;
+
+        // Only update if heading changed significantly (> 5 degrees)
+        // This prevents jittery updates from small sensor noise
+        if (Math.abs(newHeading - lastHeading) > 5) {
+          lastHeading = newHeading;
+          setHeading(newHeading);
+        }
       });
     };
 

@@ -129,7 +129,7 @@ export function useLocation() {
         // Store unsubscribe for cleanup
         if (isMounted) {
           unsubscribe = unsub;
-        } else {
+        } else if (unsub) {
           // Component unmounted before watch started, clean up immediately
           unsub();
         }

@@ -2,17 +2,267 @@
 
 ---
 
-## 🚨 SESSION 16 PRIORITY: COMPLETE THE APP 🚨
+## 🎯 THE END GOAL
 
-**Goal:** Make Tomo the BEST travel app in the world - fully functional, polished, production-ready.
+**Tomo = The ONLY app a traveler needs.**
 
-### IMMEDIATE BLOCKERS (Fix First)
+When someone lands in a new city, they open Tomo - not Google Maps, not TripAdvisor, not ChatGPT. Tomo gives them ONE confident recommendation, they tap "Take me there", and they're walking. No decision fatigue. A local friend in their pocket.
 
-1. **REBUILD DEV CLIENT** - App won't start due to native module mismatch
-   ```bash
-   npx expo prebuild --clean && npx expo run:ios
-   ```
-   Error: `NativeJSLogger.default.addListener is not a function`
+**The Home Screen Philosophy:**
+- Show ONE smart recommendation with direct actions
+- Location/weather context
+- Input bar for anything else
+- That's it. Calm, confident, actionable.
+
+---
+
+## 🤖 OPENAI MODELS & REALTIME API (December 2025)
+
+### ⚠️ CRITICAL: ALWAYS USE THESE EXACT MODEL NAMES ⚠️
+
+**These are the CORRECT, CURRENT model names. DO NOT change them. DO NOT use old names.**
+
+| Purpose | Model ID | API Endpoint | Notes |
+|---------|----------|--------------|-------|
+| **Main Chat AI** | `gpt-5.2` | `/v1/chat/completions` | Flagship reasoning model |
+| **Fast Tasks** | `gpt-5-mini` | `/v1/chat/completions` | Memory extraction, quick parsing |
+| **Voice/Realtime** | `gpt-realtime` | WebRTC or `/v1/realtime` | GA model (Aug 2025), replaces preview |
+| **Vision** | `gpt-5.2` | `/v1/chat/completions` | Has vision capabilities built-in |
+
+### ❌ DEPRECATED - DO NOT USE:
+- `gpt-4o` → Use `gpt-5.2` instead
+- `gpt-4o-mini` → Use `gpt-5-mini` instead
+- `gpt-4o-realtime-preview` → Use `gpt-realtime` instead (deprecated Feb 2026)
+- `gpt-4o-realtime-preview-2024-*` → Use `gpt-realtime` instead
+
+### Files That Use OpenAI Models:
+| File | Model | Purpose |
+|------|-------|---------|
+| `services/openai.ts` | `gpt-5.2` | Main chat, vision, trip summaries |
+| `services/realtime.ts` | `gpt-realtime` | Voice conversations |
+| `hooks/useMemoryExtraction.ts` | `gpt-5-mini` | Fast preference extraction |
+
+---
+
+## 🎙️ REALTIME VOICE API - COMPLETE IMPLEMENTATION GUIDE
+
+### Overview
+The OpenAI Realtime API enables natural voice-to-voice conversations like ChatGPT's voice mode.
+It was released as GA (Generally Available) in August 2025 with the `gpt-realtime` model.
+
+### Connection Methods
+
+| Method | Use Case | Latency | Recommended For |
+|--------|----------|---------|-----------------|
+| **WebRTC** | Mobile apps, browsers | ~300ms | ✅ Tomo (React Native) |
+| **WebSocket** | Server-to-server | Higher | Backend integrations |
+| **SIP** | Telephony | Varies | Call centers |
+
+**For Tomo: USE WEBRTC, NOT WEBSOCKET.**
+
+### Why WebRTC > WebSocket for Mobile:
+1. **Native audio handling** - No manual encoding/decoding of PCM audio
+2. **Lower latency** - Peer-to-peer connection optimized for real-time
+3. **Automatic playback** - Received audio plays via RTCPeerConnection
+4. **Better VAD** - Server-side Voice Activity Detection works seamlessly
+5. **Interruption support** - User can interrupt Tomo mid-sentence
+
+### Required Package:
+```bash
+npx expo install react-native-webrtc
+```
+
+### Architecture:
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         TOMO APP                             │
+├─────────────────────────────────────────────────────────────┤
+│  1. User taps mic button                                     │
+│           ↓                                                  │
+│  2. Request ephemeral token from YOUR backend                │
+│     POST /api/realtime-token → returns short-lived token     │
+│           ↓                                                  │
+│  3. Create RTCPeerConnection                                 │
+│           ↓                                                  │
+│  4. Get user media (microphone)                              │
+│     stream.getTracks().forEach(track => pc.addTrack(track))  │
+│           ↓                                                  │
+│  5. Create offer & connect to OpenAI                         │
+│     POST https://api.openai.com/v1/realtime/sessions         │
+│           ↓                                                  │
+│  6. Audio streams both ways automatically                    │
+│     - User speaks → OpenAI receives                          │
+│     - OpenAI responds → Audio plays via pc.ontrack           │
+│           ↓                                                  │
+│  7. Server VAD detects when user stops speaking              │
+│           ↓                                                  │
+│  8. Model responds with voice (plays automatically)          │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Ephemeral Token (Security):
+**NEVER put your API key in the mobile app.** Instead:
+1. Create a backend endpoint (Supabase Edge Function, Vercel, etc.)
+2. Backend calls OpenAI to get a short-lived token
+3. Return token to app
+4. App uses token for WebRTC connection
+
+```typescript
+// Backend endpoint example (Node.js/Edge Function)
+const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    model: 'gpt-realtime',
+    voice: 'alloy',
+  }),
+});
+const { client_secret } = await response.json();
+// Return client_secret.value to the app (expires in 60 seconds)
+```
+
+### WebRTC Implementation (React Native):
+```typescript
+import { RTCPeerConnection, mediaDevices } from 'react-native-webrtc';
+
+async function startVoiceSession(ephemeralToken: string) {
+  // 1. Create peer connection
+  const pc = new RTCPeerConnection({
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  });
+
+  // 2. Handle remote audio (Tomo's voice)
+  pc.ontrack = (event) => {
+    // Audio plays automatically via the track
+    // Or attach to an audio element if needed
+  };
+
+  // 3. Add local audio (user's microphone)
+  const stream = await mediaDevices.getUserMedia({ audio: true });
+  stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+  // 4. Create and set local description
+  const offer = await pc.createOffer({});
+  await pc.setLocalDescription(offer);
+
+  // 5. Send offer to OpenAI
+  const response = await fetch('https://api.openai.com/v1/realtime?model=gpt-realtime', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${ephemeralToken}`,
+      'Content-Type': 'application/sdp',
+    },
+    body: offer.sdp,
+  });
+
+  // 6. Set remote description
+  const answerSdp = await response.text();
+  await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+
+  // 7. Connection established - voice flows automatically
+  return pc;
+}
+```
+
+### Session Configuration (via Data Channel):
+```typescript
+// After connection, configure session via data channel
+const dataChannel = pc.createDataChannel('oai-events');
+
+dataChannel.onopen = () => {
+  dataChannel.send(JSON.stringify({
+    type: 'session.update',
+    session: {
+      modalities: ['text', 'audio'],
+      voice: 'alloy', // or 'echo', 'shimmer', etc.
+      instructions: `You are Tomo, a friendly AI travel companion...`,
+      turn_detection: {
+        type: 'server_vad',
+        threshold: 0.5,
+        silence_duration_ms: 500,
+      },
+    },
+  }));
+};
+
+dataChannel.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  // Handle events: transcript, response, errors, etc.
+};
+```
+
+### Key Events to Handle:
+| Event | Description |
+|-------|-------------|
+| `session.created` | Connection established |
+| `input_audio_buffer.speech_started` | User started speaking |
+| `input_audio_buffer.speech_stopped` | User stopped (VAD detected) |
+| `conversation.item.input_audio_transcription.completed` | User's words transcribed |
+| `response.audio.delta` | Streaming audio from Tomo |
+| `response.audio_transcript.delta` | Streaming text of Tomo's response |
+| `response.done` | Response complete |
+
+### Pricing (gpt-realtime):
+- Audio input: $32 / 1M tokens (~$0.04/minute)
+- Audio output: $64 / 1M tokens (~$0.08/minute)
+- Cached input: $0.40 / 1M tokens (huge savings for repeated context)
+
+### References:
+- OpenAI Realtime API Guide: https://platform.openai.com/docs/guides/realtime
+- WebRTC Guide: https://platform.openai.com/docs/guides/realtime-webrtc
+- Expo WebRTC Example: https://github.com/thorwebdev/expo-webrtc-openai-realtime
+- Model Info: https://platform.openai.com/docs/models/gpt-realtime
+
+---
+
+## 🚨 SESSION 17: SIMPLIFY & SHIP 🚨
+
+### Current Focus
+1. ✅ Code quality fixes (Session 16 - DONE)
+2. 🔄 Update to GPT-5.2 models
+3. 🔄 Simplify home screen to one smart recommendation
+4. ⏳ Device test and ship
+
+### Home Screen Target Design
+```
+┌─────────────────────────────────────────┐
+│      Evening in Shibuya · 18°           │
+│                                          │
+│  ┌─────────────────────────────────┐    │
+│  │ 🍜 Afuri Ramen                   │    │
+│  │ Light yuzu shio — matches your   │    │
+│  │ preference for mild flavors.     │    │
+│  │                                   │    │
+│  │ 5 min walk · $ · Open now        │    │
+│  │                                   │    │
+│  │    [Take me there]    [Save ♡]   │    │
+│  └─────────────────────────────────┘    │
+│                                          │
+│  ┌─────────────────────────────────┐    │
+│  │ Ask Tomo anything...      🎤 📷  │    │
+│  └─────────────────────────────────┘    │
+└─────────────────────────────────────────┘
+```
+
+**Remove:** Quick chips, AI tip banner, multiple suggestion cards, "What do you want right now?" prompt.
+
+---
+
+## ✅ SESSION 16 COMPLETED: Code Quality Fixes
+
+All 16 critical issues fixed:
+- ✅ Realtime session moved to Zustand store
+- ✅ Zustand anti-patterns fixed
+- ✅ Offline checks added to routes
+- ✅ Memory leaks fixed (animations, notifications, AbortController)
+- ✅ Error Boundary added
+- ✅ API key validation on startup
+- ✅ PlaceCard memoized
+- ✅ TypeScript passes clean
 
 ### PHASE 1: Code Quality (40 Issues Found in Session 15)
 
@@ -149,31 +399,31 @@ A travel companion that:
 
 | Feature | Status | Confidence | Notes |
 |---------|--------|------------|-------|
-| **Core Chat AI** | ✅ 95% | HIGH | **GPT-4o**, structured responses, context-aware + memory |
+| **Core Chat AI** | ✅ 95% | HIGH | **GPT-5.2**, structured responses, context-aware + memory |
 | **Place Discovery** | ✅ 90% | HIGH | Google Places, photos, ratings, open status |
 | **Navigation** | ✅ 85% | MEDIUM | Needs real device testing (compass) |
 | **Map Explorer** | ✅ 85% | HIGH | Categories, search, selection |
 | **Settings** | ✅ 90% | HIGH | All preferences persist |
 | **Saved Places** | ✅ 85% | MEDIUM | Complete, wired into chat |
-| **Memory System** | ✅ 90% | HIGH | **GPT-4o-mini extraction → feeds back into chat** |
+| **Memory System** | ✅ 90% | HIGH | **gpt-5-mini extraction → feeds back into chat** |
 | **Offline Mode** | ✅ 85% | MEDIUM | Network detection + graceful fallbacks |
-| **Voice Mode** | ✅ 85% | MEDIUM | **gpt-4o-realtime-preview** - needs device testing |
-| **Camera/Translation** | ✅ 90% | HIGH | GPT-4o vision + smart prompt selection |
+| **Voice Mode** | ✅ 85% | MEDIUM | **gpt-realtime** - needs device testing |
+| **Camera/Translation** | ✅ 90% | HIGH | GPT-5.2 vision + smart prompt selection |
 | **Itinerary Map** | ✅ 90% | HIGH | Day's activities on map with route polyline |
 | **Route Optimization** | ✅ 90% | HIGH | Reorder waypoints for minimal walking |
 | **Expense Tracking** | ✅ 90% | HIGH | Full UI with budget progress, categories |
 | **Weather Forecast** | ✅ 85% | HIGH | 5-day forecast from OpenWeatherMap |
-| **Trip Recap** | ✅ 90% | HIGH | AI-generated summaries via GPT-4o |
+| **Trip Recap** | ✅ 90% | HIGH | AI-generated summaries via GPT-5.2 |
 | **Currency Converter** | ✅ 85% | HIGH | 25 currencies with swap/convert |
 | **Itinerary from Chat** | ✅ 90% | HIGH | **NEW** "Plan my day" creates full itinerary |
-| **Intelligent Home** | ✅ 90% | HIGH | **NEW** AI-powered tips + context suggestions |
+| **Intelligent Home** | 🔄 REFACTORING | MEDIUM | Simplifying to one smart recommendation |
 
 ### Needs Device Testing
 
 | Feature | Code Status | Notes |
 |---------|-------------|-------|
-| **Voice Realtime** | ✅ 100% | Uses `gpt-4o-realtime-preview`, full WebSocket implementation |
-| **Camera Translation** | ✅ 100% | Take photo → select prompt → GPT-4o vision → response |
+| **Voice Realtime** | ✅ 100% | Uses `gpt-realtime`, full WebSocket implementation |
+| **Camera Translation** | ✅ 100% | Take photo → select prompt → GPT-5.2 vision → response |
 | **Notification Triggers** | ✅ 100% | All triggers wired, running every 30s |
 | **Compass Navigation** | ✅ 90% | Magnetometer-based, needs real device |
 | **Booking Links** | ✅ 80% | Deep links with web fallbacks |
@@ -197,10 +447,10 @@ Voice mode now uses `gpt-realtime` model:
 - Tap mic → speak → Tomo responds with voice
 
 ### 3. ✅ Memory Extraction - WORKING (Session 13)
-Now uses GPT-4o-mini for intelligent extraction + feeds back into chat:
+Now uses gpt-5-mini for intelligent extraction + feeds back into chat:
 ```typescript
 // hooks/useMemoryExtraction.ts:
-// 1. Sends user messages to gpt-4o-mini for preference extraction
+// 1. Sends user messages to gpt-5-mini for preference extraction
 // 2. Falls back to regex patterns if AI unavailable/offline
 // 3. Shows "Tomo learned" notification when preferences detected
 // 4. Memories feed into buildSystemPrompt() for personalized responses

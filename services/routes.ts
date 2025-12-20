@@ -1,5 +1,69 @@
 import { Coordinates, TransitStep, TransitRoute } from '../types';
 import { config } from '../constants/config';
+import { useOfflineStore } from '../stores/useOfflineStore';
+
+/**
+ * Check if we're online before making API calls
+ */
+function checkOnline(): boolean {
+  return useOfflineStore.getState().isOnline;
+}
+
+/**
+ * Create a fallback route based on straight-line distance when offline
+ */
+function createFallbackRoute(
+  origin: Coordinates,
+  destination: Coordinates,
+  mode: 'WALK' | 'TRANSIT' | 'DRIVE'
+): TransitRoute {
+  // Calculate straight-line distance
+  const R = 6371e3; // Earth's radius in meters
+  const lat1 = (origin.latitude * Math.PI) / 180;
+  const lat2 = (destination.latitude * Math.PI) / 180;
+  const deltaLat = ((destination.latitude - origin.latitude) * Math.PI) / 180;
+  const deltaLon = ((destination.longitude - origin.longitude) * Math.PI) / 180;
+
+  const a =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const straightLineDistance = R * c;
+
+  // Estimate actual distance (add 30% for path curvature)
+  const estimatedDistance = Math.round(straightLineDistance * 1.3);
+
+  // Estimate duration based on mode
+  let durationMinutes: number;
+  let stepMode: 'walk' | 'train' | 'taxi';
+
+  switch (mode) {
+    case 'WALK':
+      durationMinutes = Math.ceil(estimatedDistance / 80); // ~4.8 km/h
+      stepMode = 'walk';
+      break;
+    case 'TRANSIT':
+      durationMinutes = Math.ceil(estimatedDistance / 400); // ~24 km/h avg with stops
+      stepMode = 'train';
+      break;
+    case 'DRIVE':
+      durationMinutes = Math.ceil(estimatedDistance / 500); // ~30 km/h city driving
+      stepMode = 'taxi';
+      break;
+  }
+
+  return {
+    steps: [{
+      mode: stepMode,
+      instruction: `Head toward destination (offline estimate)`,
+      duration: durationMinutes,
+      distance: estimatedDistance,
+    }],
+    totalDuration: durationMinutes,
+    totalDistance: estimatedDistance,
+    polyline: '', // No polyline for fallback
+  };
+}
 
 /**
  * Google Routes API service
@@ -63,6 +127,15 @@ export async function getTransitDirections(
   destination: Coordinates,
   departureTime?: Date
 ): Promise<TransitRoute | null> {
+  // Check offline status first
+  if (!checkOnline()) {
+    console.log('[Routes] Offline - returning cached or fallback route');
+    const cached = useOfflineStore.getState().getCachedRoute(origin, destination, 'TRANSIT');
+    if (cached) return cached;
+    // Return distance-based estimate if no cache
+    return createFallbackRoute(origin, destination, 'TRANSIT');
+  }
+
   try {
     const requestBody = {
       origin: {
@@ -283,6 +356,14 @@ export async function getDrivingDirections(
   origin: Coordinates,
   destination: Coordinates
 ): Promise<TransitRoute | null> {
+  // Check offline status first
+  if (!checkOnline()) {
+    console.log('[Routes] Offline - returning cached or fallback route');
+    const cached = useOfflineStore.getState().getCachedRoute(origin, destination, 'DRIVE');
+    if (cached) return cached;
+    return createFallbackRoute(origin, destination, 'DRIVE');
+  }
+
   try {
     const requestBody = {
       origin: {
@@ -386,6 +467,14 @@ export async function getWalkingDirections(
   origin: Coordinates,
   destination: Coordinates
 ): Promise<TransitRoute | null> {
+  // Check offline status first
+  if (!checkOnline()) {
+    console.log('[Routes] Offline - returning cached or fallback route');
+    const cached = useOfflineStore.getState().getCachedRoute(origin, destination, 'WALK');
+    if (cached) return cached;
+    return createFallbackRoute(origin, destination, 'WALK');
+  }
+
   try {
     const requestBody = {
       origin: {
@@ -409,7 +498,7 @@ export async function getWalkingDirections(
       units: 'METRIC',
     };
 
-    console.log('[Routes] Using API key:', config.googlePlacesApiKey?.substring(0, 15) + '...');
+    // Note: Removed API key logging for security
 
     const response = await fetch(ROUTES_API_URL, {
       method: 'POST',

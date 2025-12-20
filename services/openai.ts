@@ -293,7 +293,7 @@ export async function chat(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-5.2',
         messages,
         max_tokens: 1500,
         temperature: 0.7,
@@ -551,7 +551,7 @@ export async function generateItinerary(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-5.2',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -618,16 +618,18 @@ export interface NavigationContext {
   travelMode: 'WALK' | 'TRANSIT' | 'DRIVE';
 }
 
+export interface NavigationChatAction {
+  type: 'add_stop' | 'find_nearby' | 'change_route' | 'info' | 'none';
+  place?: {
+    name: string;
+    address: string;
+    coordinates: Coordinates;
+  };
+}
+
 export interface NavigationChatResponse {
   text: string;
-  action?: {
-    type: 'add_stop' | 'find_nearby' | 'change_route' | 'info' | 'none';
-    place?: {
-      name: string;
-      address: string;
-      coordinates: Coordinates;
-    };
-  };
+  action?: NavigationChatAction;
 }
 
 /**
@@ -705,7 +707,7 @@ export async function navigationChat(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Fast + capable model for navigation
+        model: 'gpt-5-mini', // Fast + capable model for navigation
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: message },
@@ -902,7 +904,7 @@ export async function modifyItinerary(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Fast + capable model for modifications
+        model: 'gpt-5-mini', // Fast + capable model for modifications
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -1021,7 +1023,7 @@ Keep summary conversational and warm, like a friend reflecting on shared memorie
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Fast + capable
+        model: 'gpt-5-mini', // Fast + capable
         messages: [
           { role: 'system', content: 'You generate trip summaries in JSON format. Be warm and specific.' },
           { role: 'user', content: prompt },
