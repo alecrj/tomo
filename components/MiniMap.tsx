@@ -8,7 +8,7 @@ import { useNavigationStore } from '../stores/useNavigationStore';
 import { decodePolyline } from '../utils/polyline';
 import type { Coordinates } from '../types';
 
-// Use Google Maps everywhere for better international coverage
+// Use Google Maps everywhere for consistent experience
 const MAP_PROVIDER = PROVIDER_GOOGLE;
 
 interface MiniMapProps {

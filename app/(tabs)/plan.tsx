@@ -17,12 +17,14 @@ import {
   Check,
   X,
   Calendar,
+  Map,
 } from 'lucide-react-native';
 import { colors, spacing, typography, borders } from '../../constants/theme';
 import { useItineraryStore } from '../../stores/useItineraryStore';
 import { useLocationStore } from '../../stores/useLocationStore';
 import { useTripStore } from '../../stores/useTripStore';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../../utils/haptics';
+import ItineraryMap from '../../components/ItineraryMap';
 import type { Activity } from '../../types';
 
 const TIME_SLOTS = ['morning', 'afternoon', 'evening', 'night'] as const;
@@ -232,6 +234,26 @@ export default function PlanScreen() {
                 />
               ))}
             </View>
+
+            {/* Day Map */}
+            {selectedDay && selectedDay.activities.length > 0 && (
+              <View style={styles.mapSection}>
+                <View style={styles.mapHeader}>
+                  <Map size={16} color={colors.text.secondary} />
+                  <Text style={styles.mapHeaderText}>Day Route</Text>
+                </View>
+                <ItineraryMap
+                  activities={selectedDay.activities}
+                  dayDate={selectedDay.date}
+                  itineraryId={activeItinerary.id}
+                  onActivityPress={(activity) => {
+                    safeHaptics.impact(ImpactFeedbackStyle.Light);
+                    // Could scroll to activity or show details
+                  }}
+                  compact
+                />
+              </View>
+            )}
 
             {/* Activities by time slot */}
             {TIME_SLOTS.map((slot) => (
@@ -559,5 +581,23 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.base,
     color: colors.accent.primary,
     fontWeight: typography.weights.medium,
+  },
+
+  // Map section
+  mapSection: {
+    marginBottom: spacing.xl,
+  },
+  mapHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  mapHeaderText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.text.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

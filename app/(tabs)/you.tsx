@@ -158,7 +158,7 @@ export default function YouScreen() {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => handleNavigate('/settings')}
+              onPress={() => handleNavigate('/expenses')}
             >
               <View style={[styles.menuIcon, { backgroundColor: colors.status.warningMuted }]}>
                 <Wallet size={20} color={colors.status.warning} />

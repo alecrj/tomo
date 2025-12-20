@@ -7,7 +7,7 @@ import { Audio } from 'expo-av';
 
 // API configuration
 const REALTIME_API_URL = 'wss://api.openai.com/v1/realtime';
-const MODEL = 'gpt-realtime';
+const MODEL = 'gpt-4o-realtime-preview';
 
 // Get API key from environment
 const getApiKey = () => process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';

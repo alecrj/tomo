@@ -43,7 +43,7 @@ import type { TransitRoute, Coordinates } from '../types';
 
 const { width, height } = Dimensions.get('window');
 
-// Use Google Maps everywhere for better international coverage
+// Use Google Maps everywhere for consistent experience
 const MAP_PROVIDER = PROVIDER_GOOGLE;
 
 const TRAVEL_MODES: { mode: TravelMode; label: string; icon: typeof Car }[] = [

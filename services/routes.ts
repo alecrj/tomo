@@ -555,3 +555,250 @@ export function getMinutesUntilLastTrain(route: TransitRoute): number | null {
 
   return diffMinutes > 0 ? diffMinutes : null;
 }
+
+// === ROUTE OPTIMIZATION ===
+
+export interface OptimizedRouteResult {
+  optimizedOrder: number[];     // Index order of waypoints (0-based, excludes origin/dest)
+  totalDistance: number;        // Total distance in meters
+  totalDuration: number;        // Total duration in minutes
+  polyline: string;             // Encoded polyline for the entire route
+  legs: Array<{
+    startIndex: number;         // Index of starting waypoint
+    endIndex: number;           // Index of ending waypoint
+    distance: number;           // Distance in meters
+    duration: number;           // Duration in minutes
+  }>;
+}
+
+/**
+ * Optimize the order of waypoints for the shortest walking route
+ * Uses Google Routes API with optimizeWaypointOrder parameter
+ *
+ * @param waypoints Array of coordinates to visit (minimum 2)
+ * @param origin Starting point (defaults to first waypoint)
+ * @param destination Ending point (defaults to last waypoint or back to origin for round trip)
+ * @param roundTrip If true, returns to origin after visiting all waypoints
+ */
+export async function optimizeRoute(
+  waypoints: Coordinates[],
+  origin?: Coordinates,
+  destination?: Coordinates,
+  roundTrip: boolean = false
+): Promise<OptimizedRouteResult | null> {
+  try {
+    if (waypoints.length < 2) {
+      console.warn('[Routes] Need at least 2 waypoints to optimize');
+      return null;
+    }
+
+    // If no explicit origin, use first waypoint
+    const routeOrigin = origin || waypoints[0];
+
+    // If no explicit destination, use last waypoint (or origin for round trip)
+    const routeDestination = destination || (roundTrip ? routeOrigin : waypoints[waypoints.length - 1]);
+
+    // Intermediate waypoints (excluding origin/destination if they're from the array)
+    let intermediates = [...waypoints];
+    if (!origin) {
+      intermediates = intermediates.slice(1); // Remove first as it's origin
+    }
+    if (!destination && !roundTrip) {
+      intermediates = intermediates.slice(0, -1); // Remove last as it's destination
+    }
+
+    // Build request body
+    const requestBody: any = {
+      origin: {
+        location: {
+          latLng: {
+            latitude: routeOrigin.latitude,
+            longitude: routeOrigin.longitude,
+          },
+        },
+      },
+      destination: {
+        location: {
+          latLng: {
+            latitude: routeDestination.latitude,
+            longitude: routeDestination.longitude,
+          },
+        },
+      },
+      travelMode: 'WALK',
+      optimizeWaypointOrder: true, // Key parameter for optimization
+      languageCode: 'en-US',
+      units: 'METRIC',
+    };
+
+    // Add intermediates if any
+    if (intermediates.length > 0) {
+      requestBody.intermediates = intermediates.map((coord) => ({
+        location: {
+          latLng: {
+            latitude: coord.latitude,
+            longitude: coord.longitude,
+          },
+        },
+      }));
+    }
+
+    console.log('[Routes] Optimizing route with', intermediates.length, 'intermediate waypoints');
+
+    const response = await fetch(ROUTES_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': config.googlePlacesApiKey,
+        'X-Goog-FieldMask': 'routes.legs,routes.distanceMeters,routes.duration,routes.polyline,routes.optimizedIntermediateWaypointIndex',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('[Routes] Optimization API error:', response.status, errorBody);
+      throw new Error(`Routes API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.routes || data.routes.length === 0) {
+      console.error('[Routes] No optimized route found');
+      return null;
+    }
+
+    const route = data.routes[0];
+
+    // Parse optimized waypoint order
+    // Google returns 0-based indices for intermediates only
+    const optimizedOrder: number[] = route.optimizedIntermediateWaypointIndex ||
+      intermediates.map((_, i) => i);
+
+    // Parse legs
+    const legs = route.legs.map((leg: GoogleRouteLeg, index: number) => ({
+      startIndex: index === 0 ? -1 : optimizedOrder[index - 1], // -1 for origin
+      endIndex: index === route.legs.length - 1 ? -2 : optimizedOrder[index], // -2 for destination
+      distance: leg.distanceMeters,
+      duration: Math.round(parseDuration(leg.duration)),
+    }));
+
+    const result: OptimizedRouteResult = {
+      optimizedOrder,
+      totalDistance: route.distanceMeters,
+      totalDuration: Math.round(parseDuration(route.duration)),
+      polyline: route.polyline?.encodedPolyline || '',
+      legs,
+    };
+
+    console.log('[Routes] Route optimized:', {
+      originalOrder: intermediates.map((_, i) => i),
+      optimizedOrder: result.optimizedOrder,
+      totalDistance: result.totalDistance,
+      totalDuration: result.totalDuration,
+      legCount: result.legs.length,
+    });
+
+    return result;
+  } catch (error) {
+    console.error('[Routes] Error optimizing route:', error);
+    return null;
+  }
+}
+
+/**
+ * Get a complete route through multiple waypoints (without optimization)
+ * Useful for getting polyline and stats for a specific order
+ */
+export async function getMultiWaypointRoute(
+  waypoints: Coordinates[]
+): Promise<OptimizedRouteResult | null> {
+  try {
+    if (waypoints.length < 2) {
+      console.warn('[Routes] Need at least 2 waypoints');
+      return null;
+    }
+
+    const origin = waypoints[0];
+    const destination = waypoints[waypoints.length - 1];
+    const intermediates = waypoints.slice(1, -1);
+
+    const requestBody: any = {
+      origin: {
+        location: {
+          latLng: {
+            latitude: origin.latitude,
+            longitude: origin.longitude,
+          },
+        },
+      },
+      destination: {
+        location: {
+          latLng: {
+            latitude: destination.latitude,
+            longitude: destination.longitude,
+          },
+        },
+      },
+      travelMode: 'WALK',
+      optimizeWaypointOrder: false, // Keep original order
+      languageCode: 'en-US',
+      units: 'METRIC',
+    };
+
+    if (intermediates.length > 0) {
+      requestBody.intermediates = intermediates.map((coord) => ({
+        location: {
+          latLng: {
+            latitude: coord.latitude,
+            longitude: coord.longitude,
+          },
+        },
+      }));
+    }
+
+    const response = await fetch(ROUTES_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': config.googlePlacesApiKey,
+        'X-Goog-FieldMask': 'routes.legs,routes.distanceMeters,routes.duration,routes.polyline',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('[Routes] Multi-waypoint API error:', response.status, errorBody);
+      throw new Error(`Routes API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.routes || data.routes.length === 0) {
+      console.error('[Routes] No route found');
+      return null;
+    }
+
+    const route = data.routes[0];
+
+    // Parse legs (keeping original order)
+    const legs = route.legs.map((leg: GoogleRouteLeg, index: number) => ({
+      startIndex: index - 1, // -1 for origin
+      endIndex: index,
+      distance: leg.distanceMeters,
+      duration: Math.round(parseDuration(leg.duration)),
+    }));
+
+    return {
+      optimizedOrder: intermediates.map((_, i) => i), // Original order
+      totalDistance: route.distanceMeters,
+      totalDuration: Math.round(parseDuration(route.duration)),
+      polyline: route.polyline?.encodedPolyline || '',
+      legs,
+    };
+  } catch (error) {
+    console.error('[Routes] Error getting multi-waypoint route:', error);
+    return null;
+  }
+}

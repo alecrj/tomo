@@ -9,6 +9,20 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 // Get API key from environment
 const getApiKey = () => process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
 
+/**
+ * Safely parse JSON with error handling
+ * Returns null if parsing fails
+ */
+function safeJsonParse<T>(text: string, context: string): T | null {
+  try {
+    return JSON.parse(text) as T;
+  } catch (error) {
+    console.error(`[OpenAI] JSON parse error in ${context}:`, error);
+    console.error(`[OpenAI] Raw content: ${text.substring(0, 200)}...`);
+    return null;
+  }
+}
+
 // Check if online
 const checkOnline = (): boolean => {
   return useOfflineStore.getState().isOnline;
@@ -279,7 +293,7 @@ export async function chat(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.2',
+        model: 'gpt-4o',
         messages,
         max_tokens: 1500,
         temperature: 0.7,
@@ -537,7 +551,7 @@ export async function generateItinerary(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.2',
+        model: 'gpt-4o',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -561,12 +575,21 @@ export async function generateItinerary(
       throw new Error('No content in OpenAI response');
     }
 
-    const itinerary: GeneratedItinerary = JSON.parse(content);
+    const itinerary = safeJsonParse<GeneratedItinerary>(content, 'generateItinerary');
+    if (!itinerary) {
+      throw new Error('Failed to parse itinerary JSON');
+    }
+
+    // Validate required fields
+    if (!itinerary.name || !itinerary.days || !Array.isArray(itinerary.days)) {
+      console.error('[OpenAI] Invalid itinerary structure:', itinerary);
+      throw new Error('Invalid itinerary structure');
+    }
 
     console.log('[OpenAI] Generated itinerary:', {
       name: itinerary.name,
       days: itinerary.totalDays,
-      activitiesPerDay: itinerary.days.map(d => d.activities.length),
+      activitiesPerDay: itinerary.days.map(d => d.activities?.length || 0),
     });
 
     return itinerary;
@@ -682,7 +705,7 @@ export async function navigationChat(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5-mini', // Fast + capable model for navigation
+        model: 'gpt-4o-mini', // Fast + capable model for navigation
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: message },
@@ -706,7 +729,10 @@ export async function navigationChat(
       throw new Error('No content in response');
     }
 
-    const parsed = JSON.parse(content);
+    const parsed = safeJsonParse<{ text?: string; action?: NavigationChatAction }>(content, 'navigationChat');
+    if (!parsed) {
+      throw new Error('Failed to parse navigation response');
+    }
 
     console.log('[OpenAI] Navigation chat response:', {
       text: parsed.text?.substring(0, 50),
@@ -876,7 +902,7 @@ export async function modifyItinerary(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5-mini', // Fast + capable model for modifications
+        model: 'gpt-4o-mini', // Fast + capable model for modifications
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -900,7 +926,10 @@ export async function modifyItinerary(
       throw new Error('No content in response');
     }
 
-    const result: ItineraryModificationResult = JSON.parse(content);
+    const result = safeJsonParse<ItineraryModificationResult>(content, 'modifyItinerary');
+    if (!result) {
+      throw new Error('Failed to parse modification result');
+    }
 
     console.log('[OpenAI] Itinerary modification result:', {
       action: result.action,
@@ -914,5 +943,121 @@ export async function modifyItinerary(
       action: 'none',
       message: "Sorry, I couldn't understand that request. Try being more specific, like 'add dinner at 7pm' or 'remove the temple visit'.",
     };
+  }
+}
+
+// === TRIP SUMMARY ===
+
+/**
+ * Trip summary result from AI
+ */
+export interface TripSummaryResult {
+  summary: string;         // 2-3 sentence natural language summary
+  highlights: string[];    // Key highlights (3-5 items)
+  favoritePlace?: string;  // Best place based on data
+  travelStyle?: string;    // Assessed travel style
+}
+
+/**
+ * Generate an AI-powered trip summary
+ */
+export async function generateTripSummary(tripData: {
+  name: string;
+  days: number;
+  cities: Array<{
+    name: string;
+    country: string;
+    visits: Array<{ name: string; neighborhood: string }>;
+    totalExpenses: number;
+  }>;
+  totalPlaces: number;
+  totalExpenses: number;
+  currency: string;
+}): Promise<TripSummaryResult | null> {
+  try {
+    // Check if offline
+    if (!checkOnline()) {
+      console.log('[OpenAI] Offline - returning null for trip summary');
+      return null;
+    }
+
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      console.log('[OpenAI] No API key for trip summary');
+      return null;
+    }
+
+    // Build trip context
+    const citiesSummary = tripData.cities.map(city => {
+      const placesList = city.visits.slice(0, 5).map(v => v.name).join(', ');
+      return `${city.name}, ${city.country}: ${city.visits.length} places (${placesList}${city.visits.length > 5 ? '...' : ''})`;
+    }).join('\n');
+
+    const prompt = `You are Tomo, analyzing a completed trip. Generate a warm, personalized summary.
+
+TRIP DATA:
+- Trip: ${tripData.name}
+- Duration: ${tripData.days} days
+- Cities: ${tripData.cities.length}
+- Total places visited: ${tripData.totalPlaces}
+- Total spent: ${tripData.currency}${tripData.totalExpenses.toLocaleString()}
+
+CITIES & PLACES:
+${citiesSummary}
+
+Generate a JSON response with:
+1. "summary": A warm 2-3 sentence summary of their trip (mention specific places/experiences)
+2. "highlights": Array of 3-5 key highlights (short phrases)
+3. "favoritePlace": The place that seemed most significant (based on being mentioned or context)
+4. "travelStyle": One phrase describing their travel style (e.g., "foodie explorer", "culture enthusiast", "adventurous walker")
+
+Be specific - mention actual place names and neighborhoods from the data.
+Keep summary conversational and warm, like a friend reflecting on shared memories.`;
+
+    const response = await fetch(OPENAI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini', // Fast + capable
+        messages: [
+          { role: 'system', content: 'You generate trip summaries in JSON format. Be warm and specific.' },
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: 500,
+        temperature: 0.7,
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('[OpenAI] Trip summary error:', response.status, errorBody);
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      throw new Error('No content in response');
+    }
+
+    const result = safeJsonParse<TripSummaryResult>(content, 'generateTripSummary');
+    if (!result) {
+      throw new Error('Failed to parse trip summary');
+    }
+
+    console.log('[OpenAI] Trip summary generated:', {
+      summaryLength: result.summary?.length,
+      highlightsCount: result.highlights?.length,
+    });
+
+    return result;
+  } catch (error) {
+    console.error('[OpenAI] Trip summary error:', error);
+    return null;
   }
 }

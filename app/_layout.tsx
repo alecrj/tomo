@@ -44,6 +44,7 @@ export default function RootLayout() {
         <Stack.Screen name="notifications" />
         <Stack.Screen name="memory" />
         <Stack.Screen name="trip-recap" />
+        <Stack.Screen name="expenses" />
         <Stack.Screen name="itinerary" />
         <Stack.Screen name="destination" options={{ presentation: 'modal' }} />
         <Stack.Screen name="conversations" options={{ presentation: 'modal' }} />

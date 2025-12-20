@@ -12,11 +12,31 @@ module.exports = ({ config }) => {
 
   return {
     ...config,
+    ios: {
+      ...config.ios,
+      config: {
+        googleMapsApiKey: googleMapsApiKey,
+      },
+    },
+    android: {
+      ...config.android,
+      config: {
+        googleMaps: {
+          apiKey: googleMapsApiKey,
+        },
+      },
+    },
     plugins: [
       'expo-router',
       'expo-location',
-      // Note: react-native-maps 1.19.1 doesn't need a plugin, but we need to configure
-      // Google Maps manually in ios/Podfile and provide API key via environment
+      [
+        'expo-build-properties',
+        {
+          ios: {
+            useFrameworks: 'static',
+          },
+        },
+      ],
     ],
   };
 };

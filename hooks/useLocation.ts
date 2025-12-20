@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useStampsStore } from '../stores/useStampsStore';
 import {
@@ -86,43 +86,63 @@ export function useLocation() {
    * Initialize location tracking on mount
    */
   useEffect(() => {
+    // Track if component is still mounted
+    let isMounted = true;
+    let unsubscribe: (() => void) | null = null;
+
     // Get initial location
     updateLocation();
 
     // Start watching location
-    let unsubscribe: (() => void) | null = null;
+    const startWatching = async () => {
+      try {
+        const unsub = await watchLocation((coords) => {
+          // Only update if still mounted
+          if (!isMounted) return;
 
-    watchLocation((coords) => {
-      setCoordinates(coords);
+          setCoordinates(coords);
 
-      // Update station and neighborhood when location changes significantly
-      getNearestStation(coords).then((station) => {
-        if (station) {
-          setNearestStation(station);
+          // Update station and neighborhood when location changes significantly
+          getNearestStation(coords).then((station) => {
+            if (station && isMounted) {
+              setNearestStation(station);
+            }
+          });
+
+          // Update neighborhood via reverse geocoding
+          getNeighborhoodName(coords).then((neighborhood) => {
+            if (neighborhood && isMounted) {
+              setNeighborhood(neighborhood);
+            }
+          });
+
+          // Check if city changed
+          const city = detectCity(coords);
+          if (city) {
+            const stampsStore = useStampsStore.getState();
+            if (stampsStore.currentCity !== city) {
+              stampsStore.loadStampsForCity(city);
+            }
+          }
+        });
+
+        // Store unsubscribe for cleanup
+        if (isMounted) {
+          unsubscribe = unsub;
+        } else {
+          // Component unmounted before watch started, clean up immediately
+          unsub();
         }
-      });
-
-      // Update neighborhood via reverse geocoding
-      getNeighborhoodName(coords).then((neighborhood) => {
-        if (neighborhood) {
-          setNeighborhood(neighborhood);
-        }
-      });
-
-      // Check if city changed
-      const city = detectCity(coords);
-      if (city) {
-        const stampsStore = useStampsStore.getState();
-        if (stampsStore.currentCity !== city) {
-          stampsStore.loadStampsForCity(city);
-        }
+      } catch (error) {
+        console.warn('[useLocation] Failed to start watching:', error);
       }
-    }).then((unsub) => {
-      unsubscribe = unsub;
-    });
+    };
+
+    startWatching();
 
     // Cleanup on unmount
     return () => {
+      isMounted = false;
       if (unsubscribe) {
         unsubscribe();
       }

@@ -8,16 +8,30 @@ import {
   Dimensions,
   Share,
   Alert,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import { ArrowLeft, Share2, Download, MapPin, Calendar, DollarSign, MessageCircle } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Share2,
+  Download,
+  MapPin,
+  Calendar,
+  DollarSign,
+  MessageCircle,
+  Sparkles,
+  Star,
+  User,
+} from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import { colors, spacing, borders, shadows, mapStyle } from '../constants/theme';
 import { useTripStore } from '../stores/useTripStore';
 import { useConversationStore } from '../stores/useConversationStore';
 import { detectCurrency } from '../utils/currency';
+import { generateTripSummary, TripSummaryResult } from '../services/openai';
 import type { ChatMessage } from '../types';
 
 // City colors for map pins
@@ -39,6 +53,8 @@ export default function TripRecapScreen() {
   const { currentTrip, pastTrips } = useTripStore();
   const conversationStore = useConversationStore();
   const [selectedTrip, setSelectedTrip] = useState(currentTrip);
+  const [aiSummary, setAiSummary] = useState<TripSummaryResult | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
 
   useEffect(() => {
     if (!selectedTrip) {
@@ -49,6 +65,48 @@ export default function TripRecapScreen() {
       }
     }
   }, [currentTrip, pastTrips]);
+
+  // Generate AI summary when trip is selected
+  useEffect(() => {
+    async function fetchSummary() {
+      if (!selectedTrip || selectedTrip.cities.length === 0) {
+        setAiSummary(null);
+        return;
+      }
+
+      setIsLoadingSummary(true);
+      try {
+        // Get currency for the trip
+        const firstVisit = selectedTrip.cities[0]?.visits[0];
+        const currency = firstVisit
+          ? detectCurrency(firstVisit.coordinates)
+          : { code: 'USD', symbol: '$', name: 'US Dollar' };
+
+        const summary = await generateTripSummary({
+          name: selectedTrip.name,
+          days: selectedTrip.stats.totalDays,
+          cities: selectedTrip.cities.map((city) => ({
+            name: city.name,
+            country: city.country,
+            visits: city.visits.map((v) => ({ name: v.name, neighborhood: v.neighborhood })),
+            totalExpenses: city.totalExpenses,
+          })),
+          totalPlaces: selectedTrip.stats.totalPlaces,
+          totalExpenses: selectedTrip.stats.totalExpenses,
+          currency: currency.symbol,
+        });
+
+        setAiSummary(summary);
+      } catch (error) {
+        console.error('[TripRecap] Error generating summary:', error);
+        setAiSummary(null);
+      } finally {
+        setIsLoadingSummary(false);
+      }
+    }
+
+    fetchSummary();
+  }, [selectedTrip?.id]);
 
   const getCityColor = (index: number) => CITY_COLORS[index % CITY_COLORS.length];
 
@@ -247,6 +305,49 @@ export default function TripRecapScreen() {
               <Text style={styles.statLabel}>Spent</Text>
             </View>
           </View>
+
+          {/* AI Summary Card */}
+          {(isLoadingSummary || aiSummary) && (
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryHeader}>
+                <Sparkles size={20} color={colors.accent.primary} />
+                <Text style={styles.summaryHeaderText}>Tomo's Summary</Text>
+              </View>
+
+              {isLoadingSummary ? (
+                <View style={styles.aiSummaryLoading}>
+                  <ActivityIndicator size="small" color={colors.accent.primary} />
+                  <Text style={styles.aiSummaryLoadingText}>Generating your trip summary...</Text>
+                </View>
+              ) : aiSummary && (
+                <>
+                  <Text style={styles.aiSummaryText}>{aiSummary.summary}</Text>
+
+                  {aiSummary.highlights && aiSummary.highlights.length > 0 && (
+                    <View style={styles.highlightsContainer}>
+                      {aiSummary.highlights.map((highlight, index) => (
+                        <View key={index} style={styles.highlightChip}>
+                          <Star size={12} color={colors.status.warning} />
+                          <Text style={styles.highlightText}>{highlight}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {(aiSummary.favoritePlace || aiSummary.travelStyle) && (
+                    <View style={styles.summaryFooter}>
+                      {aiSummary.travelStyle && (
+                        <View style={styles.travelStyleBadge}>
+                          <User size={14} color={colors.accent.primary} />
+                          <Text style={styles.travelStyleText}>{aiSummary.travelStyle}</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+          )}
 
           {/* Countries & Cities Summary */}
           <View style={styles.summarySection}>
@@ -675,5 +776,85 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.accent.primary,
+  },
+  // AI Summary Card styles
+  summaryCard: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    backgroundColor: colors.surface.card,
+    borderRadius: borders.radius.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.accent.muted,
+    ...shadows.md,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  summaryHeaderText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.accent.primary,
+  },
+  aiSummaryLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.lg,
+    gap: spacing.md,
+  },
+  aiSummaryLoadingText: {
+    fontSize: 14,
+    color: colors.text.secondary,
+  },
+  aiSummaryText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.text.primary,
+    marginBottom: spacing.md,
+  },
+  highlightsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  highlightChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.background.tertiary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borders.radius.full,
+  },
+  highlightText: {
+    fontSize: 13,
+    color: colors.text.primary,
+    fontWeight: '500',
+  },
+  summaryFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.muted,
+  },
+  travelStyleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.accent.muted,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borders.radius.full,
+  },
+  travelStyleText: {
+    fontSize: 13,
+    color: colors.accent.primary,
+    fontWeight: '600',
   },
 });

@@ -17,7 +17,7 @@ interface ExtractedMemory {
 /**
  * Use AI to extract preferences from a message
  */
-async function extractMemoriesWithAI(message: string): Promise<ExtractedMemory[]> {
+async function extractMemoriesWithAI(message: string, signal?: AbortSignal): Promise<ExtractedMemory[]> {
   try {
     const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
     if (!apiKey) return [];
@@ -28,13 +28,14 @@ async function extractMemoriesWithAI(message: string): Promise<ExtractedMemory[]
     }
 
     const response = await fetch(OPENAI_API_URL, {
+      signal, // AbortController signal for cancellation
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5-mini', // Fast + capable model for extraction
+        model: 'gpt-4o-mini', // Fast + capable model for extraction
         messages: [
           {
             role: 'system',
@@ -104,6 +105,10 @@ Only extract if confidence > 0.7. Be conservative - only extract clear preferenc
     // Filter by confidence
     return memories.filter((m: ExtractedMemory) => m.confidence >= 0.7);
   } catch (error) {
+    // Don't log abort errors - they're intentional
+    if (error instanceof Error && error.name === 'AbortError') {
+      return [];
+    }
     console.error('[MemoryExtraction] AI extraction error:', error);
     return [];
   }
@@ -192,6 +197,7 @@ function isSimilarMemoryExists(memories: Memory[], newContent: string): boolean 
 export function useMemoryExtraction() {
   const processedMessagesRef = useRef<Set<string>>(new Set());
   const aiProcessingRef = useRef<Set<string>>(new Set()); // Track messages being processed by AI
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Memory store
   const memories = useMemoryStore((state) => state.memories);
@@ -236,9 +242,13 @@ export function useMemoryExtraction() {
 
     aiProcessingRef.current.add(message.id);
 
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
     try {
       // Try AI extraction first
-      const aiMemories = await extractMemoriesWithAI(message.content);
+      const aiMemories = await extractMemoriesWithAI(message.content, signal);
 
       if (aiMemories.length > 0) {
         console.log('[MemoryExtraction] AI found memories:', aiMemories.length);
@@ -330,6 +340,15 @@ export function useMemoryExtraction() {
   useEffect(() => {
     processMessages();
   }, [processMessages]);
+
+  // Cleanup: abort any pending requests on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   return {
     processMessages,

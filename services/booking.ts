@@ -200,31 +200,68 @@ export function getPrimaryBookingOptions(place: PlaceCardData, category?: string
 }
 
 /**
- * Open a booking URL
+ * Open a booking URL with robust fallbacks
+ * On iOS, canOpenURL throws if URL scheme isn't in LSApplicationQueriesSchemes
  */
 export async function openBookingUrl(url: string): Promise<boolean> {
+  // Helper to get web fallback URL
+  const getWebFallback = (originalUrl: string): string | null => {
+    if (originalUrl.startsWith('uber://')) {
+      return 'https://m.uber.com/';
+    }
+    if (originalUrl.startsWith('grab://')) {
+      return 'https://grab.com';
+    }
+    if (originalUrl.startsWith('comgooglemaps://')) {
+      // Extract coordinates from Google Maps deep link and use web URL
+      const match = originalUrl.match(/daddr=([^&]+)/);
+      if (match) {
+        return `https://www.google.com/maps/dir/?api=1&destination=${match[1]}`;
+      }
+    }
+    return null;
+  };
+
   try {
+    // Try to check if we can open the URL (may throw on iOS)
     const canOpen = await Linking.canOpenURL(url);
     if (canOpen) {
       await Linking.openURL(url);
       return true;
-    } else {
-      // Fallback to web URL if app deep link fails
-      if (url.startsWith('uber://')) {
-        await Linking.openURL(url.replace('uber://', 'https://m.uber.com/'));
-        return true;
-      }
-      if (url.startsWith('grab://')) {
-        await Linking.openURL('https://grab.com');
-        return true;
-      }
-      console.log('[Booking] Cannot open URL:', url);
-      return false;
     }
-  } catch (error) {
-    console.error('[Booking] Error opening URL:', error);
-    return false;
+  } catch {
+    // iOS throws if scheme not in LSApplicationQueriesSchemes - expected behavior
+    console.log('[Booking] App not available, trying web fallback');
   }
+
+  // Try web fallback
+  const webFallback = getWebFallback(url);
+  if (webFallback) {
+    try {
+      await Linking.openURL(webFallback);
+      return true;
+    } catch (error) {
+      console.error('[Booking] Web fallback failed:', error);
+    }
+  }
+
+  // Last resort: open in Google Maps web
+  if (url.includes('daddr=') || url.includes('destination=')) {
+    try {
+      // Try to extract destination and open Google Maps web
+      const coordMatch = url.match(/(\d+\.\d+)[,|%2C](\d+\.\d+)/);
+      if (coordMatch) {
+        const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${coordMatch[1]},${coordMatch[2]}`;
+        await Linking.openURL(mapsUrl);
+        return true;
+      }
+    } catch {
+      console.log('[Booking] Could not open any URL');
+    }
+  }
+
+  console.log('[Booking] No fallback available for:', url);
+  return false;
 }
 
 /**

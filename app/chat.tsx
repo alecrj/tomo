@@ -25,7 +25,7 @@ import {
   Plus,
 } from 'lucide-react-native';
 import { colors, spacing, typography, borders } from '../constants/theme';
-import { chat } from '../services/openai';
+import { chat, generateItinerary, GeneratedItinerary } from '../services/openai';
 import { takePhoto, pickPhoto } from '../services/camera';
 import { startRecording, stopRecording, transcribeAudio } from '../services/voice';
 import { useLocationStore } from '../stores/useLocationStore';
@@ -143,6 +143,123 @@ export default function ChatScreen() {
     }
   }, [messages]);
 
+  // Helper to detect itinerary requests
+  const isItineraryRequest = (text: string): { isRequest: boolean; numDays: number } => {
+    const lower = text.toLowerCase();
+    const itineraryPatterns = [
+      /plan\s+(my|a|the)?\s*(day|trip|itinerary|schedule)/i,
+      /create\s+(an?|my)?\s*(itinerary|plan|schedule)/i,
+      /help\s+me\s+plan/i,
+      /what\s+should\s+i\s+do\s+(today|tomorrow|this\s+week)/i,
+      /make\s+(me\s+)?(an?\s+)?(itinerary|plan)/i,
+      /(\d+)\s*days?\s*(itinerary|plan|trip)/i,
+      /(itinerary|plan)\s*for\s*(\d+)\s*days?/i,
+    ];
+
+    const isRequest = itineraryPatterns.some(pattern => pattern.test(lower));
+
+    // Try to extract number of days
+    const daysMatch = lower.match(/(\d+)\s*days?/);
+    const numDays = daysMatch ? parseInt(daysMatch[1], 10) : 1;
+
+    return { isRequest, numDays: Math.min(numDays, 7) }; // Max 7 days
+  };
+
+  // Handle itinerary generation
+  const handleItineraryGeneration = async (text: string, numDays: number): Promise<boolean> => {
+    const context: DestinationContext = {
+      location: coordinates || { latitude: 0, longitude: 0 },
+      neighborhood: neighborhood || 'unknown location',
+      timeOfDay,
+      weather: weatherCondition && weatherTemperature ? {
+        condition: weatherCondition,
+        temperature: weatherTemperature,
+        description: `${weatherCondition}, ${weatherTemperature}°C`,
+        humidity: 0,
+      } : null,
+      budgetRemaining,
+      dailyBudget,
+      preferences: {
+        homeBase,
+        walkingTolerance: walkingTolerance === 'medium' ? 'moderate' : walkingTolerance,
+        budget: budgetLevel,
+        dietary,
+        interests,
+        avoidCrowds,
+      },
+      visitedPlaces: visits.slice(-10),
+      completedStamps: [],
+      excludedToday: [],
+      totalWalkingToday: totalWalkingMinutes,
+    };
+
+    try {
+      const itinerary = await generateItinerary(context, numDays, text);
+
+      if (!itinerary) {
+        return false;
+      }
+
+      // Create itinerary in store
+      const itineraryStore = useItineraryStore.getState();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const endDate = new Date(today);
+      endDate.setDate(endDate.getDate() + numDays);
+
+      const createdItinerary = itineraryStore.createItinerary(
+        itinerary.name || `${neighborhood || 'My'} Itinerary`,
+        today.getTime(),
+        endDate.getTime(),
+        currentTrip?.id
+      );
+
+      // Add activities for each day
+      itinerary.days.forEach((day, dayIndex) => {
+        const dayDate = new Date(today);
+        dayDate.setDate(dayDate.getDate() + dayIndex);
+        dayDate.setHours(0, 0, 0, 0);
+
+        day.activities.forEach((activity) => {
+          itineraryStore.addActivity(createdItinerary.id, dayDate.getTime(), {
+            timeSlot: activity.timeSlot as 'morning' | 'afternoon' | 'evening',
+            title: activity.title,
+            description: activity.description,
+            category: activity.category || 'activity',
+            place: activity.place ? {
+              name: activity.place.name,
+              address: activity.place.address || '',
+              coordinates: activity.place.coordinates || coordinates || { latitude: 0, longitude: 0 },
+              estimatedCost: activity.place.estimatedCost,
+            } : undefined,
+            booked: false,
+          });
+        });
+      });
+
+      // Create response message
+      const responseContent = `I've created your ${numDays}-day itinerary: **${itinerary.name}**\n\n${itinerary.overview}\n\n${itinerary.tips?.length ? '**Tips:**\n' + itinerary.tips.map(t => `• ${t}`).join('\n') : ''}\n\nTap below to view your full itinerary!`;
+
+      const assistantMessage: ChatMessage = {
+        id: `assistant-${Date.now()}`,
+        role: 'assistant',
+        content: responseContent,
+        timestamp: Date.now(),
+        actions: [
+          { label: 'View Itinerary', type: 'view_itinerary' },
+          { label: 'Modify Plan', type: 'regenerate' },
+        ],
+      };
+
+      safeHaptics.notification(NotificationFeedbackType.Success);
+      addMessage(assistantMessage);
+      return true;
+    } catch (error) {
+      console.error('Error generating itinerary:', error);
+      return false;
+    }
+  };
+
   const handleSendMessage = async (messageText?: string, imageBase64?: string) => {
     const text = messageText || inputText.trim();
     if ((!text && !imageBase64) || isSending) return;
@@ -175,6 +292,17 @@ export default function ChatScreen() {
       addMessage(offlineMessage);
       setIsSending(false);
       return;
+    }
+
+    // Check if this is an itinerary request
+    const itineraryCheck = isItineraryRequest(text);
+    if (itineraryCheck.isRequest && !imageBase64) {
+      const success = await handleItineraryGeneration(text, itineraryCheck.numDays);
+      if (success) {
+        setIsSending(false);
+        return;
+      }
+      // If itinerary generation failed, fall through to regular chat
     }
 
     try {
@@ -277,6 +405,9 @@ export default function ChatScreen() {
       case 'show_recap':
         router.push('/trip-recap');
         break;
+      case 'view_itinerary':
+        router.push('/(tabs)/plan');
+        break;
       case 'add_to_itinerary':
         if (placeCard) {
           const itineraryStore = useItineraryStore.getState();
@@ -319,6 +450,39 @@ export default function ChatScreen() {
   const handleCamera = () => {
     safeHaptics.impact(ImpactFeedbackStyle.Light);
 
+    // Smart prompt options for different image types
+    const promptOptions = [
+      'Translate this text/menu for me',
+      'What is this place?',
+      'Tell me about this',
+      'How much does this cost?',
+    ];
+
+    const handleImageWithPrompt = async (image: string) => {
+      if (Platform.OS === 'ios') {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            title: 'What do you want to know?',
+            options: ['Cancel', ...promptOptions],
+            cancelButtonIndex: 0,
+          },
+          (buttonIndex) => {
+            if (buttonIndex > 0 && buttonIndex <= promptOptions.length) {
+              handleSendMessage(promptOptions[buttonIndex - 1], image);
+            }
+          }
+        );
+      } else {
+        Alert.alert('What do you want to know?', undefined, [
+          { text: 'Cancel', style: 'cancel' },
+          ...promptOptions.map((prompt) => ({
+            text: prompt,
+            onPress: () => handleSendMessage(prompt, image),
+          })),
+        ]);
+      }
+    };
+
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
@@ -328,10 +492,10 @@ export default function ChatScreen() {
         async (buttonIndex) => {
           if (buttonIndex === 1) {
             const image = await takePhoto();
-            if (image) handleSendMessage('What can you tell me about this?', image);
+            if (image) handleImageWithPrompt(image);
           } else if (buttonIndex === 2) {
             const image = await pickPhoto();
-            if (image) handleSendMessage('What can you tell me about this?', image);
+            if (image) handleImageWithPrompt(image);
           }
         }
       );
@@ -342,14 +506,14 @@ export default function ChatScreen() {
           text: 'Take Photo',
           onPress: async () => {
             const image = await takePhoto();
-            if (image) handleSendMessage('What can you tell me about this?', image);
+            if (image) handleImageWithPrompt(image);
           },
         },
         {
           text: 'Choose from Library',
           onPress: async () => {
             const image = await pickPhoto();
-            if (image) handleSendMessage('What can you tell me about this?', image);
+            if (image) handleImageWithPrompt(image);
           },
         },
       ]);

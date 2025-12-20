@@ -34,11 +34,13 @@ import { usePreferencesStore } from '../../stores/usePreferencesStore';
 import { useSavedPlacesStore } from '../../stores/useSavedPlacesStore';
 import { useItineraryStore } from '../../stores/useItineraryStore';
 import { useConversationStore } from '../../stores/useConversationStore';
+import { useMemoryStore } from '../../stores/useMemoryStore';
 import { useTimeOfDay } from '../../hooks/useTimeOfDay';
 import { useLocation } from '../../hooks/useLocation';
 import { useWeather } from '../../hooks/useWeather';
 import { chat } from '../../services/openai';
 import { searchNearbyPlaces } from '../../services/places';
+import { useOfflineStore } from '../../stores/useOfflineStore';
 import { safeHaptics, ImpactFeedbackStyle } from '../../utils/haptics';
 import { NotificationContainer } from '../../components/NotificationToast';
 import { OfflineBanner } from '../../components/OfflineBanner';
@@ -129,12 +131,16 @@ export default function TomoHomeScreen() {
   }, [itineraries, activeItineraryId]);
   const addMessage = useConversationStore((state) => state.addMessage);
   const startNewConversation = useConversationStore((state) => state.startNewConversation);
+  const memories = useMemoryStore((state) => state.memories);
+  const getMemoriesByType = useMemoryStore((state) => state.getMemoriesByType);
+  const isOnline = useOfflineStore((state) => state.isOnline);
 
   // Local state
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<RightNowSuggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
+  const [aiTip, setAiTip] = useState<string | null>(null);
 
   // Get quick actions based on time of day
   const quickActions = useMemo(() => {
@@ -171,9 +177,89 @@ export default function TomoHomeScreen() {
     return <Sun size={14} color={colors.text.secondary} />;
   };
 
+  // Get user dislikes and likes from memory
+  const userDislikes = useMemo(() => {
+    return getMemoriesByType('dislike').map(m => m.content.toLowerCase());
+  }, [memories, getMemoriesByType]);
+
+  const userLikes = useMemo(() => {
+    return getMemoriesByType('like').map(m => m.content.toLowerCase());
+  }, [memories, getMemoriesByType]);
+
+  // Generate personalized AI tip
+  const generateAiTip = useCallback(async () => {
+    if (!isOnline) {
+      setAiTip(null);
+      return;
+    }
+
+    try {
+      // Build a concise context for the tip
+      const context = {
+        timeOfDay,
+        weather: weatherCondition,
+        temp: displayTemperature,
+        neighborhood: neighborhood || 'Unknown',
+        hasItinerary: !!activeItinerary,
+        savedPlacesNearby: savedPlaces.filter(p => {
+          if (!p.coordinates || !coordinates) return false;
+          const dist = Math.sqrt(
+            Math.pow(p.coordinates.latitude - coordinates.latitude, 2) +
+            Math.pow(p.coordinates.longitude - coordinates.longitude, 2)
+          );
+          return dist < 0.01;
+        }).length,
+        likes: userLikes.slice(0, 3),
+        dislikes: userDislikes.slice(0, 3),
+      };
+
+      // Quick chat call for a tip - uses gpt-4o-mini for speed/cost
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `You are Tomo, a friendly travel companion. Generate a SINGLE short sentence (max 15 words) giving a personalized tip or observation based on context. Be warm but not cheesy. Sound like a helpful local friend.`
+            },
+            {
+              role: 'user',
+              content: `Context: ${JSON.stringify(context)}
+
+Generate one short personalized tip for right now. Examples:
+- "Perfect coffee weather - there's a great spot around the corner"
+- "The bars are just opening up, good time to explore"
+- "You saved a place nearby - want to check it out?"
+- "Rainy day = perfect for that museum you've been meaning to visit"`
+            }
+          ],
+          max_tokens: 50,
+          temperature: 0.8,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const tip = data.choices?.[0]?.message?.content?.trim();
+        if (tip) {
+          setAiTip(tip.replace(/^["']|["']$/g, '')); // Remove quotes if present
+        }
+      }
+    } catch (error) {
+      console.log('[TomoHome] AI tip generation skipped:', error);
+      // Don't show error - just skip the tip
+    }
+  }, [timeOfDay, weatherCondition, displayTemperature, neighborhood, activeItinerary, savedPlaces, coordinates, userLikes, userDislikes, isOnline]);
+
   // Generate "Right Now" suggestions
   useEffect(() => {
     generateSuggestions();
+    generateAiTip();
   }, [coordinates, timeOfDay, weatherCondition]);
 
   const generateSuggestions = async () => {
@@ -418,6 +504,13 @@ export default function TomoHomeScreen() {
             </View>
           </View>
 
+          {/* AI-generated personalized tip */}
+          {aiTip && (
+            <View style={styles.aiTipContainer}>
+              <Text style={styles.aiTipText}>{aiTip}</Text>
+            </View>
+          )}
+
           {/* Main prompt */}
           <View style={styles.promptSection}>
             <Text style={styles.mainPrompt}>
@@ -561,6 +654,23 @@ const styles = StyleSheet.create({
   weatherText: {
     fontSize: typography.sizes.sm,
     color: colors.text.secondary,
+  },
+
+  // AI Tip
+  aiTipContainer: {
+    backgroundColor: colors.accent.primary + '15',
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent.primary,
+    borderRadius: borders.radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.md,
+  },
+  aiTipText: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.primary,
+    fontStyle: 'italic',
+    lineHeight: 20,
   },
 
   // Prompt section

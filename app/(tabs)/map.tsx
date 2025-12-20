@@ -47,8 +47,8 @@ import type { Coordinates, Destination, DestinationContext } from '../../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Use Apple Maps on iOS (no Google branding) and Google Maps on Android
-const MAP_PROVIDER = Platform.OS === 'ios' ? PROVIDER_DEFAULT : PROVIDER_GOOGLE;
+// Use Google Maps everywhere for consistent experience
+const MAP_PROVIDER = PROVIDER_GOOGLE;
 
 interface PlaceResult {
   id: string;
