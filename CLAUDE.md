@@ -1,5 +1,102 @@
 # Tomo - AI Travel Companion
 
+---
+
+## 🚨 SESSION 16 PRIORITY: COMPLETE THE APP 🚨
+
+**Goal:** Make Tomo the BEST travel app in the world - fully functional, polished, production-ready.
+
+### IMMEDIATE BLOCKERS (Fix First)
+
+1. **REBUILD DEV CLIENT** - App won't start due to native module mismatch
+   ```bash
+   npx expo prebuild --clean && npx expo run:ios
+   ```
+   Error: `NativeJSLogger.default.addListener is not a function`
+
+### PHASE 1: Code Quality (40 Issues Found in Session 15)
+
+A deep analysis found these critical issues that MUST be fixed:
+
+| Priority | Issue | File | Fix |
+|----------|-------|------|-----|
+| HIGH | Zustand anti-pattern | `app/(tabs)/index.tsx:183` | Remove `getMemoriesByType` from useMemo deps |
+| HIGH | Missing null checks | `app/(tabs)/index.tsx:266` | Add `if (!coordinates) return;` |
+| HIGH | Global session state | `services/realtime.ts:42` | Move session to Zustand store |
+| HIGH | Offline queue not retried | `stores/useOfflineStore.ts` | Add retry on reconnect |
+| MEDIUM | Empty catch blocks | `services/realtime.ts:395` | Add proper error logging |
+| MEDIUM | No Error Boundary | `app/_layout.tsx` | Wrap app in ErrorBoundary |
+| MEDIUM | No API key validation | `app/_layout.tsx` | Check keys on startup |
+
+### PHASE 2: Set Up Claude Code Power Features
+
+Create `.claude/` structure for productivity:
+
+```
+.claude/
+├── agents/
+│   ├── ios-expert.md        # React Native iOS specialist
+│   ├── api-expert.md        # OpenAI/Google API debugging
+│   ├── tester.md            # Runs tests, fixes failures
+│   └── code-reviewer.md     # Quality/security review
+├── commands/
+│   ├── test.md              # /test - run all tests
+│   ├── build.md             # /build - build and check errors
+│   ├── fix-types.md         # /fix-types - fix TypeScript errors
+│   └── review.md            # /review - code quality check
+└── settings.json            # Hooks for auto-format, auto-test
+```
+
+### PHASE 3: Device Testing Checklist
+
+Test on REAL iPhone (not simulator):
+
+| Feature | Test Method | Expected |
+|---------|------------|----------|
+| Maps | Open Map tab | Google Maps renders with markers |
+| Location | Grant permission | Shows real location, updates |
+| Camera | Tap camera icon | Take photo → select prompt → AI responds |
+| Voice | Tap mic | WebSocket connects, voice works |
+| Navigation | "Take me there" | Opens /navigation with compass |
+| Offline | Toggle airplane mode | Shows offline banner, queues messages |
+| Itinerary | "Plan my day" in chat | Creates full itinerary |
+
+### PHASE 4: Final Polish
+
+- [ ] Test all user flows end-to-end
+- [ ] Fix any UI glitches
+- [ ] Verify all API integrations
+- [ ] Test offline → online transition
+- [ ] Performance check (no jank, fast loads)
+
+### The Vision We're Building
+
+**Three Types of Travelers:**
+
+1. **The Planner** 📋
+   - Opens Tomo before trip
+   - "Plan my 3 days in Tokyo"
+   - Gets full itinerary on map
+   - Optimizes route
+   - Adds to calendar
+
+2. **The Free Spirit** 🌊
+   - Opens Tomo when hungry
+   - "I'm craving ramen"
+   - Gets perfect spot nearby
+   - "Take me there"
+   - Navigates with compass
+
+3. **The In-Betweener** 🔄
+   - Has loose plan
+   - "What else is near Shibuya?"
+   - Discovers hidden gems
+   - Adds to itinerary on the fly
+
+**Every feature serves these users. If it doesn't, cut it.**
+
+---
+
 ## The Vision
 
 **Tomo = The ONLY app a traveler needs**
