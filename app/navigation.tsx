@@ -385,8 +385,7 @@ export default function NavigationScreen() {
         ref={mapRef}
         style={styles.map}
         provider={MAP_PROVIDER}
-        customMapStyle={Platform.OS === 'android' ? mapStyle : undefined}
-        userInterfaceStyle="dark"
+        customMapStyle={mapStyle}
         showsUserLocation
         showsMyLocationButton={false}
         showsCompass={false}
@@ -401,22 +400,32 @@ export default function NavigationScreen() {
           longitudeDelta: 0.005,
         }}
       >
+        {/* Route Polyline - Draw first so it's behind marker */}
+        {routeCoordinates.length > 0 && (
+          <>
+            {/* Route outline for contrast */}
+            <Polyline
+              coordinates={routeCoordinates}
+              strokeColor="#000000"
+              strokeWidth={10}
+            />
+            {/* Main route line - bright blue like Google Maps */}
+            <Polyline
+              coordinates={routeCoordinates}
+              strokeColor="#4285F4"
+              strokeWidth={6}
+            />
+          </>
+        )}
+
         {/* Destination Marker */}
         <Marker coordinate={currentDestination.coordinates} title={currentDestination.title}>
           <View style={styles.destinationMarker}>
-            <MapPin size={20} color={colors.text.primary} />
+            <View style={styles.destinationMarkerInner}>
+              <MapPin size={18} color="#FFFFFF" />
+            </View>
           </View>
         </Marker>
-
-        {/* Route Polyline */}
-        {routeCoordinates.length > 0 && (
-          <Polyline
-            coordinates={routeCoordinates}
-            strokeColor={colors.map.route}
-            strokeWidth={5}
-            lineDashPattern={selectedMode === 'WALK' ? [1] : undefined}
-          />
-        )}
       </MapView>
 
       {/* Top Bar */}
@@ -963,11 +972,18 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   destinationMarker: {
-    backgroundColor: colors.map.marker,
-    borderRadius: borders.radius.full,
-    padding: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  destinationMarkerInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EA4335', // Google Maps red
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 3,
-    borderColor: colors.text.primary,
-    ...shadows.md,
+    borderColor: '#FFFFFF',
+    ...shadows.lg,
   },
 });

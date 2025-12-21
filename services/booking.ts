@@ -158,6 +158,7 @@ export function getBookingOptions(place: PlaceCardData): BookingOption[] {
 
 /**
  * Get primary booking options (most relevant)
+ * Note: We don't include Google Maps navigation here since Tomo has in-app navigation
  */
 export function getPrimaryBookingOptions(place: PlaceCardData, category?: string): BookingOption[] {
   // Determine likely category from place type or name
@@ -189,14 +190,7 @@ export function getPrimaryBookingOptions(place: PlaceCardData, category?: string
     available: true,
   });
 
-  // Always show navigation option
-  options.push({
-    provider: 'google_maps',
-    label: 'Navigate',
-    icon: '🗺️',
-    url: getGoogleMapsUrl(place.coordinates, place.name),
-    available: true,
-  });
+  // Note: No Google Maps - use Tomo's in-app navigation instead ("Take me there" button)
 
   return options;
 }
@@ -292,18 +286,12 @@ export function getQuickActions(place: PlaceCardData): QuickAction[] {
       },
     },
     {
-      label: 'Navigate',
-      icon: '🗺️',
-      action: async () => {
-        await openBookingUrl(getGoogleMapsUrl(place.coordinates, place.name));
-      },
-    },
-    {
       label: 'Reviews',
       icon: '🦉',
       action: async () => {
         await openBookingUrl(getTripAdvisorUrl(place.name));
       },
     },
+    // Note: Navigation is handled in-app via "Take me there" button
   ];
 }

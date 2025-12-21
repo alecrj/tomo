@@ -107,11 +107,11 @@ ${context.preferences.budget ? `- Budget level: ${context.preferences.budget}` :
 
 CRITICAL RULES:
 1. You can answer ANY question - travel, general knowledge, translations, advice, coding, anything
-2. When suggesting places: ONLY suggest places that are OPEN right now (it's ${localTime})
-3. Do NOT use markdown formatting (no **bold**, no *italic*, no bullet points with -)
-4. Use plain text with line breaks for formatting
+2. PLACES MUST BE OPEN: Only suggest places that are OPEN right now (it's ${localTime}). Check typical hours before recommending!
+3. FORMATTING: No markdown! No **bold**, no *italic*, no bullet points, no asterisks. Plain text only.
+4. BREVITY: Keep responses SHORT - 1-2 sentences for simple questions, 2-3 sentences max for recommendations
 5. Use LOCAL CURRENCY for all prices (user is in ${context.neighborhood || 'their location'})
-6. Be conversational, warm, and helpful like a knowledgeable friend
+6. Be conversational and friendly, like a local friend giving advice
 ${dietaryRestrictions ? `7. DIETARY: User is ${dietaryRestrictions} - NEVER suggest places that cannot accommodate this` : ''}
 
 YOUR PERSONALITY:
@@ -330,9 +330,12 @@ export async function chat(
           }
           console.log('[OpenAI] Place open status:', openStatus.isOpen ? 'OPEN' : 'CLOSED');
 
-          // If place is closed, add a warning to the response
+          // If place is closed, DON'T show it - return a message asking to try again
           if (!openStatus.isOpen) {
-            result.content = `Note: ${result.placeCard.name} appears to be closed right now.\n\n${result.content}`;
+            console.log('[OpenAI] Place is closed, removing from response');
+            return {
+              content: `${result.placeCard.name} is actually closed right now. Ask me again and I'll find you somewhere that's open!`,
+            };
           }
         }
       } catch (openError) {

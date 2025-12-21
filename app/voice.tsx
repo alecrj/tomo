@@ -474,7 +474,7 @@ You can help with:
             ]}
           />
           <Text style={styles.connectionText}>
-            {connectionState === 'connected' ? 'Connected to gpt-realtime' : connectionState}
+            {connectionState === 'connected' ? 'Voice active' : connectionState === 'connecting' ? 'Connecting...' : connectionState}
           </Text>
         </View>
       </SafeAreaView>
@@ -530,10 +530,12 @@ const styles = StyleSheet.create({
   // Conversation
   conversationContainer: {
     flex: 1,
+    width: '100%',
   },
   conversationContent: {
     padding: spacing.lg,
     paddingBottom: spacing.xl,
+    flexGrow: 1,
   },
   emptyState: {
     alignItems: 'center',
@@ -575,8 +577,8 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   messageText: {
-    fontSize: typography.sizes.lg,
-    lineHeight: 26,
+    fontSize: typography.sizes.base,
+    lineHeight: 22,
   },
   userText: {
     color: colors.chat.userText,
