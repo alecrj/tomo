@@ -4,7 +4,7 @@ import { View, StyleSheet } from 'react-native';
 import {
   Feather,
   MapPin,
-  MessageCircle,
+  Calendar,
   Heart,
   User,
 } from 'lucide-react-native';
@@ -55,13 +55,12 @@ export default function TabLayout() {
       <Tabs.Screen
         name="plan"
         options={{
-          title: 'Chat',
+          title: 'Plan',
           tabBarIcon: ({ color, focused }) => (
             <View style={[styles.chatTab, focused && styles.chatTabActive]}>
-              <MessageCircle
+              <Calendar
                 size={20}
                 color={focused ? colors.text.inverse : color}
-                fill={focused ? colors.text.primary : 'transparent'}
               />
             </View>
           ),
