@@ -164,7 +164,6 @@ export default function ItineraryMap({
         // Update route display
         setRouteResult(result);
 
-        console.log('[ItineraryMap] Route optimized, new order:', result.optimizedOrder);
       }
     } catch (error) {
       console.error('[ItineraryMap] Error optimizing route:', error);

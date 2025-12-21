@@ -15,6 +15,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+// Animations disabled temporarily for stability
+// import Animated, { FadeIn, FadeInDown, FadeInUp, FadeOut } from 'react-native-reanimated';
 import MapView, { Marker, PROVIDER_GOOGLE, PROVIDER_DEFAULT, Region } from 'react-native-maps';
 import { safeHaptics, ImpactFeedbackStyle } from '../../utils/haptics';
 import {
@@ -368,8 +370,7 @@ export default function MapScreen() {
         ref={mapRef}
         style={styles.map}
         provider={MAP_PROVIDER}
-        customMapStyle={Platform.OS === 'android' ? mapStyle : undefined}
-        userInterfaceStyle="dark"
+        customMapStyle={mapStyle}
         initialRegion={initialRegion}
         showsUserLocation
         showsMyLocationButton={false}

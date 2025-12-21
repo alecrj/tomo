@@ -71,16 +71,9 @@ export function useLastTrainWarning() {
         );
 
         lastWarningRef.current = now;
-
-        console.log(
-          '[LastTrainWarning] Warning created:',
-          minutesUntilLast,
-          'minutes until last',
-          trainLine
-        );
       }
     } catch (error) {
-      console.error('[LastTrainWarning] Error checking last train:', error);
+      // Silently handle last train check errors
     }
   }, [coordinates, homeBase, lastTrainWarningMinutes, createLastTrainWarning]);
 
@@ -110,12 +103,6 @@ export function useLastTrainWarning() {
       );
 
       lastWarningRef.current = now;
-
-      console.log(
-        '[LastTrainWarning] Current route warning:',
-        minutesUntilLast,
-        'minutes'
-      );
     }
   }, [currentRoute, mode, lastTrainWarningMinutes, createLastTrainWarning]);
 

@@ -37,6 +37,8 @@ module.exports = ({ config }) => {
           },
         },
       ],
+      // Note: react-native-maps v1.19.1 doesn't have a config plugin
+      // Google Maps API key is configured in AppDelegate.swift
     ],
   };
 };

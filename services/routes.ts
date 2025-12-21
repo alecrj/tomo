@@ -129,10 +129,8 @@ export async function getTransitDirections(
 ): Promise<TransitRoute | null> {
   // Check offline status first
   if (!checkOnline()) {
-    console.log('[Routes] Offline - returning cached or fallback route');
     const cached = useOfflineStore.getState().getCachedRoute(origin, destination, 'TRANSIT');
     if (cached) return cached;
-    // Return distance-based estimate if no cache
     return createFallbackRoute(origin, destination, 'TRANSIT');
   }
 
@@ -175,15 +173,12 @@ export async function getTransitDirections(
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Routes API error:', response.status, errorText);
       throw new Error(`Routes API error: ${response.status}`);
     }
 
     const data = await response.json();
 
     if (!data.routes || data.routes.length === 0) {
-      console.error('No routes found');
       return null;
     }
 
@@ -192,7 +187,6 @@ export async function getTransitDirections(
     // Parse route into our TransitRoute format
     return parseGoogleRoute(route, origin, destination);
   } catch (error) {
-    console.error('Error getting transit directions:', error);
     return null;
   }
 }
@@ -296,7 +290,6 @@ function parseDuration(duration: string): number {
     return hours * 60 + minutes + seconds / 60;
   }
 
-  console.warn('[Routes] Unknown duration format:', duration);
   return 0;
 }
 
@@ -322,7 +315,6 @@ function parseTimeString(timeText: string): Date | null {
 
     return date;
   } catch (error) {
-    console.error('Error parsing time string:', timeText, error);
     return null;
   }
 }
@@ -358,7 +350,6 @@ export async function getDrivingDirections(
 ): Promise<TransitRoute | null> {
   // Check offline status first
   if (!checkOnline()) {
-    console.log('[Routes] Offline - returning cached or fallback route');
     const cached = useOfflineStore.getState().getCachedRoute(origin, destination, 'DRIVE');
     if (cached) return cached;
     return createFallbackRoute(origin, destination, 'DRIVE');
@@ -427,7 +418,6 @@ export async function getDrivingDirections(
       polyline: route.polyline.encodedPolyline,
     };
   } catch (error) {
-    console.error('Error getting driving directions:', error);
     return null;
   }
 }
@@ -469,7 +459,6 @@ export async function getWalkingDirections(
 ): Promise<TransitRoute | null> {
   // Check offline status first
   if (!checkOnline()) {
-    console.log('[Routes] Offline - returning cached or fallback route');
     const cached = useOfflineStore.getState().getCachedRoute(origin, destination, 'WALK');
     if (cached) return cached;
     return createFallbackRoute(origin, destination, 'WALK');
@@ -511,8 +500,6 @@ export async function getWalkingDirections(
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('[Routes] FULL ERROR from Google:', errorBody);
       throw new Error(`Routes API error: ${response.status}`);
     }
 
@@ -521,12 +508,7 @@ export async function getWalkingDirections(
     if (!data.routes || data.routes.length === 0) {
       // Fallback: create a basic walking route using straight-line distance
       const fallbackDistance = calculateStraightLineDistance(origin, destination);
-      const fallbackDuration = estimateWalkingDuration(fallbackDistance * 1.3); // Add 30% for actual walking path
-
-      console.log('[Routes] No routes returned, using fallback calculation:', {
-        distance: fallbackDistance,
-        duration: fallbackDuration,
-      });
+      const fallbackDuration = estimateWalkingDuration(fallbackDistance * 1.3);
 
       return {
         steps: [{
@@ -557,43 +539,25 @@ export async function getWalkingDirections(
     let totalDistance = route.distanceMeters;
     if (!totalDistance || totalDistance === 0) {
       totalDistance = Math.round(calculateStraightLineDistance(origin, destination) * 1.3);
-      console.log('[Routes] Distance not provided, using calculated fallback:', totalDistance);
     }
 
     // Get duration - fallback to estimation if not provided or 0
     let totalDuration = Math.round(parseDuration(route.duration));
     if (!totalDuration || totalDuration === 0) {
       totalDuration = estimateWalkingDuration(totalDistance);
-      console.log('[Routes] Duration was 0 or missing, using estimated fallback:', totalDuration);
     }
 
-    const result = {
+    return {
       steps,
       totalDuration,
       totalDistance,
       polyline: route.polyline?.encodedPolyline || '',
     };
-
-    console.log('[Routes] Walking directions fetched:', {
-      steps: result.steps.length,
-      duration: result.totalDuration,
-      distance: result.totalDistance,
-      hasPolyline: !!result.polyline,
-    });
-
-    return result;
   } catch (error) {
-    console.error('Error getting walking directions:', error);
-
     // Even on error, try to return a basic estimate
     try {
       const fallbackDistance = calculateStraightLineDistance(origin, destination);
       const fallbackDuration = estimateWalkingDuration(fallbackDistance * 1.3);
-
-      console.log('[Routes] Using error fallback calculation:', {
-        distance: fallbackDistance,
-        duration: fallbackDuration,
-      });
 
       return {
         steps: [{
@@ -677,7 +641,6 @@ export async function optimizeRoute(
 ): Promise<OptimizedRouteResult | null> {
   try {
     if (waypoints.length < 2) {
-      console.warn('[Routes] Need at least 2 waypoints to optimize');
       return null;
     }
 
@@ -732,8 +695,6 @@ export async function optimizeRoute(
       }));
     }
 
-    console.log('[Routes] Optimizing route with', intermediates.length, 'intermediate waypoints');
-
     const response = await fetch(ROUTES_API_URL, {
       method: 'POST',
       headers: {
@@ -745,15 +706,12 @@ export async function optimizeRoute(
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('[Routes] Optimization API error:', response.status, errorBody);
       throw new Error(`Routes API error: ${response.status}`);
     }
 
     const data = await response.json();
 
     if (!data.routes || data.routes.length === 0) {
-      console.error('[Routes] No optimized route found');
       return null;
     }
 
@@ -772,25 +730,14 @@ export async function optimizeRoute(
       duration: Math.round(parseDuration(leg.duration)),
     }));
 
-    const result: OptimizedRouteResult = {
+    return {
       optimizedOrder,
       totalDistance: route.distanceMeters,
       totalDuration: Math.round(parseDuration(route.duration)),
       polyline: route.polyline?.encodedPolyline || '',
       legs,
     };
-
-    console.log('[Routes] Route optimized:', {
-      originalOrder: intermediates.map((_, i) => i),
-      optimizedOrder: result.optimizedOrder,
-      totalDistance: result.totalDistance,
-      totalDuration: result.totalDuration,
-      legCount: result.legs.length,
-    });
-
-    return result;
   } catch (error) {
-    console.error('[Routes] Error optimizing route:', error);
     return null;
   }
 }
@@ -804,7 +751,6 @@ export async function getMultiWaypointRoute(
 ): Promise<OptimizedRouteResult | null> {
   try {
     if (waypoints.length < 2) {
-      console.warn('[Routes] Need at least 2 waypoints');
       return null;
     }
 
@@ -857,15 +803,12 @@ export async function getMultiWaypointRoute(
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('[Routes] Multi-waypoint API error:', response.status, errorBody);
       throw new Error(`Routes API error: ${response.status}`);
     }
 
     const data = await response.json();
 
     if (!data.routes || data.routes.length === 0) {
-      console.error('[Routes] No route found');
       return null;
     }
 
@@ -887,7 +830,6 @@ export async function getMultiWaypointRoute(
       legs,
     };
   } catch (error) {
-    console.error('[Routes] Error getting multi-waypoint route:', error);
     return null;
   }
 }

@@ -23,7 +23,6 @@ export async function getCurrentLocation(): Promise<Coordinates | null> {
   try {
     // Use dev override if set (for testing in simulator)
     if (config.devLocationOverride) {
-      console.log('[DEV] Using location override:', config.devLocationOverride);
       return config.devLocationOverride;
     }
 
@@ -34,11 +33,6 @@ export async function getCurrentLocation(): Promise<Coordinates | null> {
 
     const location = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
-    });
-
-    console.log('[Location] Got GPS coordinates:', {
-      latitude: location.coords.latitude.toFixed(4),
-      longitude: location.coords.longitude.toFixed(4),
     });
 
     return {
@@ -205,7 +199,6 @@ export async function getNeighborhoodName(coordinates: Coordinates): Promise<str
       ].filter(Boolean);
 
       const locationName = parts.join(', ');
-      console.log('[Location] Reverse geocoded to:', locationName);
       return locationName;
     }
 

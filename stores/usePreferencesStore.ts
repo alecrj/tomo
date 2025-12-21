@@ -25,6 +25,7 @@ export const LANGUAGE_NAMES: Record<Language, string> = {
 
 interface PreferencesState {
   homeBase: HomeBase | null;
+  userName: string | null;
   walkingTolerance: 'low' | 'medium' | 'high';
   budgetLevel: 'budget' | 'moderate' | 'luxury';
   dietary: string[];
@@ -50,6 +51,7 @@ interface PreferencesState {
 
   // Actions
   setHomeBase: (homeBase: HomeBase) => void;
+  setUserName: (name: string) => void;
   setWalkingTolerance: (tolerance: 'low' | 'medium' | 'high') => void;
   setBudgetLevel: (level: 'budget' | 'moderate' | 'luxury') => void;
   addDietaryRestriction: (restriction: string) => void;
@@ -73,6 +75,7 @@ interface PreferencesState {
 
 const initialState = {
   homeBase: null,
+  userName: null as string | null,
   walkingTolerance: 'medium' as const,
   budgetLevel: 'moderate' as const,
   dietary: [] as string[],
@@ -100,6 +103,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       ...initialState,
 
       setHomeBase: (homeBase) => set({ homeBase }),
+      setUserName: (name) => set({ userName: name }),
       setWalkingTolerance: (tolerance) => set({ walkingTolerance: tolerance }),
       setBudgetLevel: (level) => set({ budgetLevel: level }),
 

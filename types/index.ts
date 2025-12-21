@@ -243,6 +243,7 @@ export interface PlaceCardData {
   closingTime?: string; // "til 10pm"
   estimatedCost?: string;
   description?: string; // Tomo's conversational description
+  whyRecommended?: string; // Brief reason for recommendation
   coordinates: Coordinates;
 }
 
@@ -280,6 +281,7 @@ export interface ChatMessage {
 
   // Rich inline content
   placeCard?: PlaceCardData;
+  placeCards?: PlaceCardData[]; // Multiple options
   inlineMap?: InlineMapData;
   actions?: MessageAction[];
 

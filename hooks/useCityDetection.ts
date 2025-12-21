@@ -45,7 +45,6 @@ export function useCityDetection(): CityChange | null {
 
       // Only trigger city change if we have a current trip and the city actually changed
       if (currentTrip && currentCity && currentCity !== newCity) {
-        console.log('[CityDetection] City changed from', currentCity, 'to', newCity);
 
         // Update the trip store
         switchCity(newCity, newCountry);
@@ -58,7 +57,6 @@ export function useCityDetection(): CityChange | null {
         });
       } else if (!currentTrip || !currentCity) {
         // First city detection - just record it, don't emit change
-        console.log('[CityDetection] Initial city detected:', newCity, newCountry);
       }
     }
   }, [neighborhood, currentTrip?.currentCity]);

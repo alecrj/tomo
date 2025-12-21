@@ -44,7 +44,6 @@ export async function searchNearby(
 ): Promise<PlaceSearchResult[]> {
   // Return empty if offline
   if (!checkOnline()) {
-    console.log('[Places] Offline - returning empty results');
     return [];
   }
 
@@ -187,7 +186,6 @@ export async function searchPlace(
 ): Promise<PlaceSearchResult | null> {
   // Return null if offline
   if (!checkOnline()) {
-    console.log('[Places] Offline - cannot search place');
     return null;
   }
 

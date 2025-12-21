@@ -74,7 +74,6 @@ function parseStructuredResponse(responseText: string, userLocation: Coordinates
     return result;
   } catch (error) {
     // If JSON parsing fails, return plain text
-    console.log('[Claude] Response is not structured JSON, returning as plain text');
     return { content: responseText };
   }
 }
@@ -286,7 +285,6 @@ export async function chat(
   try {
     // Debug: Check if API key is loaded
     const apiKeyPresent = config.claudeApiKey && config.claudeApiKey.length > 0;
-    console.log('[Claude] API key present:', apiKeyPresent, 'Length:', config.claudeApiKey?.length || 0);
 
     if (!apiKeyPresent) {
       console.error('[Claude] No API key configured!');
@@ -359,7 +357,6 @@ export async function chat(
     // Enrich placeCard with real photo from Google Places if present
     if (response.placeCard && response.placeCard.name) {
       try {
-        console.log('[Claude] Fetching real photo for:', response.placeCard.name);
         const photoUrl = await getPlacePhotoUrl(
           response.placeCard.name,
           context.location,
@@ -367,9 +364,7 @@ export async function chat(
         );
         if (photoUrl) {
           response.placeCard.photo = photoUrl;
-          console.log('[Claude] Photo URL fetched successfully');
         } else {
-          console.log('[Claude] No photo found for place');
         }
       } catch (photoError) {
         console.error('[Claude] Error fetching place photo:', photoError);

@@ -135,7 +135,6 @@ function validateApiKeys(): void {
   }
 
   if (missing.length === 0) {
-    console.log('[Config] All required API keys present');
   }
 }
 

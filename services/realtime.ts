@@ -137,29 +137,23 @@ const updateVoiceActivityState = (state: VoiceActivityState) => {
 function handleDataChannelMessage(event: MessageEvent, callbacks: RealtimeCallbacks) {
   try {
     const message = JSON.parse(event.data);
-    console.log('[Realtime] Event:', message.type);
 
     switch (message.type) {
       case 'session.created':
-        console.log('[Realtime] Session created successfully');
         break;
 
       case 'session.updated':
-        console.log('[Realtime] Session configuration updated');
         break;
 
       case 'input_audio_buffer.speech_started':
-        console.log('[Realtime] User started speaking');
         updateVoiceActivityState('listening');
         break;
 
       case 'input_audio_buffer.speech_stopped':
-        console.log('[Realtime] User stopped speaking');
         updateVoiceActivityState('processing');
         break;
 
       case 'conversation.item.input_audio_transcription.completed':
-        console.log('[Realtime] User transcript:', message.transcript);
         callbacks.onTranscript?.(message.transcript, true);
         break;
 
@@ -169,7 +163,6 @@ function handleDataChannelMessage(event: MessageEvent, callbacks: RealtimeCallba
         break;
 
       case 'response.audio_transcript.done':
-        console.log('[Realtime] Assistant transcript complete');
         break;
 
       case 'response.audio.delta':
@@ -180,12 +173,10 @@ function handleDataChannelMessage(event: MessageEvent, callbacks: RealtimeCallba
         break;
 
       case 'response.audio.done':
-        console.log('[Realtime] Audio response complete');
         updateVoiceActivityState('idle');
         break;
 
       case 'response.done':
-        console.log('[Realtime] Response complete');
         updateVoiceActivityState('idle');
         break;
 
@@ -195,7 +186,6 @@ function handleDataChannelMessage(event: MessageEvent, callbacks: RealtimeCallba
         break;
 
       default:
-        console.log('[Realtime] Unhandled event:', message.type);
     }
   } catch (error) {
     console.error('[Realtime] Error parsing data channel message:', error);
@@ -252,22 +242,17 @@ export async function initRealtimeSession(
 
   try {
     // 0. Start audio session - THIS IS CRITICAL FOR AUDIO TO PLAY
-    console.log('[Realtime] Starting audio session...');
     InCallManager.start({ media: 'audio' });
     InCallManager.setSpeakerphoneOn(true); // Route to speaker, not earpiece
-    console.log('[Realtime] Audio session started, speaker enabled');
 
     // 1. Request microphone permission and get local audio stream
-    console.log('[Realtime] Requesting microphone access...');
     const localStream = await mediaDevices.getUserMedia({
       audio: true,
       video: false,
     }) as MediaStream;
     session.localStream = localStream;
-    console.log('[Realtime] Microphone access granted');
 
     // 2. Create RTCPeerConnection
-    console.log('[Realtime] Creating peer connection...');
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -277,7 +262,6 @@ export async function initRealtimeSession(
 
     // 3. Add local audio track to peer connection
     localStream.getTracks().forEach((track: MediaStreamTrack) => {
-      console.log('[Realtime] Adding local track:', track.kind);
       (pc as any).addTrack(track, localStream);
     });
 
@@ -285,14 +269,9 @@ export async function initRealtimeSession(
     // With InCallManager started and speaker enabled, the audio will play automatically
     // when the remote track is received via WebRTC
     pc.ontrack = (event: any) => {
-      console.log('[Realtime] Received remote audio track!');
-      console.log('[Realtime] Track kind:', event.track?.kind);
-      console.log('[Realtime] Track enabled:', event.track?.enabled);
-      console.log('[Realtime] Track readyState:', event.track?.readyState);
 
       if (event.streams && event.streams[0]) {
         session.remoteStream = event.streams[0];
-        console.log('[Realtime] Remote stream attached - audio should now play through speaker');
 
         // The audio plays automatically via react-native-webrtc + InCallManager
         // InCallManager routes it to the speaker (set above)
@@ -305,7 +284,6 @@ export async function initRealtimeSession(
     session.dataChannel = dataChannel;
 
     dataChannel.onopen = () => {
-      console.log('[Realtime] Data channel opened');
 
       // Configure the session
       const sessionConfig = {
@@ -333,7 +311,6 @@ Be warm and friendly like a local friend showing someone around.`,
       };
 
       dataChannel.send(JSON.stringify(sessionConfig));
-      console.log('[Realtime] Session configuration sent');
     };
 
     dataChannel.onmessage = (event: MessageEvent) => {
@@ -346,12 +323,10 @@ Be warm and friendly like a local friend showing someone around.`,
     };
 
     dataChannel.onclose = () => {
-      console.log('[Realtime] Data channel closed');
     };
 
     // 6. Handle ICE connection state changes
     pc.oniceconnectionstatechange = () => {
-      console.log('[Realtime] ICE connection state:', pc.iceConnectionState);
 
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         updateConnectionState('connected');
@@ -364,16 +339,13 @@ Be warm and friendly like a local friend showing someone around.`,
     };
 
     // 7. Create SDP offer
-    console.log('[Realtime] Creating SDP offer...');
     const offer = await (pc as any).createOffer({
       offerToReceiveAudio: true,
       offerToReceiveVideo: false,
     });
     await (pc as any).setLocalDescription(offer);
-    console.log('[Realtime] Local description set');
 
     // 8. Send offer to OpenAI Realtime API
-    console.log('[Realtime] Connecting to OpenAI Realtime API...');
     const response = await fetch(`${REALTIME_API_URL}?model=${MODEL}`, {
       method: 'POST',
       headers: {
@@ -391,14 +363,12 @@ Be warm and friendly like a local friend showing someone around.`,
 
     // 9. Set remote description from OpenAI's answer
     const answerSdp = await response.text();
-    console.log('[Realtime] Received SDP answer from OpenAI');
 
     const answer = new RTCSessionDescription({
       type: 'answer',
       sdp: answerSdp,
     });
     await (pc as any).setRemoteDescription(answer);
-    console.log('[Realtime] Remote description set - connection establishing...');
 
     return true;
   } catch (error) {
@@ -444,7 +414,6 @@ export function sendTextMessage(text: string): void {
     type: 'response.create',
   }));
 
-  console.log('[Realtime] Sent text message:', text);
 }
 
 /**
@@ -461,7 +430,6 @@ export function interruptResponse(): void {
     type: 'response.cancel',
   }));
 
-  console.log('[Realtime] Response interrupted');
 }
 
 /**
@@ -478,7 +446,6 @@ export function setMicrophoneMuted(muted: boolean): void {
     track.enabled = !muted;
   });
 
-  console.log('[Realtime] Microphone', muted ? 'muted' : 'unmuted');
 }
 
 /**
@@ -488,7 +455,6 @@ export function closeRealtimeSession(): void {
   const session = getSession();
   if (!session) return;
 
-  console.log('[Realtime] Closing session...');
 
   // Stop local audio tracks
   if (session.localStream) {
@@ -508,14 +474,12 @@ export function closeRealtimeSession(): void {
   }
 
   // Stop audio session - critical to release audio resources
-  console.log('[Realtime] Stopping audio session...');
   InCallManager.stop();
 
   // Clear session
   setSession(null);
   useRealtimeStore.getState().clearSession();
 
-  console.log('[Realtime] Session closed');
 }
 
 /**
@@ -555,12 +519,10 @@ export function isRealtimeSupported(): boolean {
 export async function startListening(): Promise<boolean> {
   // With WebRTC, listening is always on (handled by VAD)
   // This function is now a no-op but kept for API compatibility
-  console.log('[Realtime] Note: With WebRTC, VAD handles listening automatically');
   return true;
 }
 
 export async function stopListening(): Promise<void> {
   // With WebRTC, the server VAD handles turn detection
   // This function is now a no-op but kept for API compatibility
-  console.log('[Realtime] Note: With WebRTC, VAD handles turn detection automatically');
 }

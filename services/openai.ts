@@ -13,12 +13,10 @@ const getApiKey = () => process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
  * Safely parse JSON with error handling
  * Returns null if parsing fails
  */
-function safeJsonParse<T>(text: string, context: string): T | null {
+function safeJsonParse<T>(text: string, _context: string): T | null {
   try {
     return JSON.parse(text) as T;
   } catch (error) {
-    console.error(`[OpenAI] JSON parse error in ${context}:`, error);
-    console.error(`[OpenAI] Raw content: ${text.substring(0, 200)}...`);
     return null;
   }
 }
@@ -52,7 +50,6 @@ async function verifyPlaceOpen(
     }
     return null;
   } catch (error) {
-    console.error('[OpenAI] Error verifying place open status:', error);
     return null;
   }
 }
@@ -208,18 +205,9 @@ function parseStructuredResponse(responseText: string, userLocation: Coordinates
       result.actions = parsed.actions;
     }
 
-    console.log('[OpenAI] Parsed structured response:', {
-      hasText: !!result.content,
-      hasPlaceCard: !!result.placeCard,
-      hasMap: !!result.inlineMap,
-      actionsCount: result.actions?.length || 0,
-    });
-
     return result;
   } catch (error) {
-    // If JSON parsing fails (shouldn't happen with json_object mode), return as plain text
-    console.warn('[OpenAI] Failed to parse JSON response:', error);
-    console.log('[OpenAI] Raw response:', responseText.substring(0, 200));
+    // If JSON parsing fails, return as plain text
     return { content: responseText };
   }
 }
@@ -236,8 +224,6 @@ export async function chat(
   try {
     // Check if offline
     if (!checkOnline()) {
-      console.log('[OpenAI] Offline - returning cached response');
-      // Queue the message for later
       useOfflineStore.getState().queueMessage(message, image);
       return getOfflineResponse();
     }
@@ -245,11 +231,8 @@ export async function chat(
     const apiKey = getApiKey();
 
     if (!apiKey) {
-      console.error('[OpenAI] No API key configured!');
       return { content: "OpenAI API key is not configured. Please check your .env file." };
     }
-
-    console.log('[OpenAI] API key present, length:', apiKey.length);
 
     const systemPrompt = buildSystemPrompt(context);
 
@@ -303,7 +286,6 @@ export async function chat(
 
     if (!response.ok) {
       const errorBody = await response.text();
-      console.error('[OpenAI] API error:', response.status, errorBody);
       throw new Error(`OpenAI API error: ${response.status} - ${errorBody}`);
     }
 
@@ -321,44 +303,37 @@ export async function chat(
     if (result.placeCard && result.placeCard.name && result.placeCard.coordinates) {
       // Verify place is open using Google Places API
       try {
-        console.log('[OpenAI] Verifying open status for:', result.placeCard.name);
         const openStatus = await verifyPlaceOpen(result.placeCard.name, context.location);
         if (openStatus) {
           result.placeCard.openNow = openStatus.isOpen;
           if (openStatus.hours) {
             result.placeCard.hours = openStatus.hours;
           }
-          console.log('[OpenAI] Place open status:', openStatus.isOpen ? 'OPEN' : 'CLOSED');
 
           // If place is closed, DON'T show it - return a message asking to try again
           if (!openStatus.isOpen) {
-            console.log('[OpenAI] Place is closed, removing from response');
             return {
               content: `${result.placeCard.name} is actually closed right now. Ask me again and I'll find you somewhere that's open!`,
             };
           }
         }
       } catch (openError) {
-        console.error('[OpenAI] Error verifying open status:', openError);
+        // Silently continue if open status check fails
       }
 
-      // Fetch real walking distance/time from Routes API (fixes distance mismatch!)
+      // Fetch real walking distance/time from Routes API
       try {
-        const gptGuessedDistance = result.placeCard.distance;
-        console.log('[OpenAI] Fetching real walking distance for:', result.placeCard.name);
         const route = await getWalkingDirections(context.location, result.placeCard.coordinates);
         if (route) {
           const walkMins = Math.round(route.totalDuration);
           result.placeCard.distance = `${walkMins} min walk`;
-          console.log('[OpenAI] Real walking time:', walkMins, 'min (GPT guessed:', gptGuessedDistance, ')');
         }
       } catch (routeError) {
-        console.error('[OpenAI] Error fetching walking distance:', routeError);
+        // Silently continue if route fetch fails
       }
 
       // Fetch real photos and review count from Google Places
       try {
-        console.log('[OpenAI] Fetching place data for:', result.placeCard.name);
         const place = await searchPlace(result.placeCard.name, context.location);
         if (place) {
           // Get multiple photos (up to 5)
@@ -367,13 +342,11 @@ export async function chat(
               buildPhotoUrl(p.name, 600)
             );
             result.placeCard.photos = photoUrls;
-            result.placeCard.photo = photoUrls[0]; // Also set single photo for backward compatibility
-            console.log('[OpenAI] Fetched', photoUrls.length, 'photos');
+            result.placeCard.photo = photoUrls[0];
           }
           // Get review count
           if (place.userRatingCount) {
             result.placeCard.reviewCount = place.userRatingCount;
-            console.log('[OpenAI] Review count:', place.userRatingCount);
           }
           // Get accurate rating from Google
           if (place.rating) {
@@ -381,13 +354,12 @@ export async function chat(
           }
         }
       } catch (photoError) {
-        console.error('[OpenAI] Error fetching place data:', photoError);
+        // Silently continue if place data fetch fails
       }
     }
 
     return result;
   } catch (error) {
-    console.error('[OpenAI] Chat error:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       content: `Sorry, I'm having trouble responding: ${errorMessage}`,
@@ -542,14 +514,12 @@ export async function generateItinerary(
   try {
     // Check if offline
     if (!checkOnline()) {
-      console.log('[OpenAI] Offline - cannot generate itinerary');
       return null;
     }
 
     const apiKey = getApiKey();
 
     if (!apiKey) {
-      console.error('[OpenAI] No API key configured!');
       return null;
     }
 
@@ -578,8 +548,6 @@ export async function generateItinerary(
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('[OpenAI] Itinerary API error:', response.status, errorBody);
       throw new Error(`OpenAI API error: ${response.status}`);
     }
 
@@ -597,19 +565,11 @@ export async function generateItinerary(
 
     // Validate required fields
     if (!itinerary.name || !itinerary.days || !Array.isArray(itinerary.days)) {
-      console.error('[OpenAI] Invalid itinerary structure:', itinerary);
       throw new Error('Invalid itinerary structure');
     }
 
-    console.log('[OpenAI] Generated itinerary:', {
-      name: itinerary.name,
-      days: itinerary.totalDays,
-      activitiesPerDay: itinerary.days.map(d => d.activities?.length || 0),
-    });
-
     return itinerary;
   } catch (error) {
-    console.error('[OpenAI] Itinerary generation error:', error);
     return null;
   }
 }
@@ -734,8 +694,6 @@ export async function navigationChat(
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('[OpenAI] Navigation chat error:', response.status, errorBody);
       throw new Error(`API error: ${response.status}`);
     }
 
@@ -751,17 +709,11 @@ export async function navigationChat(
       throw new Error('Failed to parse navigation response');
     }
 
-    console.log('[OpenAI] Navigation chat response:', {
-      text: parsed.text?.substring(0, 50),
-      actionType: parsed.action?.type,
-    });
-
     return {
       text: parsed.text || "I'm not sure how to help with that.",
       action: parsed.action,
     };
   } catch (error) {
-    console.error('[OpenAI] Navigation chat error:', error);
     return {
       text: "Sorry, I'm having trouble responding. Try again in a moment.",
     };
@@ -948,14 +900,8 @@ export async function modifyItinerary(
       throw new Error('Failed to parse modification result');
     }
 
-    console.log('[OpenAI] Itinerary modification result:', {
-      action: result.action,
-      message: result.message?.substring(0, 50),
-    });
-
     return result;
   } catch (error) {
-    console.error('[OpenAI] Itinerary modification error:', error);
     return {
       action: 'none',
       message: "Sorry, I couldn't understand that request. Try being more specific, like 'add dinner at 7pm' or 'remove the temple visit'.",
@@ -994,13 +940,11 @@ export async function generateTripSummary(tripData: {
   try {
     // Check if offline
     if (!checkOnline()) {
-      console.log('[OpenAI] Offline - returning null for trip summary');
       return null;
     }
 
     const apiKey = getApiKey();
     if (!apiKey) {
-      console.log('[OpenAI] No API key for trip summary');
       return null;
     }
 
@@ -1050,8 +994,6 @@ Keep summary conversational and warm, like a friend reflecting on shared memorie
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('[OpenAI] Trip summary error:', response.status, errorBody);
       throw new Error(`API error: ${response.status}`);
     }
 
@@ -1067,14 +1009,8 @@ Keep summary conversational and warm, like a friend reflecting on shared memorie
       throw new Error('Failed to parse trip summary');
     }
 
-    console.log('[OpenAI] Trip summary generated:', {
-      summaryLength: result.summary?.length,
-      highlightsCount: result.highlights?.length,
-    });
-
     return result;
   } catch (error) {
-    console.error('[OpenAI] Trip summary error:', error);
     return null;
   }
 }

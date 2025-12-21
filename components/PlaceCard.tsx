@@ -10,6 +10,9 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
+// Animations disabled temporarily for stability
+// import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   Navigation,
   Shuffle,
@@ -18,6 +21,8 @@ import {
   Car,
   Train,
   Heart,
+  Star,
+  MapPin,
 } from 'lucide-react-native';
 import { safeHaptics, ImpactFeedbackStyle } from '../utils/haptics';
 import { colors, spacing, borders, shadows, typography } from '../constants/theme';
@@ -32,11 +37,14 @@ interface PlaceCardProps {
   onSave?: () => void;
   isSaved?: boolean;
   showBookingOptions?: boolean;
+  isCompact?: boolean;
 }
 
 const { width: screenWidth } = Dimensions.get('window');
-const IMAGE_WIDTH = screenWidth - spacing.lg * 4; // Account for message padding
-const IMAGE_HEIGHT = 180;
+const CARD_MARGIN = spacing.lg * 2;
+const IMAGE_WIDTH = screenWidth - CARD_MARGIN;
+const IMAGE_HEIGHT = 220; // Taller for more immersive feel
+const COMPACT_IMAGE_HEIGHT = 160;
 
 function PlaceCardComponent({
   placeCard,
@@ -46,12 +54,13 @@ function PlaceCardComponent({
   onSave,
   isSaved = false,
   showBookingOptions = true,
+  isCompact = false,
 }: PlaceCardProps) {
   const scrollRef = useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
   // Get booking options
-  const bookingOptions = showBookingOptions ? getPrimaryBookingOptions(placeCard) : [];
+  const bookingOptions = showBookingOptions && !isCompact ? getPrimaryBookingOptions(placeCard) : [];
 
   // Build photos array (support both single photo and multiple photos)
   const photos = placeCard.photos?.length
@@ -86,57 +95,20 @@ function PlaceCardComponent({
     await openBookingUrl(option.url);
   };
 
-  // Build info pills
-  const infoPills: { icon: React.ReactNode; label: string }[] = [];
-
-  // Walk time (from walkTime or distance field)
+  // Build info items
   const walkTime = placeCard.walkTime || placeCard.distance;
-  if (walkTime) {
-    infoPills.push({
-      icon: <Footprints size={14} color={colors.text.secondary} />,
-      label: walkTime,
-    });
-  }
-
-  if (placeCard.transitTime) {
-    infoPills.push({
-      icon: <Train size={14} color={colors.text.secondary} />,
-      label: placeCard.transitTime,
-    });
-  }
-
-  if (placeCard.driveTime) {
-    infoPills.push({
-      icon: <Car size={14} color={colors.text.secondary} />,
-      label: placeCard.driveTime,
-    });
-  }
-
-  // Price (from estimatedCost or priceLevel)
   const priceDisplay = placeCard.estimatedCost ||
     (placeCard.priceLevel ? currencySymbol.repeat(placeCard.priceLevel) : null);
-  if (priceDisplay) {
-    infoPills.push({
-      icon: null,
-      label: priceDisplay.startsWith('~') ? priceDisplay : `~${priceDisplay}`,
-    });
-  }
-
-  // Closing time
   const closingTime = placeCard.closingTime ||
     (placeCard.hours && placeCard.openNow ? `til ${placeCard.hours.split(' - ')[1] || placeCard.hours}` : null);
-  if (closingTime && placeCard.openNow !== false) {
-    infoPills.push({
-      icon: <Clock size={14} color={colors.text.secondary} />,
-      label: closingTime,
-    });
-  }
+
+  const imageHeight = isCompact ? COMPACT_IMAGE_HEIGHT : IMAGE_HEIGHT;
 
   return (
-    <View style={styles.container}>
-      {/* Image Carousel */}
+    <View style={[styles.container, isCompact && styles.containerCompact]}>
+      {/* Image Section with Gradient Overlay */}
       {photos.length > 0 && (
-        <View style={styles.carouselContainer}>
+        <View style={styles.imageContainer}>
           <ScrollView
             ref={scrollRef}
             horizontal
@@ -145,19 +117,39 @@ function PlaceCardComponent({
             onScroll={handleScroll}
             scrollEventThrottle={16}
             decelerationRate="fast"
-            snapToInterval={IMAGE_WIDTH + spacing.sm}
+            snapToInterval={IMAGE_WIDTH}
             snapToAlignment="start"
-            contentContainerStyle={styles.carouselContent}
           >
             {photos.map((photo, index) => (
-              <Image
-                key={index}
-                source={{ uri: photo }}
-                style={styles.image}
-                resizeMode="cover"
-              />
+              <View key={index} style={[styles.imageWrapper, { height: imageHeight }]}>
+                <Image
+                  source={{ uri: photo }}
+                  style={[styles.image, { height: imageHeight }]}
+                  resizeMode="cover"
+                />
+                {/* Gradient overlay for text readability */}
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.7)']}
+                  style={styles.imageGradient}
+                />
+              </View>
             ))}
           </ScrollView>
+
+          {/* Save button overlay */}
+          {onSave && (
+            <TouchableOpacity
+              style={[styles.saveButton, isSaved && styles.saveButtonActive]}
+              onPress={handleSave}
+              activeOpacity={0.8}
+            >
+              <Heart
+                size={20}
+                color={isSaved ? '#fff' : colors.text.primary}
+                fill={isSaved ? colors.status.error : 'transparent'}
+              />
+            </TouchableOpacity>
+          )}
 
           {/* Pagination dots */}
           {photos.length > 1 && (
@@ -173,184 +165,247 @@ function PlaceCardComponent({
               ))}
             </View>
           )}
-        </View>
-      )}
 
-      {/* Place Name */}
-      <Text style={styles.name}>{placeCard.name}</Text>
-
-      {/* Rating with review count */}
-      {placeCard.rating && (
-        <View style={styles.ratingRow}>
-          <Text style={styles.ratingStar}>★</Text>
-          <Text style={styles.ratingText}>{placeCard.rating.toFixed(1)}</Text>
-          {placeCard.reviewCount && (
-            <Text style={styles.reviewCount}>
-              ({placeCard.reviewCount >= 1000
-                ? `${(placeCard.reviewCount / 1000).toFixed(1)}k`
-                : placeCard.reviewCount})
-            </Text>
-          )}
-          {placeCard.cuisine && (
-            <>
-              <Text style={styles.ratingDot}>·</Text>
-              <Text style={styles.cuisineText}>{placeCard.cuisine}</Text>
-            </>
-          )}
-        </View>
-      )}
-
-      {/* Tomo's Description (if available) */}
-      {placeCard.description && (
-        <Text style={styles.description}>{placeCard.description}</Text>
-      )}
-
-      {/* Info Pills */}
-      {infoPills.length > 0 && (
-        <View style={styles.pillsContainer}>
-          {infoPills.map((pill, index) => (
-            <View key={index} style={styles.pill}>
-              {pill.icon}
-              <Text style={styles.pillText}>{pill.label}</Text>
+          {/* Rating badge on image */}
+          {placeCard.rating && (
+            <View style={styles.ratingBadge}>
+              <Star size={12} color="#FCD34D" fill="#FCD34D" />
+              <Text style={styles.ratingBadgeText}>{placeCard.rating.toFixed(1)}</Text>
+              {placeCard.reviewCount && (
+                <Text style={styles.reviewCountBadge}>
+                  ({placeCard.reviewCount >= 1000
+                    ? `${(placeCard.reviewCount / 1000).toFixed(1)}k`
+                    : placeCard.reviewCount})
+                </Text>
+              )}
             </View>
-          ))}
+          )}
+        </View>
+      )}
+
+      {/* Content Section */}
+      <View style={[styles.content, isCompact && styles.contentCompact]}>
+        {/* Place Name & Cuisine */}
+        <View style={styles.header}>
+          <Text style={[styles.name, isCompact && styles.nameCompact]} numberOfLines={1}>
+            {placeCard.name}
+          </Text>
+          {placeCard.cuisine && (
+            <Text style={styles.cuisine}>{placeCard.cuisine}</Text>
+          )}
+        </View>
+
+        {/* Tomo's Description */}
+        {placeCard.description && !isCompact && (
+          <Text style={styles.description} numberOfLines={2}>
+            {placeCard.description}
+          </Text>
+        )}
+
+        {/* Quick Info Row */}
+        <View style={styles.infoRow}>
+          {walkTime && (
+            <View style={styles.infoItem}>
+              <Footprints size={14} color={colors.accent.primary} />
+              <Text style={styles.infoText}>{walkTime}</Text>
+            </View>
+          )}
+          {placeCard.transitTime && (
+            <View style={styles.infoItem}>
+              <Train size={14} color={colors.status.info} />
+              <Text style={styles.infoText}>{placeCard.transitTime}</Text>
+            </View>
+          )}
+          {priceDisplay && (
+            <View style={styles.infoItem}>
+              <Text style={styles.priceText}>{priceDisplay}</Text>
+            </View>
+          )}
+          {closingTime && placeCard.openNow !== false && (
+            <View style={styles.infoItem}>
+              <Clock size={14} color={colors.text.tertiary} />
+              <Text style={styles.infoText}>{closingTime}</Text>
+            </View>
+          )}
           {placeCard.openNow === false && (
-            <View style={[styles.pill, styles.closedPill]}>
+            <View style={[styles.infoItem, styles.closedItem]}>
               <Text style={styles.closedText}>Closed</Text>
             </View>
           )}
         </View>
-      )}
 
-      {/* Action Buttons */}
-      {(onTakeMeThere || onSomethingElse || onSave) && (
-        <View style={styles.actions}>
-          {onTakeMeThere && (
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={handleTakeMeThere}
-              activeOpacity={0.8}
-            >
-              <Navigation size={18} color={colors.text.inverse} />
-              <Text style={styles.primaryButtonText}>Take me there</Text>
-            </TouchableOpacity>
-          )}
-          {onSave && (
-            <TouchableOpacity
-              style={[styles.secondaryButton, isSaved && styles.savedButton]}
-              onPress={handleSave}
-              activeOpacity={0.8}
-            >
-              <Heart
-                size={18}
-                color={isSaved ? colors.status.error : colors.text.primary}
-                fill={isSaved ? colors.status.error : 'transparent'}
-              />
-            </TouchableOpacity>
-          )}
-          {onSomethingElse && (
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={handleSomethingElse}
-              activeOpacity={0.8}
-            >
-              <Shuffle size={16} color={colors.text.primary} />
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-
-      {/* Booking Options */}
-      {bookingOptions.length > 0 && (
-        <View style={styles.bookingContainer}>
-          <Text style={styles.bookingLabel}>Quick Actions</Text>
-          <View style={styles.bookingOptions}>
-            {bookingOptions.map((option) => (
+        {/* Action Buttons */}
+        {(onTakeMeThere || onSomethingElse) && !isCompact && (
+          <View style={styles.actions}>
+            {onTakeMeThere && (
               <TouchableOpacity
-                key={option.provider}
-                style={styles.bookingButton}
-                onPress={() => handleBooking(option)}
-                activeOpacity={0.7}
+                style={styles.primaryButton}
+                onPress={handleTakeMeThere}
+                activeOpacity={0.85}
               >
-                <Text style={styles.bookingIcon}>{option.icon}</Text>
-                <Text style={styles.bookingText}>{option.label}</Text>
+                <Navigation size={18} color="#fff" />
+                <Text style={styles.primaryButtonText}>Take me there</Text>
               </TouchableOpacity>
-            ))}
+            )}
+            {onSomethingElse && (
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={handleSomethingElse}
+                activeOpacity={0.8}
+              >
+                <Shuffle size={18} color={colors.text.primary} />
+              </TouchableOpacity>
+            )}
           </View>
-        </View>
-      )}
+        )}
+
+        {/* Compact Actions */}
+        {isCompact && onTakeMeThere && (
+          <TouchableOpacity
+            style={styles.compactButton}
+            onPress={handleTakeMeThere}
+            activeOpacity={0.85}
+          >
+            <Navigation size={16} color="#fff" />
+            <Text style={styles.compactButtonText}>Go</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Booking Options */}
+        {bookingOptions.length > 0 && (
+          <View style={styles.bookingContainer}>
+            <Text style={styles.bookingLabel}>Quick Actions</Text>
+            <View style={styles.bookingOptions}>
+              {bookingOptions.map((option) => (
+                <TouchableOpacity
+                  key={option.provider}
+                  style={styles.bookingButton}
+                  onPress={() => handleBooking(option)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.bookingIcon}>{option.icon}</Text>
+                  <Text style={styles.bookingText}>{option.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: colors.surface.card,
+    borderRadius: borders.radius['2xl'],
+    overflow: 'hidden',
     marginTop: spacing.md,
+    ...shadows.md,
   },
-  carouselContainer: {
-    marginBottom: spacing.md,
+  containerCompact: {
+    marginTop: spacing.sm,
   },
-  carouselContent: {
-    gap: spacing.sm,
+
+  // Image Section
+  imageContainer: {
+    position: 'relative',
+  },
+  imageWrapper: {
+    width: IMAGE_WIDTH,
+    position: 'relative',
   },
   image: {
     width: IMAGE_WIDTH,
-    height: IMAGE_HEIGHT,
-    borderRadius: borders.radius.lg,
     backgroundColor: colors.background.tertiary,
   },
+  imageGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 100,
+  },
+  saveButton: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveButtonActive: {
+    backgroundColor: colors.status.error,
+  },
   pagination: {
+    position: 'absolute',
+    bottom: spacing.md,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: spacing.sm,
     gap: spacing.xs,
   },
   dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: colors.text.tertiary,
+    backgroundColor: 'rgba(255,255,255,0.4)',
   },
   dotActive: {
-    backgroundColor: colors.accent.primary,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    backgroundColor: '#fff',
+    width: 20,
+    borderRadius: 3,
+  },
+  ratingBadge: {
+    position: 'absolute',
+    bottom: spacing.md,
+    left: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borders.radius.full,
+  },
+  ratingBadgeText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
+    color: '#fff',
+  },
+  reviewCountBadge: {
+    fontSize: typography.sizes.xs,
+    color: 'rgba(255,255,255,0.7)',
+  },
+
+  // Content Section
+  content: {
+    padding: spacing.lg,
+  },
+  contentCompact: {
+    padding: spacing.md,
+  },
+  header: {
+    marginBottom: spacing.sm,
   },
   name: {
-    fontSize: typography.sizes.xl,
+    fontSize: typography.sizes['2xl'],
     fontWeight: typography.weights.bold,
     color: colors.text.primary,
     marginBottom: spacing.xs,
   },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-    gap: spacing.xs,
+  nameCompact: {
+    fontSize: typography.sizes.lg,
   },
-  ratingStar: {
+  cuisine: {
     fontSize: typography.sizes.sm,
-    color: colors.status.warning,
-  },
-  ratingText: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.primary,
+    color: colors.accent.primary,
     fontWeight: typography.weights.medium,
-  },
-  reviewCount: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.tertiary,
-  },
-  ratingDot: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.tertiary,
-    marginHorizontal: spacing.xs,
-  },
-  cuisineText: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
   },
   description: {
     fontSize: typography.sizes.base,
@@ -358,37 +413,42 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginBottom: spacing.md,
   },
-  pillsContainer: {
+
+  // Info Row
+  infoRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    gap: spacing.md,
     marginBottom: spacing.lg,
   },
-  pill: {
+  infoItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    backgroundColor: colors.surface.card,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    borderRadius: borders.radius.full,
-    borderWidth: 1,
-    borderColor: colors.border.muted,
   },
-  pillText: {
+  infoText: {
     fontSize: typography.sizes.sm,
     color: colors.text.secondary,
     fontWeight: typography.weights.medium,
   },
-  closedPill: {
+  priceText: {
+    fontSize: typography.sizes.sm,
+    color: colors.accent.primary,
+    fontWeight: typography.weights.semibold,
+  },
+  closedItem: {
     backgroundColor: colors.status.errorMuted,
-    borderColor: colors.status.error,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borders.radius.sm,
   },
   closedText: {
-    fontSize: typography.sizes.sm,
+    fontSize: typography.sizes.xs,
     color: colors.status.error,
-    fontWeight: typography.weights.medium,
+    fontWeight: typography.weights.semibold,
   },
+
+  // Action Buttons
   actions: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -401,39 +461,54 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     backgroundColor: colors.accent.primary,
     paddingVertical: spacing.md,
-    borderRadius: borders.radius.lg,
+    borderRadius: borders.radius.xl,
+    ...shadows.glowSoft,
   },
   primaryButtonText: {
-    color: colors.text.inverse,
+    color: '#fff',
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.semibold,
   },
   secondaryButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface.card,
+    backgroundColor: colors.background.tertiary,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    borderRadius: borders.radius.lg,
+    borderRadius: borders.radius.xl,
     borderWidth: 1,
     borderColor: colors.border.default,
   },
-  savedButton: {
-    backgroundColor: colors.status.errorMuted,
-    borderColor: colors.status.error,
+  compactButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.accent.primary,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borders.radius.lg,
+    alignSelf: 'flex-start',
   },
+  compactButtonText: {
+    color: '#fff',
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+  },
+
+  // Booking
   bookingContainer: {
     marginTop: spacing.lg,
     paddingTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.border.muted,
+    borderTopColor: colors.border.default,
   },
   bookingLabel: {
     fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.medium,
+    fontWeight: typography.weights.semibold,
     color: colors.text.tertiary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
     marginBottom: spacing.sm,
   },
   bookingOptions: {
@@ -462,12 +537,11 @@ const styles = StyleSheet.create({
 
 // Custom comparison for React.memo - only re-render when data changes
 function arePropsEqual(prevProps: PlaceCardProps, nextProps: PlaceCardProps): boolean {
-  // Compare primitive props
   if (prevProps.currencySymbol !== nextProps.currencySymbol) return false;
   if (prevProps.isSaved !== nextProps.isSaved) return false;
   if (prevProps.showBookingOptions !== nextProps.showBookingOptions) return false;
+  if (prevProps.isCompact !== nextProps.isCompact) return false;
 
-  // Compare placeCard by ID and key fields (avoid deep comparison)
   const prevCard = prevProps.placeCard;
   const nextCard = nextProps.placeCard;
   if (prevCard.placeId !== nextCard.placeId) return false;
@@ -477,7 +551,6 @@ function arePropsEqual(prevProps: PlaceCardProps, nextProps: PlaceCardProps): bo
   if (prevCard.photo !== nextCard.photo) return false;
   if (prevCard.photos?.length !== nextCard.photos?.length) return false;
 
-  // Callbacks are stable if parent uses useCallback, skip deep comparison
   return true;
 }
 

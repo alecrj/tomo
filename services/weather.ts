@@ -69,7 +69,6 @@ export async function getWeather(
 ): Promise<Weather | null> {
   // Use mock data if no API key
   if (config.useMockWeather) {
-    console.log('Using mock weather data (no API key configured)');
     return getMockWeather();
   }
 
@@ -208,7 +207,6 @@ export async function getForecast(
 ): Promise<ForecastResult | null> {
   // Use mock data if no API key
   if (config.useMockWeather) {
-    console.log('[Weather] Using mock forecast data (no API key configured)');
     return getMockForecast();
   }
 
@@ -217,7 +215,6 @@ export async function getForecast(
     // OpenWeatherMap 5 day / 3 hour forecast endpoint
     const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${latitude}&lon=${longitude}&units=metric&appid=${config.weatherApiKey}`;
 
-    console.log('[Weather] Fetching forecast...');
     const response = await fetch(url);
 
     if (!response.ok) {
@@ -315,10 +312,8 @@ export async function getForecast(
       daily,
     };
 
-    console.log('[Weather] Forecast fetched:', result.daily.length, 'days');
     return result;
   } catch (error) {
-    console.error('[Weather] Error fetching forecast:', error);
     // Fall back to mock data on error
     return getMockForecast();
   }

@@ -46,7 +46,6 @@ export function useDestinationGeneration() {
    */
   const buildContext = useCallback((): DestinationContext | null => {
     if (!coordinates) {
-      console.log('No coordinates available yet');
       return null;
     }
 
@@ -106,30 +105,18 @@ export function useDestinationGeneration() {
   const generate = useCallback(async () => {
     const context = buildContext();
     if (!context) {
-      console.log('Cannot generate destination: missing context');
       return;
     }
 
     try {
       setLoading(true);
-      console.log('Generating destination with context:', {
-        location: context.neighborhood,
-        timeOfDay: context.timeOfDay,
-        weather: context.weather?.condition,
-        budgetRemaining: context.budgetRemaining,
-        excludedCount: context.excludedToday.length,
-      });
-
       const destination = await generateDestination(context);
 
       if (destination) {
-        console.log('Destination generated:', destination.title);
         setDestination(destination);
-      } else {
-        console.error('Failed to generate destination');
       }
     } catch (error) {
-      console.error('Error generating destination:', error);
+      // Silently handle destination generation errors
     } finally {
       setLoading(false);
     }
@@ -140,16 +127,14 @@ export function useDestinationGeneration() {
    */
   useEffect(() => {
     if (!currentDestination && coordinates) {
-      console.log('No destination exists, generating initial destination...');
       generate();
     }
-  }, [currentDestination, coordinates]); // Only run when these change
+  }, [currentDestination, coordinates]);
 
   /**
    * Regenerate function (for "Something else" button)
    */
   const regenerate = useCallback(() => {
-    console.log('Regenerating destination...');
     generate();
   }, [generate]);
 

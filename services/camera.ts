@@ -33,7 +33,6 @@ export async function takePhoto(): Promise<string | null> {
   try {
     const hasPermission = await requestCameraPermission();
     if (!hasPermission) {
-      console.log('Camera permission denied');
       return null;
     }
 
@@ -62,7 +61,6 @@ export async function pickPhoto(): Promise<string | null> {
   try {
     const hasPermission = await requestLibraryPermission();
     if (!hasPermission) {
-      console.log('Library permission denied');
       return null;
     }
 

@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+// Animations disabled temporarily for stability
+// import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import { ArrowLeft, MapPin, DollarSign, Utensils, Heart, Users, Check, Navigation, Brain, Thermometer, MessageCircle, Bell, Smile, AlignLeft, Train, Clock, CloudRain, Wallet, Calendar, Globe } from 'lucide-react-native';
 import { colors, spacing, typography, shadows, borders } from '../constants/theme';

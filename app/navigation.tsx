@@ -325,7 +325,6 @@ export default function NavigationScreen() {
       // Handle actions from the response
       if (response.action?.type === 'add_stop' && response.action.place) {
         // TODO: Implement waypoint/stop addition
-        console.log('[Navigation] Add stop suggested:', response.action.place);
       }
 
       safeHaptics.notification(NotificationFeedbackType.Success);

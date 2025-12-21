@@ -21,6 +21,7 @@ import {
   Animated,
   Easing,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -33,11 +34,14 @@ import {
   MessageSquare,
   Phone,
   PhoneOff,
+  Navigation,
 } from 'lucide-react-native';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import { colors, spacing, borders, typography } from '../constants/theme';
 import { useLocationStore } from '../stores/useLocationStore';
 import { usePreferencesStore, LANGUAGE_NAMES } from '../stores/usePreferencesStore';
+import { useNavigationStore } from '../stores/useNavigationStore';
+import { searchPlace } from '../services/places';
 import {
   initRealtimeSession,
   closeRealtimeSession,
@@ -47,6 +51,37 @@ import {
   VoiceActivityState,
   RealtimeMessage,
 } from '../services/realtime';
+import type { Destination } from '../types';
+
+// Navigation intent patterns
+const NAVIGATION_PATTERNS = [
+  /(?:take me to|navigate to|go to|get me to|route me to|directions? to|how do i get to)\s+(.+)/i,
+  /(?:i want to go to|i need to go to|i'd like to go to)\s+(.+)/i,
+  /(?:can you (?:take|route|navigate|get) me (?:to|there))\s*(.+)?/i,
+  /(?:let's go to|show me the way to)\s+(.+)/i,
+];
+
+/**
+ * Detect navigation intent and extract destination from text
+ */
+function detectNavigationIntent(text: string): { isNavigation: boolean; destination: string | null } {
+  const cleanText = text.toLowerCase().trim();
+
+  for (const pattern of NAVIGATION_PATTERNS) {
+    const match = cleanText.match(pattern);
+    if (match) {
+      const destination = match[1]?.trim() || null;
+      return { isNavigation: true, destination };
+    }
+  }
+
+  // Check for simple navigation confirmations
+  if (cleanText.includes('navigate') || cleanText.includes('take me there') || cleanText.includes('route me there')) {
+    return { isNavigation: true, destination: null };
+  }
+
+  return { isNavigation: false, destination: null };
+}
 
 export default function VoiceScreen() {
   const router = useRouter();
@@ -54,6 +89,9 @@ export default function VoiceScreen() {
   // Location context for system prompt
   const neighborhood = useLocationStore((state) => state.neighborhood);
   const coordinates = useLocationStore((state) => state.coordinates);
+
+  // Navigation store
+  const viewDestination = useNavigationStore((state) => state.viewDestination);
 
   // Language preference
   const language = usePreferencesStore((state) => state.language);
@@ -63,12 +101,16 @@ export default function VoiceScreen() {
   const [connectionState, setConnectionState] = useState<RealtimeConnectionState>('disconnected');
   const [voiceState, setVoiceState] = useState<VoiceActivityState>('idle');
   const [isMuted, setIsMuted] = useState(false);
+  const [isSearchingPlace, setIsSearchingPlace] = useState(false);
 
   // Conversation
   const [transcript, setTranscript] = useState<string>('');
   const [assistantText, setAssistantText] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<RealtimeMessage[]>([]);
+
+  // Track last mentioned place for "take me there" commands
+  const lastMentionedPlace = useRef<string | null>(null);
 
   // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -115,26 +157,82 @@ You can help with:
 - Anything else a helpful friend would help with`;
   }, [coordinates, neighborhood, languageName]);
 
+  // Handle navigation intent - search for place and navigate
+  const handleNavigationIntent = useCallback(async (destinationQuery: string | null) => {
+    if (!coordinates) {
+      return;
+    }
+
+    // If no destination specified, use last mentioned place
+    const searchQuery = destinationQuery || lastMentionedPlace.current;
+    if (!searchQuery) {
+      return;
+    }
+
+    setIsSearchingPlace(true);
+
+    try {
+      const result = await searchPlace(searchQuery, coordinates);
+
+      if (result) {
+        safeHaptics.notification(NotificationFeedbackType.Success);
+
+        // Close voice session
+        closeRealtimeSession();
+
+        // Build destination object
+        const destination: Destination = {
+          id: result.id,
+          title: result.displayName.text,
+          description: result.formattedAddress,
+          whatItIs: result.formattedAddress,
+          whenToGo: '',
+          neighborhood: neighborhood || '',
+          category: 'food',
+          whyNow: '',
+          address: result.formattedAddress,
+          coordinates: {
+            latitude: result.location.latitude,
+            longitude: result.location.longitude,
+          },
+          priceLevel: 2,
+          transitPreview: {
+            method: 'walk',
+            totalMinutes: 10,
+            description: 'Walk',
+          },
+          spots: [],
+        };
+
+        // Set destination and navigate
+        viewDestination(destination);
+        router.replace('/navigation');
+      } else {
+        // Let the voice continue - Tomo will respond that it couldn't find the place
+      }
+    } catch (err) {
+      console.error('[VoiceScreen] Navigation search error:', err);
+    } finally {
+      setIsSearchingPlace(false);
+    }
+  }, [coordinates, neighborhood, viewDestination, router]);
+
   // Initialize session on mount
   useEffect(() => {
     const initSession = async () => {
-      console.log('[VoiceScreen] Initializing realtime session...');
 
       const success = await initRealtimeSession(
         {
           onConnectionStateChange: (state) => {
-            console.log('[VoiceScreen] Connection state:', state);
             setConnectionState(state);
             if (state === 'connected') {
               safeHaptics.notification(NotificationFeedbackType.Success);
             }
           },
           onVoiceActivityChange: (state) => {
-            console.log('[VoiceScreen] Voice activity:', state);
             setVoiceState(state);
           },
           onTranscript: (text, isFinal) => {
-            console.log('[VoiceScreen] Transcript:', text, 'final:', isFinal);
             setTranscript(text);
             if (isFinal && text) {
               setMessages((prev) => [
@@ -142,10 +240,30 @@ You can help with:
                 { type: 'user', content: text, timestamp: Date.now() },
               ]);
               setTranscript('');
+
+              // Check for navigation intent
+              const { isNavigation, destination } = detectNavigationIntent(text);
+              if (isNavigation) {
+                handleNavigationIntent(destination);
+              }
             }
           },
           onAssistantResponse: (text) => {
             setAssistantText((prev) => prev + text);
+
+            // Try to extract place names from assistant responses
+            // Look for patterns like "I recommend X" or "Try X" or "Check out X"
+            const placePatterns = [
+              /(?:i recommend|try|check out|go to|visit|head to)\s+([^.!?,]+)/i,
+              /^([A-Z][^.!?,]+)\s+(?:is|has|offers|serves)/i,
+            ];
+            for (const pattern of placePatterns) {
+              const match = text.match(pattern);
+              if (match && match[1]) {
+                lastMentionedPlace.current = match[1].trim();
+                break;
+              }
+            }
           },
           onError: (err) => {
             console.error('[VoiceScreen] Error:', err);
@@ -164,7 +282,6 @@ You can help with:
     initSession();
 
     return () => {
-      console.log('[VoiceScreen] Cleaning up...');
       closeRealtimeSession();
     };
   }, [buildSystemPrompt]);
@@ -536,6 +653,8 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingBottom: spacing.xl,
     flexGrow: 1,
+    // Ensure proper layout for messages
+    alignItems: 'stretch',
   },
   emptyState: {
     alignItems: 'center',
@@ -558,10 +677,15 @@ const styles = StyleSheet.create({
   },
   messageBubble: {
     maxWidth: '85%',
+    minWidth: 60,
     marginBottom: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderRadius: borders.radius.xl,
+    // Ensure proper text wrapping
+    flexShrink: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   userBubble: {
     alignSelf: 'flex-end',
@@ -579,6 +703,8 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: typography.sizes.base,
     lineHeight: 22,
+    flexShrink: 1,
+    flexWrap: 'wrap',
   },
   userText: {
     color: colors.chat.userText,

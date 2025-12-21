@@ -52,7 +52,6 @@ export function useNotificationTriggers() {
       tracker.notifiedClosingPlaces.size > 100;
 
     if (shouldCleanup) {
-      console.log('[NotificationTriggers] Cleaning up tracked notifications');
       tracker.notifiedActivityIds.clear();
       tracker.notifiedClosingPlaces.clear();
       tracker.lastBudgetWarningPercent = null;
@@ -111,7 +110,6 @@ export function useNotificationTriggers() {
         const remaining = Math.max(0, dailyBudget - spent);
         createBudgetWarning(percentUsed, remaining, '$'); // TODO: Get actual currency
         tracker.lastBudgetWarningPercent = threshold;
-        console.log('[NotificationTriggers] Budget warning triggered at', Math.round(percentUsed), '%');
         break;
       }
     }
@@ -138,7 +136,6 @@ export function useNotificationTriggers() {
         weatherCondition === 'rain' ? 'Rain Incoming' : 'Snow Incoming',
         description
       );
-      console.log('[NotificationTriggers] Weather alert triggered:', weatherCondition);
     }
 
     // Update tracker
@@ -200,7 +197,6 @@ export function useNotificationTriggers() {
           coordinates: activity.place?.coordinates,
         });
         tracker.notifiedActivityIds.add(activity.id);
-        console.log('[NotificationTriggers] Itinerary reminder triggered for:', activity.title);
       }
     }
   }, [itineraryReminders, getTodaysActivities, addNotification]);
@@ -250,7 +246,6 @@ export function useNotificationTriggers() {
           activity.place.coordinates
         );
         tracker.notifiedClosingPlaces.add(activity.id);
-        console.log('[NotificationTriggers] Place closing warning triggered for:', activity.place.name);
       }
     }
   }, [placeClosingWarnings, getTodaysActivities, placeClosingWarningMinutes, createPlaceClosingWarning]);
@@ -279,7 +274,6 @@ export function useNotificationTriggers() {
     // Set up interval for periodic checks
     const interval = setInterval(runAllTriggers, CHECK_INTERVAL);
 
-    console.log('[NotificationTriggers] Initialized with', CHECK_INTERVAL / 1000, 'second interval');
 
     return () => {
       clearTimeout(initialTimeout);

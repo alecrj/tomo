@@ -227,7 +227,6 @@ export async function openBookingUrl(url: string): Promise<boolean> {
     }
   } catch {
     // iOS throws if scheme not in LSApplicationQueriesSchemes - expected behavior
-    console.log('[Booking] App not available, trying web fallback');
   }
 
   // Try web fallback
@@ -252,11 +251,9 @@ export async function openBookingUrl(url: string): Promise<boolean> {
         return true;
       }
     } catch {
-      console.log('[Booking] Could not open any URL');
     }
   }
 
-  console.log('[Booking] No fallback available for:', url);
   return false;
 }
 

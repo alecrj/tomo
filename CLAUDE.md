@@ -822,31 +822,78 @@ Implemented optimal itinerary UX inspired by Roamy:
 
 ---
 
-## 🚀 SESSION 20 PLAN: Continue Device Testing
+## 🚨 SESSION 21 PRIORITY: FIX GOOGLE MAPS 🚨
 
-### Priority 1: Test New Plan Screen
-- [ ] Test drag-to-reorder activities
-- [ ] Test swipe-to-delete
-- [ ] Test "Plan with Tomo" flow (generates itinerary)
-- [ ] Test Optimize Route button
-- [ ] Test Start Day → Navigation flow
+### The Problem
+Google Maps shows WHITE/BLANK on device. This MUST be fixed before anything else.
 
-### Priority 2: Fix Any Remaining Issues
-From device testing, watch for:
-- [ ] Voice mode language preference working?
-- [ ] Home screen conversation flow smooth?
-- [ ] Photos loading properly in PlaceCards?
-- [ ] Camera translation working?
+### What Was Tried (Session 20)
+1. ✅ Moved `GMSServices.provideAPIKey()` BEFORE React Native starts in `AppDelegate.swift`
+2. ✅ Removed react-native-maps config plugin (v1.19.1 doesn't have one)
+3. ✅ Applied `customMapStyle` on iOS (was only Android before)
+4. ❌ Maps still showing white on device
 
-### Priority 3: Multiple PlaceCard Options
-Currently returns 1 place. Need to:
-- [ ] Update OpenAI prompt to return 2-3 options
-- [ ] Show multiple PlaceCards (first expanded, rest collapsed)
+### Current Configuration
+- **react-native-maps**: v1.19.1 (Old Architecture compatible)
+- **newArchEnabled**: false
+- **API Key**: `AIzaSyDR9zUARYSyyr3FZe3jjkHXYaftWE6lXMM`
+- **Provider**: `PROVIDER_GOOGLE` in all MapView components
 
-### Priority 4: Final Polish
-- [ ] Performance audit (no jank)
-- [ ] Test all flows end-to-end
-- [ ] Ship to TestFlight
+### Files Using MapView
+| File | Purpose |
+|------|---------|
+| `app/(tabs)/map.tsx` | Main map explorer |
+| `app/navigation.tsx` | Turn-by-turn navigation |
+| `components/ItineraryMap.tsx` | Day's activities map |
+
+### Debug Checklist for Next Session
+1. [ ] Verify Maps SDK for iOS is ENABLED in Google Cloud Console (not just Places API)
+2. [ ] Check API key restrictions - must allow iOS bundle ID
+3. [ ] Check Xcode console for Google Maps errors on launch
+4. [ ] Try a minimal MapView test component to isolate the issue
+5. [ ] Verify CocoaPods installed GoogleMaps properly: `pod install` in ios/
+
+### Key Files to Check
+- `ios/tomo/AppDelegate.swift` - API key init (line 24)
+- `ios/Podfile` - GoogleMaps pod
+- `app/(tabs)/map.tsx` line 53 - `PROVIDER_GOOGLE`
+
+### Maps WORKED Before
+The maps were working in earlier sessions. Something changed. Likely causes:
+- react-native-maps downgrade from 1.26 → 1.19.1
+- New Architecture disabled
+- Native code changes from Expo prebuild
+
+---
+
+## ✅ SESSION 20 COMPLETED: Code Quality + Build Fixes
+
+### What Was Done
+1. ✅ **Fixed Google Maps init order** - Moved to before React Native in AppDelegate.swift
+2. ✅ **Cleaned 20+ console.log statements** - Removed from services/, hooks/, app/
+3. ✅ **Fixed TypeScript error** - `placeCards` → `placeCard` in index.tsx
+4. ✅ **Removed broken config plugin** - react-native-maps v1.19.1 has no plugin
+5. ✅ **Removed react-native-reanimated** - Was causing build crashes
+6. ✅ **Simplified Plan screen** - Regular FlatList instead of DraggableFlatList
+
+### Files Modified
+- `ios/tomo/AppDelegate.swift` - Google Maps init before RN
+- `app.config.js` - Removed react-native-maps plugin
+- `app/(tabs)/index.tsx` - Fixed placeCards TypeScript error
+- `app/(tabs)/plan.tsx` - Removed reanimated, uses FlatList
+- `services/openai.ts` - Cleaned console statements
+- `services/routes.ts` - Cleaned console statements
+- `services/location.ts` - Cleaned console statements
+- `services/weather.ts` - Cleaned console statements
+- `services/voice.ts` - Cleaned console statements
+- `hooks/useDestinationGeneration.ts` - Cleaned console statements
+- `hooks/useLastTrainWarning.ts` - Cleaned console statements
+
+### Current State
+- ✅ TypeScript passes clean
+- ✅ Build compiles successfully
+- ❌ Maps still showing white (needs Google Cloud Console check)
+- ⚠️ Plan tab "Plan with Tomo" flow needs testing
 
 ---
 

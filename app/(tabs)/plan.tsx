@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,16 +6,12 @@ import {
   TouchableOpacity,
   StatusBar,
   Dimensions,
+  FlatList,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import DraggableFlatList, {
-  ScaleDecorator,
-  RenderItemParams,
-} from 'react-native-draggable-flatlist';
-import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+// Draggable list removed - requires reanimated
 import {
   Plus,
   ChevronLeft,
@@ -23,7 +19,6 @@ import {
   MapPin,
   Navigation,
   Trash2,
-  GripVertical,
   Calendar,
   Clock,
   Sparkles,
@@ -58,7 +53,6 @@ const CATEGORY_CONFIG: Record<string, { icon: any; color: string; label: string 
 
 export default function PlanScreen() {
   const router = useRouter();
-  const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
   // Store state
   const itineraries = useItineraryStore((state) => state.itineraries);
@@ -68,7 +62,6 @@ export default function PlanScreen() {
   }, [itineraries, activeItineraryId]);
   const createItinerary = useItineraryStore((state) => state.createItinerary);
   const removeActivity = useItineraryStore((state) => state.removeActivity);
-  const reorderActivities = useItineraryStore((state) => state.reorderActivities);
   const neighborhood = useLocationStore((state) => state.neighborhood);
   const currentTrip = useTripStore((state) => state.currentTrip);
 
@@ -140,21 +133,21 @@ export default function PlanScreen() {
   const handleDelete = (activityId: string) => {
     if (!activeItinerary || !selectedDay) return;
 
-    safeHaptics.notification(NotificationFeedbackType.Warning);
-
-    // Close the swipeable
-    swipeableRefs.current.get(activityId)?.close();
-
-    // Remove the activity
-    removeActivity(activeItinerary.id, selectedDay.date, activityId);
-  };
-
-  // Handle reorder
-  const handleDragEnd = ({ data }: { data: Activity[] }) => {
-    if (!activeItinerary || !selectedDay) return;
-    safeHaptics.impact(ImpactFeedbackStyle.Medium);
-    const newOrder = data.map((a) => a.id);
-    reorderActivities(activeItinerary.id, selectedDay.date, newOrder);
+    Alert.alert(
+      'Remove Activity',
+      'Are you sure you want to remove this from your day?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            safeHaptics.notification(NotificationFeedbackType.Warning);
+            removeActivity(activeItinerary.id, selectedDay.date, activityId);
+          },
+        },
+      ]
+    );
   };
 
   // Ask Tomo to plan
@@ -166,99 +159,70 @@ export default function PlanScreen() {
     });
   };
 
-  // Render delete action
-  const renderRightActions = (activityId: string) => {
-    return (
-      <TouchableOpacity
-        style={styles.deleteAction}
-        onPress={() => handleDelete(activityId)}
-      >
-        <Trash2 size={20} color="#FFFFFF" />
-      </TouchableOpacity>
-    );
-  };
-
   // Render activity item
   const renderActivityItem = useCallback(
-    ({ item, drag, isActive, getIndex }: RenderItemParams<Activity>) => {
-      const index = getIndex() ?? 0;
+    ({ item, index }: { item: Activity; index: number }) => {
       const config = CATEGORY_CONFIG[item.category] || CATEGORY_CONFIG.activity;
       const Icon = config.icon;
       const hasLocation = !!item.place?.coordinates;
 
       return (
-        <ScaleDecorator>
-          <Swipeable
-            ref={(ref) => {
-              if (ref) swipeableRefs.current.set(item.id, ref);
-            }}
-            renderRightActions={() => renderRightActions(item.id)}
-            overshootRight={false}
-            friction={2}
-          >
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onLongPress={drag}
-              disabled={isActive}
-              style={[
-                styles.activityCard,
-                isActive && styles.activityCardDragging,
-              ]}
-            >
-              {/* Number badge */}
-              <View style={[styles.numberBadge, { backgroundColor: config.color }]}>
-                <Text style={styles.numberText}>{index + 1}</Text>
-              </View>
+        <View>
+          <View style={styles.activityCard}>
+            {/* Number badge */}
+            <View style={[styles.numberBadge, { backgroundColor: config.color }]}>
+              <Text style={styles.numberText}>{index + 1}</Text>
+            </View>
 
-              {/* Content */}
-              <View style={styles.activityContent}>
-                <View style={styles.activityHeader}>
-                  <Text style={styles.activityTitle} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  {item.startTime && (
-                    <Text style={styles.activityTime}>{item.startTime}</Text>
-                  )}
-                </View>
-
-                <View style={styles.activityMeta}>
-                  <Icon size={14} color={config.color} />
-                  <Text style={styles.activityCategory}>{config.label}</Text>
-                  {item.place?.estimatedCost && (
-                    <>
-                      <Text style={styles.metaDot}>·</Text>
-                      <Text style={styles.activityCost}>{item.place.estimatedCost}</Text>
-                    </>
-                  )}
-                </View>
-
-                {item.description && (
-                  <Text style={styles.activityDescription} numberOfLines={1}>
-                    {item.description}
-                  </Text>
+            {/* Content */}
+            <View style={styles.activityContent}>
+              <View style={styles.activityHeader}>
+                <Text style={styles.activityTitle} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                {item.startTime && (
+                  <Text style={styles.activityTime}>{item.startTime}</Text>
                 )}
               </View>
 
-              {/* Actions */}
-              <View style={styles.activityActions}>
-                {hasLocation && (
-                  <TouchableOpacity
-                    style={styles.navButton}
-                    onPress={() => handleNavigate(item)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <Navigation size={16} color={colors.accent.primary} />
-                  </TouchableOpacity>
+              <View style={styles.activityMeta}>
+                <Icon size={14} color={config.color} />
+                <Text style={styles.activityCategory}>{config.label}</Text>
+                {item.place?.estimatedCost && (
+                  <>
+                    <Text style={styles.metaDot}>·</Text>
+                    <Text style={styles.activityCost}>{item.place.estimatedCost}</Text>
+                  </>
                 )}
+              </View>
+
+              {item.description && (
+                <Text style={styles.activityDescription} numberOfLines={1}>
+                  {item.description}
+                </Text>
+              )}
+            </View>
+
+            {/* Actions */}
+            <View style={styles.activityActions}>
+              {hasLocation && (
                 <TouchableOpacity
-                  onLongPress={drag}
+                  style={styles.navButton}
+                  onPress={() => handleNavigate(item)}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <GripVertical size={18} color={colors.text.tertiary} />
+                  <Navigation size={16} color={colors.accent.primary} />
                 </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          </Swipeable>
+              )}
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => handleDelete(item.id)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Trash2 size={16} color={colors.status.error} />
+              </TouchableOpacity>
+            </View>
+          </View>
 
           {/* Travel time connector - show between activities */}
           {index < (selectedDay?.activities.length ?? 0) - 1 && (
@@ -267,21 +231,20 @@ export default function PlanScreen() {
               <View style={styles.travelBadge}>
                 <Clock size={10} color={colors.text.tertiary} />
                 <Text style={styles.travelText}>
-                  {/* Estimate ~5-15 min between stops */}
-                  {5 + Math.floor(Math.random() * 10)} min
+                  ~{5 + (index % 10)} min
                 </Text>
               </View>
               <View style={styles.travelLine} />
             </View>
           )}
-        </ScaleDecorator>
+        </View>
       );
     },
     [selectedDay, activeItinerary]
   );
 
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         {activeItinerary ? (
@@ -350,12 +313,11 @@ export default function PlanScreen() {
 
             {/* Activities list */}
             {selectedDay && selectedDay.activities.length > 0 ? (
-              <DraggableFlatList
+              <FlatList
                 data={selectedDay.activities}
                 keyExtractor={(item) => item.id}
                 renderItem={renderActivityItem}
-                onDragEnd={handleDragEnd}
-                containerStyle={styles.listContainer}
+                style={styles.listContainer}
                 contentContainerStyle={styles.listContent}
                 showsVerticalScrollIndicator={false}
                 ListFooterComponent={
@@ -401,7 +363,7 @@ export default function PlanScreen() {
           </View>
         )}
       </SafeAreaView>
-    </GestureHandlerRootView>
+    </View>
   );
 }
 
@@ -487,11 +449,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border.muted,
   },
-  activityCardDragging: {
-    ...shadows.lg,
-    borderColor: colors.accent.primary,
-    transform: [{ scale: 1.02 }],
-  },
   numberBadge: {
     width: 28,
     height: 28,
@@ -557,6 +514,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.status.errorMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // Travel connector
   travelConnector: {
@@ -581,16 +546,6 @@ const styles = StyleSheet.create({
   travelText: {
     fontSize: typography.sizes.xs,
     color: colors.text.tertiary,
-  },
-
-  // Delete action
-  deleteAction: {
-    backgroundColor: colors.status.error,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 70,
-    borderRadius: borders.radius.lg,
-    marginLeft: spacing.sm,
   },
 
   // Add button

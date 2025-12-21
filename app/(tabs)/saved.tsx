@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+// Animations disabled temporarily for stability
+// import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import {
   Map,
   Heart,
@@ -22,7 +24,7 @@ import {
   Landmark,
   ShoppingBag,
 } from 'lucide-react-native';
-import { colors, spacing, typography, borders } from '../../constants/theme';
+import { colors, spacing, typography, borders, shadows } from '../../constants/theme';
 import { useSavedPlacesStore } from '../../stores/useSavedPlacesStore';
 import { useLocationStore } from '../../stores/useLocationStore';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../../utils/haptics';
@@ -158,7 +160,9 @@ export default function SavedScreen() {
         {isEmpty ? (
           /* Empty state */
           <View style={styles.emptyState}>
-            <Heart size={48} color={colors.text.tertiary} />
+            <View>
+              <Heart size={48} color={colors.text.tertiary} />
+            </View>
             <Text style={styles.emptyTitle}>No saved places</Text>
             <Text style={styles.emptySubtitle}>
               Save places from chat or the map to find them here
@@ -482,6 +486,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     backgroundColor: colors.accent.primary,
     borderRadius: borders.radius.lg,
+    ...shadows.glowSoft,
   },
   exploreButtonText: {
     fontSize: typography.sizes.base,

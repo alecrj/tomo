@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+// Animations disabled temporarily for stability
+// import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
   Brain,
   Wallet,
@@ -28,7 +30,9 @@ import { useBudgetStore } from '../../stores/useBudgetStore';
 import { useNotificationStore } from '../../stores/useNotificationStore';
 import { useLocationStore } from '../../stores/useLocationStore';
 import { useMemoryStore } from '../../stores/useMemoryStore';
+import { usePreferencesStore } from '../../stores/usePreferencesStore';
 import { safeHaptics, ImpactFeedbackStyle } from '../../utils/haptics';
+import { ProfileCard } from '../../components/ProfileCard';
 
 export default function YouScreen() {
   const router = useRouter();
@@ -53,6 +57,13 @@ export default function YouScreen() {
   const unreadCount = useMemo(() => notifications.filter((n) => !n.dismissed).length, [notifications]);
   const neighborhood = useLocationStore((state) => state.neighborhood);
   const memories = useMemoryStore((state) => state.memories);
+  const userName = usePreferencesStore((state) => state.userName);
+
+  // Trip day calculation
+  const tripDay = useMemo(() => {
+    if (!currentTrip?.startDate) return 1;
+    return Math.ceil((Date.now() - currentTrip.startDate) / 86400000) || 1;
+  }, [currentTrip?.startDate]);
 
   // Budget percentage
   const budgetPercent = dailyBudget > 0 ? Math.round((spentToday / dailyBudget) * 100) : 0;
@@ -83,60 +94,48 @@ export default function YouScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Trip summary card */}
-          <View style={styles.tripCard}>
-            <View style={styles.tripHeader}>
-              <MapPin size={16} color={colors.accent.primary} />
-              <Text style={styles.tripLocation}>{neighborhood || 'Your Trip'}</Text>
-            </View>
-            {currentTrip && (
-              <>
-                <Text style={styles.tripDays}>
-                  Day {Math.ceil((Date.now() - (currentTrip.startDate || Date.now())) / 86400000) || 1} of trip
-                </Text>
-                <View style={styles.tripStats}>
-                  <View style={styles.tripStat}>
-                    <Text style={styles.tripStatValue}>{visits.length}</Text>
-                    <Text style={styles.tripStatLabel}>Places visited</Text>
-                  </View>
-                  <View style={styles.tripStatDivider} />
-                  <View style={styles.tripStat}>
-                    <Text style={styles.tripStatValue}>{memories.length}</Text>
-                    <Text style={styles.tripStatLabel}>Things learned</Text>
-                  </View>
-                </View>
-              </>
-            )}
-
-            {/* Budget bar */}
-            {dailyBudget > 0 && (
-              <View style={styles.budgetSection}>
-                <View style={styles.budgetHeader}>
-                  <Text style={styles.budgetLabel}>Today's Budget</Text>
-                  <Text style={styles.budgetValue}>
-                    ${spentToday.toFixed(0)} / ${dailyBudget.toFixed(0)}
-                  </Text>
-                </View>
-                <View style={styles.budgetTrack}>
-                  <View
-                    style={[
-                      styles.budgetFill,
-                      {
-                        width: `${Math.min(budgetPercent, 100)}%`,
-                        backgroundColor:
-                          budgetPercent > 100
-                            ? colors.budget.over
-                            : budgetPercent > 80
-                              ? colors.budget.warning
-                              : colors.budget.onTrack,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.budgetPercent}>{budgetPercent}% used</Text>
-              </View>
-            )}
+          {/* Premium Profile Card */}
+          <View>
+            <ProfileCard
+              name={userName || 'Traveler'}
+              title={currentTrip?.name || 'Explorer'}
+              handle={userName?.toLowerCase().replace(/\s+/g, '') || 'adventurer'}
+              status={neighborhood ? `Exploring ${neighborhood}` : 'On a journey'}
+              location={neighborhood || 'Discovering new places'}
+              tripDay={tripDay}
+              placesVisited={visits.length}
+              onPress={() => handleNavigate('/settings')}
+              enableTilt={true}
+            />
           </View>
+
+          {/* Budget bar - compact version below card */}
+          {dailyBudget > 0 && (
+            <View style={styles.budgetCard}>
+              <View style={styles.budgetHeader}>
+                <Text style={styles.budgetLabel}>Today's Budget</Text>
+                <Text style={styles.budgetValue}>
+                  ${spentToday.toFixed(0)} / ${dailyBudget.toFixed(0)}
+                </Text>
+              </View>
+              <View style={styles.budgetTrack}>
+                <View
+                  style={[
+                    styles.budgetFill,
+                    {
+                      width: `${Math.min(budgetPercent, 100)}%`,
+                      backgroundColor:
+                        budgetPercent > 100
+                          ? colors.budget.over
+                          : budgetPercent > 80
+                            ? colors.budget.warning
+                            : colors.budget.onTrack,
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+          )}
 
           {/* Menu items */}
           <View style={styles.menuSection}>
@@ -285,61 +284,15 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
   },
 
-  // Trip card
-  tripCard: {
+  // Budget card
+  budgetCard: {
     backgroundColor: colors.surface.card,
-    borderRadius: borders.radius.xl,
+    borderRadius: borders.radius.lg,
     padding: spacing.lg,
+    marginTop: spacing.lg,
     marginBottom: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border.muted,
-  },
-  tripHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  tripLocation: {
-    fontSize: typography.sizes.base,
-    fontWeight: typography.weights.semibold,
-    color: colors.text.primary,
-  },
-  tripDays: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-    marginBottom: spacing.lg,
-  },
-  tripStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  tripStat: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  tripStatValue: {
-    fontSize: typography.sizes['2xl'],
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
-  },
-  tripStatLabel: {
-    fontSize: typography.sizes.xs,
-    color: colors.text.tertiary,
-    marginTop: spacing.xs,
-  },
-  tripStatDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: colors.border.default,
-  },
-
-  // Budget
-  budgetSection: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border.muted,
-    paddingTop: spacing.md,
   },
   budgetHeader: {
     flexDirection: 'row',

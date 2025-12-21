@@ -98,7 +98,6 @@ Only extract if confidence > 0.7. Be conservative - only extract clear preferenc
     }
     // If still not an array, return empty
     if (!Array.isArray(memories)) {
-      console.log('[MemoryExtraction] No memories extracted from response');
       return [];
     }
 
@@ -245,7 +244,6 @@ export function useMemoryExtraction() {
 
     // Clean up if it's been more than an hour OR if Sets are too large
     if (now - lastCleanupRef.current > oneHourMs || processedMessagesRef.current.size > 500) {
-      console.log('[MemoryExtraction] Cleaning up processed messages tracker');
       processedMessagesRef.current.clear();
       aiProcessingRef.current.clear();
       lastCleanupRef.current = now;
@@ -271,7 +269,6 @@ export function useMemoryExtraction() {
       const aiMemories = await extractMemoriesWithAI(message.content, signal);
 
       if (aiMemories.length > 0) {
-        console.log('[MemoryExtraction] AI found memories:', aiMemories.length);
 
         for (const memory of aiMemories) {
           // Check if similar memory already exists
@@ -291,7 +288,6 @@ export function useMemoryExtraction() {
               expiresAt: Date.now() + 10000,
             });
 
-            console.log('[MemoryExtraction] AI Learned:', memory.content);
           }
         }
       } else {
@@ -314,7 +310,6 @@ export function useMemoryExtraction() {
               expiresAt: Date.now() + 10000,
             });
 
-            console.log('[MemoryExtraction] Pattern Learned:', learning.content);
           }
         }
       }

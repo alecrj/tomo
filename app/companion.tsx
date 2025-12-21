@@ -147,7 +147,6 @@ export default function CompanionScreen() {
 
   const handleCamera = () => {
     // TODO: Implement camera functionality
-    console.log('Open camera');
   };
 
   const handleAddExpense = () => {
@@ -156,7 +155,6 @@ export default function CompanionScreen() {
 
   const handleExploreNearby = () => {
     // TODO: Implement nearby exploration
-    console.log('Explore nearby');
   };
 
   if (!currentDestination) {
