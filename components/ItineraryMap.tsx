@@ -299,8 +299,7 @@ export default function ItineraryMap({
         ref={mapRef}
         style={styles.map}
         provider={MAP_PROVIDER}
-        customMapStyle={Platform.OS === 'android' ? mapStyle : undefined}
-        userInterfaceStyle="dark"
+        customMapStyle={mapStyle}
         initialRegion={initialRegion}
         showsUserLocation
         showsMyLocationButton={false}
@@ -329,12 +328,20 @@ export default function ItineraryMap({
 
         {/* Route polyline */}
         {routeCoordinates.length > 0 && (
-          <Polyline
-            coordinates={routeCoordinates}
-            strokeColor={colors.map.route}
-            strokeWidth={4}
-            lineDashPattern={[1]}
-          />
+          <>
+            {/* Route outline for contrast */}
+            <Polyline
+              coordinates={routeCoordinates}
+              strokeColor="#000000"
+              strokeWidth={8}
+            />
+            {/* Main route line - Google Maps blue */}
+            <Polyline
+              coordinates={routeCoordinates}
+              strokeColor="#4285F4"
+              strokeWidth={5}
+            />
+          </>
         )}
       </MapView>
 
