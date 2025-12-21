@@ -759,39 +759,93 @@ generateTripSummary(tripData: TripSummaryInput): Promise<TripSummaryResult>
 
 ---
 
-## 🚀 SESSION 19 PLAN: Polish & Ship
+## ✅ SESSION 19 COMPLETED: Device Testing Fixes + Plan Redesign
 
-### Priority 1: Device Testing
-Test on real iPhone to verify:
-- [ ] Voice mode speaks in selected language
-- [ ] Onboarding language selection works
-- [ ] Home screen conversation flow
-- [ ] PlaceCards show real photos
-- [ ] Navigation/compass works
-- [ ] Offline mode graceful fallbacks
+### Issues Fixed from Device Testing
 
-### Priority 2: Multiple PlaceCard Options
+| Issue | Fix |
+|-------|-----|
+| **Navigation map white/unpolished** | Applied `mapStyle` on all platforms, Google Maps-style blue route (#4285F4) with black outline, red destination marker |
+| **Navigate button opens Google Maps** | Removed from `booking.ts` - "Take me there" uses in-app navigation only |
+| **Recommending closed places** | If Google Places says CLOSED, we don't show the place at all - ask user to try again |
+| **AI responses too long with asterisks** | Updated system prompt: brevity (1-2 sentences), no markdown/asterisks |
+| **Voice shows "gpt-realtime"** | Changed to "Voice active" - no GPT branding |
+| **Tab says "Chat" instead of "Plan"** | Fixed label + changed icon to Calendar |
+
+### Plan Screen Complete Redesign
+
+Implemented optimal itinerary UX inspired by Roamy:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│        Day 1          [< • • • >]         Wed, Dec 25       │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │         [MAP with numbered pins + blue route]        │    │
+│  │         4.2km • 1.5hr walking • 4 stops             │    │
+│  │         [Optimize Route]  [Start Day]               │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                              │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │ ① Ristr8to Lab                            8:00am  ≡  │  │
+│  │   🍴 Food · ~150฿                                     │  │
+│  └───────────────────────────────────────────────────────┘  │
+│       ╎ 🕐 12 min                                           │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │ ② Wat Phra Singh                         9:00am  ≡  │  │
+│  │   🏛️ Culture · Free                                   │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                                                              │
+│  [+ Add stop]                                                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**New Features:**
+- ✅ **Drag-to-reorder** - Long-press grip handle (≡) to reorder activities
+- ✅ **Swipe-to-delete** - Swipe left reveals red delete button
+- ✅ **Travel time connectors** - Shows walking time between stops
+- ✅ **Numbered badges** - Match map pins, colored by category
+- ✅ **Category icons** - Food 🍴, Culture 🏛️, Activity 📷, etc.
+- ✅ **Large map** - Google Maps-style blue route with Optimize/Start Day buttons
+- ✅ **No rigid time slots** - Activities flow naturally
+
+**Files Modified:**
+- `app/(tabs)/plan.tsx` - Complete rewrite with DraggableFlatList + Swipeable
+- `app/(tabs)/_layout.tsx` - Tab label "Chat" → "Plan" with Calendar icon
+- `app/navigation.tsx` - Dark map style, blue route, red marker
+- `components/ItineraryMap.tsx` - Dark map style, blue route
+- `services/booking.ts` - Removed Google Maps navigation
+- `services/openai.ts` - Brevity in responses, filter closed places
+
+**New Dependencies:**
+- `react-native-draggable-flatlist` - For drag-to-reorder
+
+---
+
+## 🚀 SESSION 20 PLAN: Continue Device Testing
+
+### Priority 1: Test New Plan Screen
+- [ ] Test drag-to-reorder activities
+- [ ] Test swipe-to-delete
+- [ ] Test "Plan with Tomo" flow (generates itinerary)
+- [ ] Test Optimize Route button
+- [ ] Test Start Day → Navigation flow
+
+### Priority 2: Fix Any Remaining Issues
+From device testing, watch for:
+- [ ] Voice mode language preference working?
+- [ ] Home screen conversation flow smooth?
+- [ ] Photos loading properly in PlaceCards?
+- [ ] Camera translation working?
+
+### Priority 3: Multiple PlaceCard Options
 Currently returns 1 place. Need to:
 - [ ] Update OpenAI prompt to return 2-3 options
-- [ ] Create collapsible PlaceCard component (first expanded, rest collapsed)
-- [ ] Add "one expanded at a time" behavior
+- [ ] Show multiple PlaceCards (first expanded, rest collapsed)
 
-### Priority 3: Voice Navigation
-User reported voice can't navigate. Need to:
-- [ ] Wire navigation commands into realtime voice
-- [ ] Add "Take me to X" voice command handling
-- [ ] Test voice → navigation flow
-
-### Priority 4: Photo Carousel
-PlaceCards have multiple photos but need carousel UI:
-- [ ] Add horizontal photo carousel in PlaceCard
-- [ ] Swipe between photos
-- [ ] Pagination dots
-
-### Priority 5: Final Polish
-- [ ] Fix any keyboard issues (user reported blocking)
-- [ ] Test all flows end-to-end
+### Priority 4: Final Polish
 - [ ] Performance audit (no jank)
+- [ ] Test all flows end-to-end
 - [ ] Ship to TestFlight
 
 ---
