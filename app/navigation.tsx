@@ -683,7 +683,7 @@ export default function NavigationScreen() {
         provider={MAP_PROVIDER}
         mapType="mutedStandard"
         userInterfaceStyle="dark"
-        showsUserLocation
+        showsUserLocation={false}
         showsMyLocationButton={false}
         showsCompass={false}
         showsPointsOfInterest={false}
@@ -707,6 +707,23 @@ export default function NavigationScreen() {
             <Polyline coordinates={routeCoordinates} strokeColor="#4285F4" strokeWidth={6} />
           </>
         )}
+
+        {/* Custom user location marker with direction cone */}
+        <Marker
+          coordinate={coordinates}
+          anchor={{ x: 0.5, y: 0.5 }}
+          flat
+          rotation={heading}
+        >
+          <View style={styles.userLocationContainer}>
+            {/* Direction cone/beam - points up, rotates with heading */}
+            <View style={styles.directionCone} />
+            {/* Blue dot */}
+            <View style={styles.userLocationDot}>
+              <View style={styles.userLocationInner} />
+            </View>
+          </View>
+        </Marker>
 
         {/* Waypoint markers */}
         {waypoints.map((wp, index) => (
@@ -811,31 +828,8 @@ export default function NavigationScreen() {
         </SafeAreaView>
       )}
 
-      {/* Direction Indicator - shows which way to go */}
-      {!hasArrived && !showChat && !isOverviewMode && (
-        <View style={[styles.directionIndicator, { top: insets.top + 160 }]}>
-          <View
-            style={[
-              styles.directionArrowContainer,
-              { transform: [{ rotate: `${bearingToDestination - heading}deg` }] },
-            ]}
-          >
-            <Navigation2 size={28} color={colors.accent.primary} style={{ transform: [{ rotate: '-45deg' }] }} />
-          </View>
-          <Text style={styles.directionLabel}>
-            {(() => {
-              const diff = ((bearingToDestination - heading + 540) % 360) - 180;
-              if (Math.abs(diff) < 30) return 'Ahead';
-              if (diff > 0 && diff < 90) return 'Right';
-              if (diff < 0 && diff > -90) return 'Left';
-              return 'Behind';
-            })()}
-          </Text>
-        </View>
-      )}
-
       {/* Control buttons - right side */}
-      <View style={[styles.controlButtons, { top: insets.top + 160 }]}>
+      <View style={[styles.controlButtons, { top: insets.top + 140 }]}>
         {/* Overview button */}
         <TouchableOpacity
           style={[styles.controlButton, isOverviewMode && styles.controlButtonActive]}
@@ -1170,27 +1164,39 @@ const styles = StyleSheet.create({
     color: colors.text.inverse,
   },
 
-  // Direction indicator
-  directionIndicator: {
-    position: 'absolute',
-    left: spacing.md,
-    backgroundColor: colors.background.secondary,
-    borderRadius: borders.radius.lg,
-    padding: spacing.md,
-    alignItems: 'center',
-    ...shadows.md,
-  },
-  directionArrowContainer: {
-    width: 44,
-    height: 44,
+  // Custom user location marker with direction cone
+  userLocationContainer: {
+    width: 80,
+    height: 80,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  directionLabel: {
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.medium,
-    color: colors.text.secondary,
-    marginTop: spacing.xs,
+  directionCone: {
+    position: 'absolute',
+    top: 0,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 20,
+    borderRightWidth: 20,
+    borderBottomWidth: 40,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: 'rgba(66, 133, 244, 0.3)', // Google blue with transparency
+  },
+  userLocationDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.md,
+  },
+  userLocationInner: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#4285F4', // Google blue
   },
 
   // Control buttons
