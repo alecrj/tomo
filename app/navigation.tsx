@@ -17,6 +17,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, Camera } from 'react-native-maps';
 import { Magnetometer } from 'expo-sensors';
+import * as Speech from 'expo-speech';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import {
   ArrowUp,
@@ -41,6 +42,10 @@ import {
   Route,
   Volume2,
   VolumeX,
+  Car,
+  Train,
+  Footprints,
+  Compass,
 } from 'lucide-react-native';
 import { colors, spacing, borders, shadows, typography } from '../constants/theme';
 import { getDirections, getMultiWaypointRoute, TravelMode } from '../services/routes';
@@ -182,6 +187,9 @@ export default function NavigationScreen() {
   const [isFollowingUser, setIsFollowingUser] = useState(true);
   const [isOverviewMode, setIsOverviewMode] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [travelMode, setTravelMode] = useState<TravelMode>('WALK');
+  const [lastSpokenStep, setLastSpokenStep] = useState(-1);
+  const [bearingToDestination, setBearingToDestination] = useState(0);
 
   // Chat state
   const [showChat, setShowChat] = useState(false);
@@ -197,7 +205,21 @@ export default function NavigationScreen() {
 
   const routeCoordinates = route?.polyline ? decodePolyline(route.polyline) : [];
 
-  // Fetch route on mount
+  // Calculate bearing from user to destination
+  const calculateBearing = useCallback((from: Coordinates, to: Coordinates): number => {
+    const lat1 = (from.latitude * Math.PI) / 180;
+    const lat2 = (to.latitude * Math.PI) / 180;
+    const deltaLon = ((to.longitude - from.longitude) * Math.PI) / 180;
+
+    const y = Math.sin(deltaLon) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLon);
+
+    let bearing = Math.atan2(y, x) * (180 / Math.PI);
+    bearing = (bearing + 360) % 360;
+    return bearing;
+  }, []);
+
+  // Fetch route on mount and when travel mode changes
   useEffect(() => {
     async function fetchRoute() {
       if (coordinates && currentDestination) {
@@ -207,19 +229,20 @@ export default function NavigationScreen() {
         const fetchedRoute = await getDirections(
           coordinates,
           currentDestination.coordinates,
-          'WALK'
+          travelMode
         );
 
         if (fetchedRoute) {
           setRoute(fetchedRoute);
           startNavigation(currentDestination, fetchedRoute);
           setCurrentStepIndex(0);
+          setLastSpokenStep(-1);
         }
         setIsLoadingRoute(false);
       }
     }
     fetchRoute();
-  }, [currentDestination?.id]);
+  }, [currentDestination?.id, travelMode]);
 
   // Recalculate route when waypoints change
   useEffect(() => {
@@ -319,6 +342,15 @@ export default function NavigationScreen() {
         setHasArrived(true);
         markArrived();
         safeHaptics.notification(NotificationFeedbackType.Success);
+
+        // Announce arrival
+        if (!isMuted) {
+          Speech.speak(`You have arrived at ${currentDestination.title}`, {
+            language: 'en-US',
+            pitch: 1.0,
+            rate: 0.9,
+          });
+        }
       }
     }
   }, [coordinates, currentDestination, hasArrived]);
@@ -346,6 +378,42 @@ export default function NavigationScreen() {
     }
   }, [coordinates, route, currentStepIndex, hasArrived, currentDestination]);
 
+  // Update bearing to destination
+  useEffect(() => {
+    if (coordinates && currentDestination) {
+      const bearing = calculateBearing(coordinates, currentDestination.coordinates);
+      setBearingToDestination(bearing);
+    }
+  }, [coordinates, currentDestination, calculateBearing]);
+
+  // Voice guidance - speak turn instructions
+  useEffect(() => {
+    if (isMuted || !route?.steps || hasArrived) return;
+    if (currentStepIndex === lastSpokenStep) return;
+
+    const currentStep = route.steps[currentStepIndex];
+    if (currentStep) {
+      // Clean up HTML tags from instruction
+      const instruction = currentStep.instruction.replace(/<[^>]*>/g, '');
+
+      // Speak the instruction
+      Speech.speak(instruction, {
+        language: 'en-US',
+        pitch: 1.0,
+        rate: 0.9,
+      });
+
+      setLastSpokenStep(currentStepIndex);
+    }
+  }, [currentStepIndex, route, isMuted, hasArrived, lastSpokenStep]);
+
+  // Stop speech when arriving or leaving
+  useEffect(() => {
+    return () => {
+      Speech.stop();
+    };
+  }, []);
+
   // Chat panel animation
   useEffect(() => {
     Animated.timing(chatSlideAnim, {
@@ -355,9 +423,19 @@ export default function NavigationScreen() {
     }).start();
   }, [showChat]);
 
+  // Travel mode change handler
+  const handleTravelModeChange = (mode: TravelMode) => {
+    if (mode === travelMode) return;
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
+    Speech.stop();
+    setTravelMode(mode);
+    setLastSpokenStep(-1);
+  };
+
   // Handlers
   const handleEndRoute = () => {
     safeHaptics.impact(ImpactFeedbackStyle.Medium);
+    Speech.stop();
     exitCompanionMode();
     router.back();
   };
@@ -619,11 +697,77 @@ export default function NavigationScreen() {
               </Text>
             </View>
           </View>
+
+          {/* Travel Mode Selector */}
+          <View style={styles.travelModeSelector}>
+            <TouchableOpacity
+              style={[
+                styles.travelModeButton,
+                travelMode === 'WALK' && styles.travelModeButtonActive,
+              ]}
+              onPress={() => handleTravelModeChange('WALK')}
+            >
+              <Footprints size={18} color={travelMode === 'WALK' ? colors.text.inverse : colors.text.secondary} />
+              <Text style={[
+                styles.travelModeText,
+                travelMode === 'WALK' && styles.travelModeTextActive,
+              ]}>Walk</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.travelModeButton,
+                travelMode === 'TRANSIT' && styles.travelModeButtonActive,
+              ]}
+              onPress={() => handleTravelModeChange('TRANSIT')}
+            >
+              <Train size={18} color={travelMode === 'TRANSIT' ? colors.text.inverse : colors.text.secondary} />
+              <Text style={[
+                styles.travelModeText,
+                travelMode === 'TRANSIT' && styles.travelModeTextActive,
+              ]}>Transit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.travelModeButton,
+                travelMode === 'DRIVE' && styles.travelModeButtonActive,
+              ]}
+              onPress={() => handleTravelModeChange('DRIVE')}
+            >
+              <Car size={18} color={travelMode === 'DRIVE' ? colors.text.inverse : colors.text.secondary} />
+              <Text style={[
+                styles.travelModeText,
+                travelMode === 'DRIVE' && styles.travelModeTextActive,
+              ]}>Drive</Text>
+            </TouchableOpacity>
+          </View>
         </SafeAreaView>
       )}
 
+      {/* Direction Indicator - shows which way to go */}
+      {!hasArrived && !showChat && !isOverviewMode && (
+        <View style={[styles.directionIndicator, { top: insets.top + 160 }]}>
+          <View
+            style={[
+              styles.directionArrowContainer,
+              { transform: [{ rotate: `${bearingToDestination - heading}deg` }] },
+            ]}
+          >
+            <Navigation2 size={28} color={colors.accent.primary} style={{ transform: [{ rotate: '-45deg' }] }} />
+          </View>
+          <Text style={styles.directionLabel}>
+            {(() => {
+              const diff = ((bearingToDestination - heading + 540) % 360) - 180;
+              if (Math.abs(diff) < 30) return 'Ahead';
+              if (diff > 0 && diff < 90) return 'Right';
+              if (diff < 0 && diff > -90) return 'Left';
+              return 'Behind';
+            })()}
+          </Text>
+        </View>
+      )}
+
       {/* Control buttons - right side */}
-      <View style={[styles.controlButtons, { top: insets.top + 100 }]}>
+      <View style={[styles.controlButtons, { top: insets.top + 160 }]}>
         {/* Overview button */}
         <TouchableOpacity
           style={[styles.controlButton, isOverviewMode && styles.controlButtonActive]}
@@ -642,7 +786,13 @@ export default function NavigationScreen() {
         {/* Mute button */}
         <TouchableOpacity
           style={styles.controlButton}
-          onPress={() => setIsMuted(!isMuted)}
+          onPress={() => {
+            const newMuted = !isMuted;
+            setIsMuted(newMuted);
+            if (newMuted) {
+              Speech.stop();
+            }
+          }}
         >
           {isMuted ? (
             <VolumeX size={20} color={colors.text.secondary} />
@@ -907,6 +1057,61 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.medium,
     color: colors.text.secondary,
     marginTop: 2,
+  },
+
+  // Travel mode selector
+  travelModeSelector: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  travelModeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.background.tertiary,
+    borderRadius: borders.radius.full,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+  },
+  travelModeButtonActive: {
+    backgroundColor: colors.accent.primary,
+    borderColor: colors.accent.primary,
+  },
+  travelModeText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.text.secondary,
+  },
+  travelModeTextActive: {
+    color: colors.text.inverse,
+  },
+
+  // Direction indicator
+  directionIndicator: {
+    position: 'absolute',
+    left: spacing.md,
+    backgroundColor: colors.background.secondary,
+    borderRadius: borders.radius.lg,
+    padding: spacing.md,
+    alignItems: 'center',
+    ...shadows.md,
+  },
+  directionArrowContainer: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  directionLabel: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.medium,
+    color: colors.text.secondary,
+    marginTop: spacing.xs,
   },
 
   // Control buttons
