@@ -782,6 +782,9 @@ export default function NavigationScreen() {
               onChangeText={setChatInput}
               onSubmitEditing={() => handleChatSend()}
               returnKeyType="send"
+              keyboardAppearance="dark"
+              blurOnSubmit={true}
+              autoCorrect={false}
             />
             <TouchableOpacity
               style={[styles.chatSendButton, !chatInput.trim() && styles.chatSendButtonDisabled]}

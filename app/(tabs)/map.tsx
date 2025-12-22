@@ -12,6 +12,7 @@ import {
   TextInput,
   Keyboard,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -415,7 +416,11 @@ export default function MapScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
+    >
       <StatusBar barStyle="light-content" />
 
       {/* Apple Maps - muted style, no Apple POIs (we show our own markers) */}
@@ -446,7 +451,7 @@ export default function MapScreen() {
               selectedPlace?.id === place.id && styles.markerSelected,
               place.isOpen === false && styles.markerClosed,
             ]}>
-              {place.rating ? (
+              {place.rating && !isNaN(place.rating) ? (
                 <View style={styles.markerRating}>
                   <Star size={10} color="#FFF" fill="#FFF" />
                   <Text style={styles.markerRatingText}>{place.rating.toFixed(1)}</Text>
@@ -682,6 +687,8 @@ export default function MapScreen() {
             returnKeyType="send"
             keyboardAppearance="dark"
             multiline={false}
+            blurOnSubmit={true}
+            autoCorrect={false}
           />
           {chatInput.trim() ? (
             <TouchableOpacity
@@ -702,7 +709,7 @@ export default function MapScreen() {
           )}
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
