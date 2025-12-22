@@ -557,13 +557,13 @@ export default function MapScreen() {
       </SafeAreaView>
 
       {/* Re-center button */}
-      <TouchableOpacity style={[styles.recenterButton, { bottom: TAB_BAR_HEIGHT + 70 }]} onPress={handleRecenter}>
+      <TouchableOpacity style={styles.recenterButton} onPress={handleRecenter}>
         <LocateFixed size={20} color={colors.text.primary} />
       </TouchableOpacity>
 
       {/* Results count badge */}
       {places.length > 0 && !selectedPlace && (
-        <View style={[styles.resultsCountBadge, { bottom: TAB_BAR_HEIGHT + 70 }]}>
+        <View style={styles.resultsCountBadge}>
           <Text style={styles.resultsCountText}>
             {places.length} place{places.length !== 1 ? 's' : ''} found
             {openNowFilter ? ' (open now)' : ''}
@@ -573,7 +573,7 @@ export default function MapScreen() {
 
       {/* Selected place card */}
       {selectedPlace && (
-        <View style={[styles.placeCardContainer, { bottom: TAB_BAR_HEIGHT + 60 }]}>
+        <View style={styles.placeCardContainer}>
           <View style={styles.placeCard}>
             <TouchableOpacity
               style={styles.closeButton}
@@ -640,7 +640,7 @@ export default function MapScreen() {
 
       {/* Empty state */}
       {!selectedCategory && !isLoading && !selectedPlace && !chatResponse && places.length === 0 && (
-        <View style={[styles.emptyStateContainer, { bottom: TAB_BAR_HEIGHT + 70 }]}>
+        <View style={styles.emptyStateContainer}>
           <View style={styles.emptyState}>
             <MapPin size={24} color={colors.text.secondary} />
             <Text style={styles.emptyStateText}>
@@ -652,7 +652,7 @@ export default function MapScreen() {
 
       {/* Chat response bubble */}
       {chatResponse && !selectedPlace && (
-        <View style={[styles.chatResponseContainer, { bottom: TAB_BAR_HEIGHT + 60 }]}>
+        <View style={styles.chatResponseContainer}>
           <View style={styles.chatResponseBubble}>
             <TouchableOpacity
               style={styles.chatResponseClose}
@@ -669,8 +669,8 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* Chat input bar - positioned directly above tab bar */}
-      <View style={[styles.chatInputContainer, { bottom: TAB_BAR_HEIGHT }]}>
+      {/* Chat input bar - at bottom of screen (tab bar is handled by navigator) */}
+      <View style={styles.chatInputContainer}>
         <View style={styles.chatInputWrapper}>
           <TextInput
             style={styles.chatInput}
@@ -859,6 +859,7 @@ const styles = StyleSheet.create({
   recenterButton: {
     position: 'absolute',
     right: spacing.md,
+    bottom: 70, // Above chat input (~56px)
     width: 44,
     height: 44,
     backgroundColor: colors.background.secondary,
@@ -870,6 +871,7 @@ const styles = StyleSheet.create({
   resultsCountBadge: {
     position: 'absolute',
     left: spacing.md,
+    bottom: 70, // Above chat input
     backgroundColor: colors.background.secondary,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -883,6 +885,7 @@ const styles = StyleSheet.create({
   },
   placeCardContainer: {
     position: 'absolute',
+    bottom: 60, // Above chat input
     left: 0,
     right: 0,
     paddingHorizontal: spacing.md,
@@ -977,6 +980,7 @@ const styles = StyleSheet.create({
   },
   emptyStateContainer: {
     position: 'absolute',
+    bottom: 70, // Above chat input
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -1024,6 +1028,7 @@ const styles = StyleSheet.create({
   },
   chatInputContainer: {
     position: 'absolute',
+    bottom: 0,
     left: 0,
     right: 0,
     paddingHorizontal: spacing.md,
@@ -1065,6 +1070,7 @@ const styles = StyleSheet.create({
   },
   chatResponseContainer: {
     position: 'absolute',
+    bottom: 60, // Above chat input
     left: 0,
     right: 0,
     paddingHorizontal: spacing.md,
