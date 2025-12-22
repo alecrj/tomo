@@ -39,13 +39,19 @@ const getOfflineResponse = (): StructuredChatResponse => {
 async function verifyPlaceOpen(
   placeName: string,
   location: Coordinates
-): Promise<{ isOpen: boolean; hours?: string } | null> {
+): Promise<{ isOpen: boolean; hours?: string; coordinates?: Coordinates; address?: string } | null> {
   try {
     const place = await searchPlace(placeName, location);
     if (place) {
       return {
         isOpen: place.regularOpeningHours?.openNow ?? true, // Default to true if unknown
         hours: place.regularOpeningHours?.weekdayDescriptions?.[0],
+        // Return REAL coordinates from Google Places - critical for accurate navigation
+        coordinates: place.location ? {
+          latitude: place.location.latitude,
+          longitude: place.location.longitude,
+        } : undefined,
+        address: place.formattedAddress,
       };
     }
     return null;
@@ -303,14 +309,24 @@ export async function chat(
     const result = parseStructuredResponse(content, context.location);
 
     // Enrich placeCard with real data from Google APIs
-    if (result.placeCard && result.placeCard.name && result.placeCard.coordinates) {
-      // Verify place is open using Google Places API
+    if (result.placeCard && result.placeCard.name) {
+      // Verify place is open using Google Places API - also gets REAL coordinates
       try {
         const openStatus = await verifyPlaceOpen(result.placeCard.name, context.location);
         if (openStatus) {
           result.placeCard.openNow = openStatus.isOpen;
           if (openStatus.hours) {
             result.placeCard.hours = openStatus.hours;
+          }
+
+          // CRITICAL: Replace GPT's coordinates with REAL coordinates from Google Places
+          if (openStatus.coordinates) {
+            result.placeCard.coordinates = openStatus.coordinates;
+          }
+
+          // Update address with real address from Google
+          if (openStatus.address) {
+            result.placeCard.address = openStatus.address;
           }
 
           // If place is closed, silently retry with this place excluded
@@ -336,15 +352,17 @@ export async function chat(
         // Silently continue if open status check fails
       }
 
-      // Fetch real walking distance/time from Routes API
-      try {
-        const route = await getWalkingDirections(context.location, result.placeCard.coordinates);
-        if (route) {
-          const walkMins = Math.round(route.totalDuration);
-          result.placeCard.distance = `${walkMins} min walk`;
+      // Fetch real walking distance/time from Routes API using REAL coordinates
+      if (result.placeCard.coordinates) {
+        try {
+          const route = await getWalkingDirections(context.location, result.placeCard.coordinates);
+          if (route) {
+            const walkMins = Math.round(route.totalDuration);
+            result.placeCard.distance = `${walkMins} min walk`;
+          }
+        } catch (routeError) {
+          // Silently continue if route fetch fails
         }
-      } catch (routeError) {
-        // Silently continue if route fetch fails
       }
 
       // Fetch real photos and review count from Google Places

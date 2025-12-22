@@ -1,6 +1,28 @@
 import { Coordinates, TransitStep, TransitRoute } from '../types';
 import { config } from '../constants/config';
 import { useOfflineStore } from '../stores/useOfflineStore';
+import { usePreferencesStore, Language } from '../stores/usePreferencesStore';
+
+/**
+ * Get the Google API language code from user preference
+ */
+function getLanguageCode(): string {
+  const language = usePreferencesStore.getState().language;
+  // Map our language codes to Google's format
+  const languageMap: Record<Language, string> = {
+    en: 'en',
+    ja: 'ja',
+    ko: 'ko',
+    zh: 'zh-CN',
+    es: 'es',
+    fr: 'fr',
+    de: 'de',
+    it: 'it',
+    pt: 'pt',
+    th: 'th',
+  };
+  return languageMap[language] || 'en';
+}
 
 /**
  * Check if we're online before making API calls
@@ -158,7 +180,7 @@ export async function getTransitDirections(
         allowedTravelModes: ['TRAIN', 'SUBWAY', 'BUS'],
         routingPreference: 'FEWER_TRANSFERS',
       },
-      languageCode: 'en-US',
+      languageCode: getLanguageCode(),
       units: 'METRIC',
     };
 
@@ -375,7 +397,7 @@ export async function getDrivingDirections(
       },
       travelMode: 'DRIVE',
       routingPreference: 'TRAFFIC_AWARE',
-      languageCode: 'en-US',
+      languageCode: getLanguageCode(),
       units: 'METRIC',
     };
 
@@ -483,7 +505,7 @@ export async function getWalkingDirections(
         },
       },
       travelMode: 'WALK',
-      languageCode: 'en-US',
+      languageCode: getLanguageCode(),
       units: 'METRIC',
     };
 
@@ -677,7 +699,7 @@ export async function optimizeRoute(
       },
       travelMode: 'WALK',
       optimizeWaypointOrder: true, // Key parameter for optimization
-      languageCode: 'en-US',
+      languageCode: getLanguageCode(),
       units: 'METRIC',
     };
 
@@ -775,7 +797,7 @@ export async function getMultiWaypointRoute(
       },
       travelMode: 'WALK',
       optimizeWaypointOrder: false, // Keep original order
-      languageCode: 'en-US',
+      languageCode: getLanguageCode(),
       units: 'METRIC',
     };
 

@@ -229,6 +229,14 @@ export default function NavigationScreen() {
   useEffect(() => {
     async function fetchRoute() {
       if (coordinates && currentDestination) {
+        // Debug: Log coordinates being used
+        console.log('[Navigation] Fetching route:', {
+          from: coordinates,
+          to: currentDestination.coordinates,
+          destination: currentDestination.title,
+          mode: travelMode,
+        });
+
         setIsLoadingRoute(true);
         safeHaptics.impact(ImpactFeedbackStyle.Light);
 
@@ -239,10 +247,19 @@ export default function NavigationScreen() {
         );
 
         if (fetchedRoute) {
+          // Debug: Log route result
+          console.log('[Navigation] Route result:', {
+            duration: fetchedRoute.totalDuration,
+            distance: fetchedRoute.totalDistance,
+            steps: fetchedRoute.steps?.length,
+          });
+
           setRoute(fetchedRoute);
           startNavigation(currentDestination, fetchedRoute);
           setCurrentStepIndex(0);
           setLastSpokenStep(-1);
+        } else {
+          console.log('[Navigation] No route returned');
         }
         setIsLoadingRoute(false);
       }
