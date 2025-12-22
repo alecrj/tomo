@@ -13,7 +13,7 @@ import {
   Keyboard,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import MapView, { Marker, PROVIDER_DEFAULT, Region } from 'react-native-maps';
 import { safeHaptics, ImpactFeedbackStyle } from '../../utils/haptics';
@@ -53,9 +53,6 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 // Use Apple Maps for tiles, Google APIs for data
 const MAP_PROVIDER = PROVIDER_DEFAULT;
 
-// Tab bar height estimate
-const TAB_BAR_HEIGHT = 85;
-
 interface PlaceResult {
   id: string;
   name: string;
@@ -67,18 +64,23 @@ interface PlaceResult {
   photo?: string;
 }
 
+// Google Places API types - must match exactly
 const CATEGORIES = [
   { id: 'restaurant', label: 'Food', icon: Utensils, type: 'restaurant' },
   { id: 'cafe', label: 'Coffee', icon: Coffee, type: 'cafe' },
   { id: 'bar', label: 'Drinks', icon: Beer, type: 'bar' },
   { id: 'tourist_attraction', label: 'Sights', icon: Landmark, type: 'tourist_attraction' },
-  { id: 'shopping_mall', label: 'Shopping', icon: ShoppingBag, type: 'shopping_mall' },
-  { id: 'park', label: 'Nature', icon: TreePine, type: 'park' },
+  { id: 'store', label: 'Shopping', icon: ShoppingBag, type: 'store' },
+  { id: 'park', label: 'Parks', icon: TreePine, type: 'park' },
 ];
 
 export default function MapScreen() {
   const router = useRouter();
   const mapRef = useRef<MapView>(null);
+  const insets = useSafeAreaInsets();
+
+  // Tab bar height = 60 + bottom inset
+  const TAB_BAR_HEIGHT = 60 + insets.bottom;
 
   const coordinates = useLocationStore((state) => state.coordinates);
   const neighborhood = useLocationStore((state) => state.neighborhood);
@@ -178,7 +180,7 @@ export default function MapScreen() {
     setIsLoading(true);
 
     try {
-      const results = await searchNearby(coordinates, '', categoryType, 2000);
+      const results = await searchNearby(coordinates, '', categoryType, 3000);
 
       const mappedPlaces: PlaceResult[] = results.map((place) => ({
         id: place.id,
@@ -551,13 +553,13 @@ export default function MapScreen() {
       </SafeAreaView>
 
       {/* Re-center button */}
-      <TouchableOpacity style={styles.recenterButton} onPress={handleRecenter}>
+      <TouchableOpacity style={[styles.recenterButton, { bottom: TAB_BAR_HEIGHT + 70 }]} onPress={handleRecenter}>
         <LocateFixed size={20} color={colors.text.primary} />
       </TouchableOpacity>
 
       {/* Results count badge */}
       {places.length > 0 && !selectedPlace && (
-        <View style={styles.resultsCountBadge}>
+        <View style={[styles.resultsCountBadge, { bottom: TAB_BAR_HEIGHT + 70 }]}>
           <Text style={styles.resultsCountText}>
             {places.length} place{places.length !== 1 ? 's' : ''} found
             {openNowFilter ? ' (open now)' : ''}
@@ -567,7 +569,7 @@ export default function MapScreen() {
 
       {/* Selected place card */}
       {selectedPlace && (
-        <View style={styles.placeCardContainer}>
+        <View style={[styles.placeCardContainer, { bottom: TAB_BAR_HEIGHT + 60 }]}>
           <View style={styles.placeCard}>
             <TouchableOpacity
               style={styles.closeButton}
@@ -634,7 +636,7 @@ export default function MapScreen() {
 
       {/* Empty state */}
       {!selectedCategory && !isLoading && !selectedPlace && !chatResponse && places.length === 0 && (
-        <View style={styles.emptyStateContainer}>
+        <View style={[styles.emptyStateContainer, { bottom: TAB_BAR_HEIGHT + 70 }]}>
           <View style={styles.emptyState}>
             <MapPin size={24} color={colors.text.secondary} />
             <Text style={styles.emptyStateText}>
@@ -646,7 +648,7 @@ export default function MapScreen() {
 
       {/* Chat response bubble */}
       {chatResponse && !selectedPlace && (
-        <View style={styles.chatResponseContainer}>
+        <View style={[styles.chatResponseContainer, { bottom: TAB_BAR_HEIGHT + 60 }]}>
           <View style={styles.chatResponseBubble}>
             <TouchableOpacity
               style={styles.chatResponseClose}
@@ -663,8 +665,8 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* Chat input bar - positioned above tab bar */}
-      <View style={styles.chatInputContainer}>
+      {/* Chat input bar - positioned directly above tab bar */}
+      <View style={[styles.chatInputContainer, { bottom: TAB_BAR_HEIGHT }]}>
         <View style={styles.chatInputWrapper}>
           <TextInput
             style={styles.chatInput}
@@ -853,7 +855,6 @@ const styles = StyleSheet.create({
   recenterButton: {
     position: 'absolute',
     right: spacing.md,
-    bottom: TAB_BAR_HEIGHT + 80,
     width: 44,
     height: 44,
     backgroundColor: colors.background.secondary,
@@ -864,7 +865,6 @@ const styles = StyleSheet.create({
   },
   resultsCountBadge: {
     position: 'absolute',
-    bottom: TAB_BAR_HEIGHT + 80,
     left: spacing.md,
     backgroundColor: colors.background.secondary,
     paddingHorizontal: spacing.md,
@@ -879,7 +879,6 @@ const styles = StyleSheet.create({
   },
   placeCardContainer: {
     position: 'absolute',
-    bottom: TAB_BAR_HEIGHT + 70,
     left: 0,
     right: 0,
     paddingHorizontal: spacing.md,
@@ -974,7 +973,6 @@ const styles = StyleSheet.create({
   },
   emptyStateContainer: {
     position: 'absolute',
-    bottom: TAB_BAR_HEIGHT + 80,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -1022,7 +1020,6 @@ const styles = StyleSheet.create({
   },
   chatInputContainer: {
     position: 'absolute',
-    bottom: TAB_BAR_HEIGHT,
     left: 0,
     right: 0,
     paddingHorizontal: spacing.md,
@@ -1064,7 +1061,6 @@ const styles = StyleSheet.create({
   },
   chatResponseContainer: {
     position: 'absolute',
-    bottom: TAB_BAR_HEIGHT + 70,
     left: 0,
     right: 0,
     paddingHorizontal: spacing.md,

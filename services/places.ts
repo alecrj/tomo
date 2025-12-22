@@ -57,7 +57,7 @@ export async function searchNearby(
       },
       body: JSON.stringify({
         includedTypes: type ? [type] : undefined,
-        maxResultCount: 10,
+        maxResultCount: 20,
         locationRestriction: {
           circle: {
             center: {
