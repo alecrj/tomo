@@ -17,7 +17,13 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, Camera } from 'react-native-maps';
 import { Magnetometer } from 'expo-sensors';
-import * as Speech from 'expo-speech';
+// Speech is optional - requires native rebuild
+let Speech: any = null;
+try {
+  Speech = require('expo-speech');
+} catch (e) {
+  console.log('expo-speech not available - voice guidance disabled');
+}
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import {
   ArrowUp,
@@ -344,7 +350,7 @@ export default function NavigationScreen() {
         safeHaptics.notification(NotificationFeedbackType.Success);
 
         // Announce arrival
-        if (!isMuted) {
+        if (!isMuted && Speech) {
           Speech.speak(`You have arrived at ${currentDestination.title}`, {
             language: 'en-US',
             pitch: 1.0,
@@ -388,7 +394,7 @@ export default function NavigationScreen() {
 
   // Voice guidance - speak turn instructions
   useEffect(() => {
-    if (isMuted || !route?.steps || hasArrived) return;
+    if (!Speech || isMuted || !route?.steps || hasArrived) return;
     if (currentStepIndex === lastSpokenStep) return;
 
     const currentStep = route.steps[currentStepIndex];
@@ -410,7 +416,7 @@ export default function NavigationScreen() {
   // Stop speech when arriving or leaving
   useEffect(() => {
     return () => {
-      Speech.stop();
+      if (Speech) Speech.stop();
     };
   }, []);
 
@@ -427,7 +433,7 @@ export default function NavigationScreen() {
   const handleTravelModeChange = (mode: TravelMode) => {
     if (mode === travelMode) return;
     safeHaptics.impact(ImpactFeedbackStyle.Light);
-    Speech.stop();
+    if (Speech) Speech.stop();
     setTravelMode(mode);
     setLastSpokenStep(-1);
   };
@@ -435,7 +441,7 @@ export default function NavigationScreen() {
   // Handlers
   const handleEndRoute = () => {
     safeHaptics.impact(ImpactFeedbackStyle.Medium);
-    Speech.stop();
+    if (Speech) Speech.stop();
     exitCompanionMode();
     router.back();
   };
@@ -789,7 +795,7 @@ export default function NavigationScreen() {
           onPress={() => {
             const newMuted = !isMuted;
             setIsMuted(newMuted);
-            if (newMuted) {
+            if (newMuted && Speech) {
               Speech.stop();
             }
           }}
