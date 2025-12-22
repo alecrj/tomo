@@ -6,6 +6,20 @@
 
 **Map Solution:** Apple Maps tiles + Google APIs for places/routes data. Google Maps tiles had persistent rendering issues.
 
+### Session 23 Progress
+
+**Navigation Enhancements:**
+- ✅ Travel mode selector (Walk/Transit/Drive)
+- ✅ Custom user location marker with direction cone (like Google Maps)
+- ✅ Transit support with train/bus icons and line names
+- ✅ Voice guidance ready (requires native rebuild for expo-speech)
+- ✅ Routes API uses user's language preference (not hardcoded en-US)
+- ✅ Real coordinates from Google Places (fixes inaccurate routes)
+
+**Known Issues to Fix:**
+- [ ] Direction cone rotation inverted (turn left → cone goes right) - FIXED
+- [ ] Need step list UI (show all/next steps)
+
 ### App Structure
 
 **4 Main Tabs:**
@@ -19,7 +33,7 @@
 **Feature Screens:**
 | Screen | Purpose |
 |--------|---------|
-| `app/navigation.tsx` | Apple Maps-style turn-by-turn navigation |
+| `app/navigation.tsx` | Apple Maps-style turn-by-turn with direction cone |
 | `app/voice.tsx` | Hands-free gpt-realtime |
 | `app/settings.tsx` | Preferences & account |
 | `app/expenses.tsx` | Budget tracking |
@@ -31,8 +45,11 @@
 - Place recommendations with PlaceCards
 - Apple Maps with dark mode
 - **Apple Maps-style navigation UI** (turn header, end route, stats bar)
+- **Travel mode selector** (Walk/Transit/Drive with route recalculation)
+- **Direction cone on user marker** (shows which way you're facing)
 - **Smart navigation chat** (find places, add stops mid-route)
 - **Waypoint support** (multi-stop routes)
+- **Transit UI** (train/bus icons, line names, stop details)
 - Voice mode with gpt-realtime
 - Camera translation
 - Memory system (learns preferences)

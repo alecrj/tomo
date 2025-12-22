@@ -713,7 +713,7 @@ export default function NavigationScreen() {
           coordinate={coordinates}
           anchor={{ x: 0.5, y: 0.5 }}
           flat
-          rotation={heading}
+          rotation={-heading}
         >
           <View style={styles.userLocationContainer}>
             {/* Direction cone/beam - points up, rotates with heading */}
