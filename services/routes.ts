@@ -487,9 +487,6 @@ export async function getWalkingDirections(
       units: 'METRIC',
     };
 
-    // Note: Removed API key logging for security
-
-    console.log('[Routes] Calling Google Routes API for WALK...');
     const response = await fetch(ROUTES_API_URL, {
       method: 'POST',
       headers: {
@@ -500,18 +497,13 @@ export async function getWalkingDirections(
       body: JSON.stringify(requestBody),
     });
 
-    console.log('[Routes] API response status:', response.status);
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[Routes] API error:', errorText);
       throw new Error(`Routes API error: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log('[Routes] Got routes:', data.routes?.length || 0);
 
     if (!data.routes || data.routes.length === 0) {
-      console.log('[Routes] No routes returned, using fallback');
       // Fallback: create a basic walking route using straight-line distance
       const fallbackDistance = calculateStraightLineDistance(origin, destination);
       const fallbackDuration = estimateWalkingDuration(fallbackDistance * 1.3);

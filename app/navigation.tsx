@@ -43,7 +43,7 @@ import {
   VolumeX,
 } from 'lucide-react-native';
 import { colors, spacing, borders, shadows, typography } from '../constants/theme';
-import { getDirections, TravelMode } from '../services/routes';
+import { getDirections, getMultiWaypointRoute, TravelMode } from '../services/routes';
 import { smartNavigationChat, NavigationContext, NearbyPlace, SmartNavigationResponse } from '../services/openai';
 import { searchNearby } from '../services/places';
 import { useNavigationStore } from '../stores/useNavigationStore';
@@ -220,6 +220,46 @@ export default function NavigationScreen() {
     }
     fetchRoute();
   }, [currentDestination?.id]);
+
+  // Recalculate route when waypoints change
+  useEffect(() => {
+    async function recalculateRoute() {
+      if (!coordinates || !currentDestination || waypoints.length === 0) return;
+
+      setIsLoadingRoute(true);
+      safeHaptics.impact(ImpactFeedbackStyle.Light);
+
+      // Build waypoint array: user location -> waypoints -> destination
+      const allPoints = [
+        coordinates,
+        ...waypoints.map(w => w.coordinates),
+        currentDestination.coordinates,
+      ];
+
+      const newRoute = await getMultiWaypointRoute(allPoints);
+
+      if (newRoute) {
+        // Convert to TransitRoute format
+        const updatedRoute = {
+          steps: [{
+            mode: 'walk' as const,
+            instruction: 'Follow route through all stops',
+            duration: newRoute.totalDuration,
+            distance: newRoute.totalDistance,
+          }],
+          totalDuration: newRoute.totalDuration,
+          totalDistance: newRoute.totalDistance,
+          polyline: newRoute.polyline,
+        };
+        setRoute(updatedRoute);
+        useNavigationStore.getState().updateRoute(updatedRoute);
+      }
+
+      setIsLoadingRoute(false);
+    }
+
+    recalculateRoute();
+  }, [waypoints.length]);
 
   // Compass heading subscription
   useEffect(() => {
