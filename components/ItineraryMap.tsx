@@ -38,7 +38,8 @@ import { decodePolyline } from '../utils/polyline';
 import type { Activity, Coordinates, Destination } from '../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const MAP_PROVIDER = PROVIDER_GOOGLE;
+// Use Apple Maps for tiles, Google APIs for data
+const MAP_PROVIDER = PROVIDER_DEFAULT;
 
 interface ItineraryMapProps {
   activities: Activity[];
@@ -293,12 +294,12 @@ export default function ItineraryMap({
 
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>
-      {/* Map */}
+      {/* Apple Maps with dark mode */}
       <MapView
         ref={mapRef}
         style={styles.map}
         provider={MAP_PROVIDER}
-        customMapStyle={mapStyle}
+        userInterfaceStyle="dark"
         initialRegion={initialRegion}
         showsUserLocation
         showsMyLocationButton={false}

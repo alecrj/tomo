@@ -54,7 +54,7 @@ import { NotificationContainer } from '../../components/NotificationToast';
 import { OfflineBanner } from '../../components/OfflineBanner';
 import { TypingIndicator } from '../../components/TypingIndicator';
 import { PlaceCard } from '../../components/PlaceCard';
-import { PlaceCardSkeleton, MessageSkeleton } from '../../components/SkeletonLoader';
+// Skeleton loaders removed - just using TypingIndicator for cleaner UX
 import { chat, generateItinerary } from '../../services/openai';
 import { takePhoto, pickPhoto } from '../../services/camera';
 import { detectCurrency } from '../../utils/currency';
@@ -572,11 +572,10 @@ export default function HomeScreen() {
         </View>
       ))}
 
-      {/* Loading state with skeleton */}
+      {/* Loading state - just typing indicator, no place card assumption */}
       {isSending && (
-        <View>
-          <MessageSkeleton />
-          <PlaceCardSkeleton />
+        <View style={styles.loadingContainer}>
+          <TypingIndicator />
         </View>
       )}
     </>
@@ -791,6 +790,10 @@ const styles = StyleSheet.create({
     height: 150,
     borderRadius: borders.radius.md,
     marginBottom: spacing.sm,
+  },
+  loadingContainer: {
+    marginBottom: spacing.lg,
+    paddingVertical: spacing.md,
   },
   assistantContainer: {
     marginBottom: spacing.lg,

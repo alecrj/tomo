@@ -84,46 +84,36 @@ function buildSystemPrompt(context: DestinationContext): string {
   // Get learned memories from memory store
   const memoryContext = useMemoryStore.getState().getMemoryContext();
 
-  return `You are Tomo, a friendly AI assistant that can help with ANYTHING - but you have travel superpowers.
+  return `You are Tomo, a friendly travel companion. Think of yourself as a local friend in the user's pocket.
 
-WHO YOU ARE:
-- A general-purpose AI assistant (like ChatGPT) that can answer ANY question
-- BUT with special awareness of the user's location, time, weather, and budget
-- Like having a knowledgeable local friend who can also discuss philosophy, translate text, explain history, give advice, etc.
-
-CURRENT CONTEXT:
-- Location: ${context.neighborhood || 'Unknown location'}
-- Local time: ${localTime} (${context.timeOfDay}) on ${localDate}
+CONTEXT:
+- Location: ${context.neighborhood || 'Unknown'}
+- Time: ${localTime} on ${localDate}
 - Weather: ${context.weather?.condition || 'unknown'}, ${context.weather?.temperature || '?'}°
-- Budget remaining today: ${context.budgetRemaining}
-- Walking today: ${context.totalWalkingToday} minutes
-${dietaryRestrictions ? `\n⚠️ DIETARY RESTRICTIONS: ${dietaryRestrictions} - YOU MUST respect these when suggesting food!` : ''}
-${userInterests ? `- Interests: ${userInterests}` : ''}
-${context.preferences.avoidCrowds ? '- Prefers: Less crowded, off-the-beaten-path places' : ''}
-${context.preferences.budget ? `- Budget level: ${context.preferences.budget}` : ''}
+${dietaryRestrictions ? `- DIETARY: ${dietaryRestrictions} (always respect this!)` : ''}
+${context.preferences.budget ? `- Budget: ${context.preferences.budget}` : ''}
 
-CRITICAL RULES:
-1. You can answer ANY question - travel, general knowledge, translations, advice, coding, anything
-2. PLACES MUST BE OPEN: Only suggest places that are OPEN right now (it's ${localTime}). Check typical hours before recommending!
-3. FORMATTING: No markdown! No **bold**, no *italic*, no bullet points, no asterisks. Plain text only.
-4. BREVITY: Keep responses SHORT - 1-2 sentences for simple questions, 2-3 sentences max for recommendations
-5. Use LOCAL CURRENCY for all prices (user is in ${context.neighborhood || 'their location'})
-6. Be conversational and friendly, like a local friend giving advice
-${dietaryRestrictions ? `7. DIETARY: User is ${dietaryRestrictions} - NEVER suggest places that cannot accommodate this` : ''}
+CORE RULES:
+1. BE CONVERSATIONAL - Not every message needs a place recommendation. If someone says "hey" or asks about weather, just chat!
+2. ONLY recommend places when user EXPLICITLY asks for food/coffee/things to do/places to go
+3. NO MARKDOWN - No asterisks, no bold, no bullets. Plain text only.
+4. BE BRIEF - 1-2 sentences max for chat, 2-3 for recommendations
+5. ONE recommendation at a time - Don't overwhelm with choices
 
-YOUR PERSONALITY:
-- Friendly, helpful, concise like a knowledgeable local friend
-- Practical (considers budget, time, weather, energy levels)
-- Proactive about useful tips
-- Never robotic or formal
-
-RESPONSE FORMAT (ALWAYS respond with valid JSON):
-
+RESPONSE FORMAT (JSON):
 {
-  "text": "Your conversational response here (NO markdown, just plain text)",
-  "placeCard": null OR {
+  "text": "Your response (plain text, no markdown)",
+  "placeCard": null,
+  "showMap": false,
+  "actions": []
+}
+
+ONLY include placeCard when recommending a SPECIFIC place:
+{
+  "text": "Short reason why this place",
+  "placeCard": {
     "name": "Place Name",
-    "address": "Full address",
+    "address": "Address",
     "rating": 4.5,
     "priceLevel": 2,
     "distance": "8 min walk",
@@ -132,23 +122,27 @@ RESPONSE FORMAT (ALWAYS respond with valid JSON):
     "estimatedCost": "200 THB",
     "coordinates": {"latitude": 18.123, "longitude": 98.456}
   },
-  "showMap": true/false,
-  "actions": [] OR [
-    {"label": "Take me there", "type": "navigate"},
-    {"label": "Something else", "type": "regenerate"},
-    {"label": "Add to itinerary", "type": "add_to_itinerary"}
-  ]
+  "showMap": true,
+  "actions": [{"label": "Take me there", "type": "navigate"}]
 }
 
-WHEN TO INCLUDE placeCard:
-- Restaurant, cafe, bar, attraction recommendations: Include placeCard with real place data
-- General questions, tips, translations, advice: Set placeCard to null
+EXAMPLES OF WHEN placeCard = null:
+- "hey tomo" → Just say hi back
+- "what's the weather?" → Answer with weather info
+- "thanks!" → You're welcome!
+- "what time is it?" → Tell them the time
+- "translate hello to Thai" → Give translation
+- "how are you?" → Chat naturally
+
+EXAMPLES OF WHEN to include placeCard:
+- "I'm hungry" → Recommend ONE specific restaurant
+- "find me coffee" → Recommend ONE specific cafe
+- "what should I do nearby?" → Recommend ONE activity
 
 PLACE RULES:
-- ONLY suggest places that are OPEN at ${localTime}
-- Use REAL places that actually exist in ${context.neighborhood || 'the area'}
-- Include accurate GPS coordinates (critical for navigation)
-- priceLevel: 1=cheap, 2=moderate, 3=expensive, 4=luxury${memoryContext}`;
+- Only recommend places OPEN at ${localTime}
+- Use real places in ${context.neighborhood || 'the area'}
+- Include accurate GPS coordinates${memoryContext}`;
 }
 
 /**
@@ -214,13 +208,18 @@ function parseStructuredResponse(responseText: string, userLocation: Coordinates
 
 /**
  * Chat with OpenAI GPT-4
+ * Auto-retries if a recommended place is closed (up to 3 times)
  */
 export async function chat(
   message: string,
   context: DestinationContext,
   recentMessages: ChatMessage[] = [],
-  image?: string
+  image?: string,
+  excludePlaces: string[] = [],
+  retryCount: number = 0
 ): Promise<StructuredChatResponse> {
+  const MAX_RETRIES = 3;
+
   try {
     // Check if offline
     if (!checkOnline()) {
@@ -234,7 +233,11 @@ export async function chat(
       return { content: "OpenAI API key is not configured. Please check your .env file." };
     }
 
-    const systemPrompt = buildSystemPrompt(context);
+    // Add excluded places to system prompt if retrying
+    let systemPrompt = buildSystemPrompt(context);
+    if (excludePlaces.length > 0) {
+      systemPrompt += `\n\nDO NOT recommend these places (they are closed): ${excludePlaces.join(', ')}. Suggest a DIFFERENT place.`;
+    }
 
     // Build messages array
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: any }> = [
@@ -279,7 +282,7 @@ export async function chat(
         model: 'gpt-4o',
         messages,
         max_tokens: 1500,
-        temperature: 0.7,
+        temperature: 0.7 + (retryCount * 0.1), // Slightly increase temperature on retries for variety
         response_format: { type: 'json_object' },
       }),
     });
@@ -310,10 +313,22 @@ export async function chat(
             result.placeCard.hours = openStatus.hours;
           }
 
-          // If place is closed, DON'T show it - return a message asking to try again
+          // If place is closed, silently retry with this place excluded
+          if (!openStatus.isOpen && retryCount < MAX_RETRIES) {
+            return chat(
+              message,
+              context,
+              recentMessages,
+              image,
+              [...excludePlaces, result.placeCard.name],
+              retryCount + 1
+            );
+          }
+
+          // If we've exhausted retries, just return text without place card
           if (!openStatus.isOpen) {
             return {
-              content: `${result.placeCard.name} is actually closed right now. Ask me again and I'll find you somewhere that's open!`,
+              content: result.content,
             };
           }
         }

@@ -15,9 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-// Animations disabled temporarily for stability
-// import Animated, { FadeIn, FadeInDown, FadeInUp, FadeOut } from 'react-native-reanimated';
-import MapView, { Marker, PROVIDER_GOOGLE, PROVIDER_DEFAULT, Region } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_DEFAULT, Region } from 'react-native-maps';
 import { safeHaptics, ImpactFeedbackStyle } from '../../utils/haptics';
 import {
   MapPin,
@@ -33,8 +31,11 @@ import {
   Search,
   Send,
   MessageCircle,
+  LocateFixed,
+  Clock,
+  SlidersHorizontal,
 } from 'lucide-react-native';
-import { colors, spacing, typography, borders, shadows, mapStyle } from '../../constants/theme';
+import { colors, spacing, typography, borders, shadows } from '../../constants/theme';
 import { useLocationStore } from '../../stores/useLocationStore';
 import { useNavigationStore } from '../../stores/useNavigationStore';
 import { searchNearby, buildPhotoUrl, searchPlace } from '../../services/places';
@@ -47,10 +48,13 @@ import { useTripStore } from '../../stores/useTripStore';
 import { useTimeOfDay } from '../../hooks/useTimeOfDay';
 import type { Coordinates, Destination, DestinationContext } from '../../types';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Use Google Maps everywhere for consistent experience
-const MAP_PROVIDER = PROVIDER_GOOGLE;
+// Use Apple Maps for tiles, Google APIs for data
+const MAP_PROVIDER = PROVIDER_DEFAULT;
+
+// Tab bar height estimate
+const TAB_BAR_HEIGHT = 85;
 
 interface PlaceResult {
   id: string;
@@ -93,8 +97,12 @@ export default function MapScreen() {
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [places, setPlaces] = useState<PlaceResult[]>([]);
+  const [allPlaces, setAllPlaces] = useState<PlaceResult[]>([]); // Unfiltered
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
+
+  // Filter states
+  const [openNowFilter, setOpenNowFilter] = useState(false);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -114,6 +122,44 @@ export default function MapScreen() {
     longitudeDelta: 0.015,
   } : undefined;
 
+  // Apply filters to places
+  const applyFilters = useCallback((placesToFilter: PlaceResult[]) => {
+    let filtered = [...placesToFilter];
+
+    if (openNowFilter) {
+      filtered = filtered.filter(p => p.isOpen === true);
+    }
+
+    return filtered;
+  }, [openNowFilter]);
+
+  // Toggle open now filter
+  const toggleOpenNowFilter = useCallback(() => {
+    safeHaptics.selection();
+    setOpenNowFilter(prev => {
+      const newValue = !prev;
+      // Re-apply filter
+      if (newValue) {
+        setPlaces(allPlaces.filter(p => p.isOpen === true));
+      } else {
+        setPlaces(allPlaces);
+      }
+      return newValue;
+    });
+  }, [allPlaces]);
+
+  // Re-center map on user location
+  const handleRecenter = useCallback(() => {
+    if (!coordinates || !mapRef.current) return;
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
+    mapRef.current.animateToRegion({
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+      latitudeDelta: 0.015,
+      longitudeDelta: 0.015,
+    }, 300);
+  }, [coordinates]);
+
   const handleCategoryPress = useCallback(async (categoryId: string, categoryType: string) => {
     if (!coordinates) return;
 
@@ -122,6 +168,7 @@ export default function MapScreen() {
     if (selectedCategory === categoryId) {
       setSelectedCategory(null);
       setPlaces([]);
+      setAllPlaces([]);
       setSelectedPlace(null);
       return;
     }
@@ -147,12 +194,13 @@ export default function MapScreen() {
         photo: place.photos?.[0]?.name ? buildPhotoUrl(place.photos[0].name, 400) : undefined,
       }));
 
-      setPlaces(mappedPlaces);
+      setAllPlaces(mappedPlaces);
+      setPlaces(applyFilters(mappedPlaces));
 
       if (mappedPlaces.length > 0 && mapRef.current) {
         const allCoords = [coordinates, ...mappedPlaces.map(p => p.coordinates)];
         mapRef.current.fitToCoordinates(allCoords, {
-          edgePadding: { top: 100, right: 50, bottom: 250, left: 50 },
+          edgePadding: { top: 100, right: 50, bottom: 200, left: 50 },
           animated: true,
         });
       }
@@ -161,7 +209,7 @@ export default function MapScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [coordinates, selectedCategory]);
+  }, [coordinates, selectedCategory, applyFilters]);
 
   const handleMarkerPress = useCallback((place: PlaceResult) => {
     safeHaptics.impact(ImpactFeedbackStyle.Medium);
@@ -248,6 +296,7 @@ export default function MapScreen() {
           photo: result.photos?.[0]?.name ? buildPhotoUrl(result.photos[0].name, 400) : undefined,
         };
 
+        setAllPlaces([mappedPlace]);
         setPlaces([mappedPlace]);
         setSelectedPlace(mappedPlace);
 
@@ -259,6 +308,7 @@ export default function MapScreen() {
         }, 500);
       } else {
         setPlaces([]);
+        setAllPlaces([]);
         setChatResponse('No places found for "' + searchQuery + '". Try a different search.');
       }
     } catch (error) {
@@ -322,6 +372,7 @@ export default function MapScreen() {
           photo: response.placeCard.photo,
         };
 
+        setAllPlaces([mappedPlace]);
         setPlaces([mappedPlace]);
         setSelectedPlace(mappedPlace);
 
@@ -365,17 +416,19 @@ export default function MapScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Full screen map with dark style */}
+      {/* Apple Maps with dark mode */}
       <MapView
         ref={mapRef}
         style={styles.map}
         provider={MAP_PROVIDER}
-        customMapStyle={mapStyle}
+        userInterfaceStyle="dark"
         initialRegion={initialRegion}
         showsUserLocation
         showsMyLocationButton={false}
+        // Move Apple Maps attribution to bottom right, above tab bar
+        legalLabelInsets={{ bottom: TAB_BAR_HEIGHT + 60, right: 10, top: 0, left: 0 }}
       >
-        {/* Place markers */}
+        {/* Place markers with rating badges */}
         {places.map((place) => (
           <Marker
             key={place.id}
@@ -385,11 +438,19 @@ export default function MapScreen() {
             <View style={[
               styles.markerContainer,
               selectedPlace?.id === place.id && styles.markerSelected,
+              place.isOpen === false && styles.markerClosed,
             ]}>
-              <MapPin
-                size={18}
-                color={selectedPlace?.id === place.id ? colors.text.inverse : colors.text.primary}
-              />
+              {place.rating ? (
+                <View style={styles.markerRating}>
+                  <Star size={10} color="#FFF" fill="#FFF" />
+                  <Text style={styles.markerRatingText}>{place.rating.toFixed(1)}</Text>
+                </View>
+              ) : (
+                <MapPin
+                  size={16}
+                  color={selectedPlace?.id === place.id ? colors.text.inverse : colors.text.primary}
+                />
+              )}
             </View>
           </Marker>
         ))}
@@ -423,6 +484,7 @@ export default function MapScreen() {
                 onPress={() => {
                   setSearchQuery('');
                   setPlaces([]);
+                  setAllPlaces([]);
                   setSelectedPlace(null);
                 }}
               >
@@ -435,36 +497,50 @@ export default function MapScreen() {
           )}
         </View>
 
-        {/* Category pills */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoriesContainer}
-        >
-          {CATEGORIES.map((category) => {
-            const IconComponent = category.icon;
-            const isSelected = selectedCategory === category.id;
+        {/* Category pills + filters */}
+        <View style={styles.filtersRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoriesContainer}
+          >
+            {/* Open Now filter */}
+            <TouchableOpacity
+              style={[styles.filterPill, openNowFilter && styles.filterPillActive]}
+              onPress={toggleOpenNowFilter}
+            >
+              <Clock size={14} color={openNowFilter ? colors.text.inverse : colors.status.success} />
+              <Text style={[styles.filterText, openNowFilter && styles.filterTextActive]}>
+                Open Now
+              </Text>
+            </TouchableOpacity>
 
-            return (
-              <TouchableOpacity
-                key={category.id}
-                style={[styles.categoryPill, isSelected && styles.categoryPillSelected]}
-                onPress={() => handleCategoryPress(category.id, category.type)}
-              >
-                <IconComponent
-                  size={16}
-                  color={isSelected ? colors.text.inverse : colors.accent.primary}
-                />
-                <Text style={[
-                  styles.categoryText,
-                  isSelected && styles.categoryTextSelected,
-                ]}>
-                  {category.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+            {/* Category pills */}
+            {CATEGORIES.map((category) => {
+              const IconComponent = category.icon;
+              const isSelected = selectedCategory === category.id;
+
+              return (
+                <TouchableOpacity
+                  key={category.id}
+                  style={[styles.categoryPill, isSelected && styles.categoryPillSelected]}
+                  onPress={() => handleCategoryPress(category.id, category.type)}
+                >
+                  <IconComponent
+                    size={16}
+                    color={isSelected ? colors.text.inverse : colors.accent.primary}
+                  />
+                  <Text style={[
+                    styles.categoryText,
+                    isSelected && styles.categoryTextSelected,
+                  ]}>
+                    {category.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
 
         {isLoading && (
           <View style={styles.loadingIndicator}>
@@ -473,6 +549,21 @@ export default function MapScreen() {
           </View>
         )}
       </SafeAreaView>
+
+      {/* Re-center button */}
+      <TouchableOpacity style={styles.recenterButton} onPress={handleRecenter}>
+        <LocateFixed size={20} color={colors.text.primary} />
+      </TouchableOpacity>
+
+      {/* Results count badge */}
+      {places.length > 0 && !selectedPlace && (
+        <View style={styles.resultsCountBadge}>
+          <Text style={styles.resultsCountText}>
+            {places.length} place{places.length !== 1 ? 's' : ''} found
+            {openNowFilter ? ' (open now)' : ''}
+          </Text>
+        </View>
+      )}
 
       {/* Selected place card */}
       {selectedPlace && (
@@ -541,13 +632,13 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* Empty state - only show when no search, no category, no chat response */}
+      {/* Empty state */}
       {!selectedCategory && !isLoading && !selectedPlace && !chatResponse && places.length === 0 && (
         <View style={styles.emptyStateContainer}>
           <View style={styles.emptyState}>
             <MapPin size={24} color={colors.text.secondary} />
             <Text style={styles.emptyStateText}>
-              Search for places or tap a category
+              Search or tap a category to explore
             </Text>
           </View>
         </View>
@@ -572,41 +663,39 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* Chat input bar at bottom */}
-      <SafeAreaView style={styles.chatInputSafeArea} edges={['bottom']}>
-        <View style={styles.chatInputContainer}>
-          <View style={styles.chatInputWrapper}>
-            <TextInput
-              style={styles.chatInput}
-              placeholder="Ask about this area..."
-              placeholderTextColor={colors.text.tertiary}
-              value={chatInput}
-              onChangeText={setChatInput}
-              onSubmitEditing={handleChatSubmit}
-              returnKeyType="send"
-              keyboardAppearance="dark"
-              multiline={false}
-            />
-            {chatInput.trim() ? (
-              <TouchableOpacity
-                style={styles.chatSendButton}
-                onPress={handleChatSubmit}
-                disabled={isChatting}
-              >
-                {isChatting ? (
-                  <ActivityIndicator size="small" color={colors.text.inverse} />
-                ) : (
-                  <Send size={16} color={colors.text.inverse} />
-                )}
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.chatSendButtonDisabled}>
-                <Send size={16} color={colors.text.tertiary} />
-              </View>
-            )}
-          </View>
+      {/* Chat input bar - positioned above tab bar */}
+      <View style={styles.chatInputContainer}>
+        <View style={styles.chatInputWrapper}>
+          <TextInput
+            style={styles.chatInput}
+            placeholder="Ask about this area..."
+            placeholderTextColor={colors.text.tertiary}
+            value={chatInput}
+            onChangeText={setChatInput}
+            onSubmitEditing={handleChatSubmit}
+            returnKeyType="send"
+            keyboardAppearance="dark"
+            multiline={false}
+          />
+          {chatInput.trim() ? (
+            <TouchableOpacity
+              style={styles.chatSendButton}
+              onPress={handleChatSubmit}
+              disabled={isChatting}
+            >
+              {isChatting ? (
+                <ActivityIndicator size="small" color={colors.text.inverse} />
+              ) : (
+                <Send size={16} color={colors.text.inverse} />
+              )}
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.chatSendButtonDisabled}>
+              <Send size={16} color={colors.text.tertiary} />
+            </View>
+          )}
         </View>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }
@@ -653,17 +742,45 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginTop: 2,
   },
+  filtersRow: {
+    marginTop: spacing.xs,
+  },
   categoriesContainer: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     gap: spacing.sm,
+  },
+  filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.secondary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borders.radius.full,
+    marginRight: spacing.sm,
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.status.success,
+    ...shadows.sm,
+  },
+  filterPillActive: {
+    backgroundColor: colors.status.success,
+    borderColor: colors.status.success,
+  },
+  filterText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.status.success,
+  },
+  filterTextActive: {
+    color: colors.text.inverse,
   },
   categoryPill: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.background.secondary,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     borderRadius: borders.radius.full,
     marginRight: spacing.sm,
     gap: spacing.xs,
@@ -708,25 +825,64 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
   markerContainer: {
-    backgroundColor: colors.map.marker,
+    backgroundColor: colors.accent.primary,
     borderRadius: borders.radius.full,
-    padding: 8,
+    padding: 6,
     borderWidth: 2,
-    borderColor: colors.text.primary,
-    ...shadows.sm,
+    borderColor: '#FFF',
+    ...shadows.md,
   },
   markerSelected: {
-    backgroundColor: colors.accent.primary,
-    borderColor: colors.accent.primary,
+    backgroundColor: colors.accent.secondary,
     transform: [{ scale: 1.2 }],
+  },
+  markerClosed: {
+    backgroundColor: colors.text.tertiary,
+    opacity: 0.7,
+  },
+  markerRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  markerRatingText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  recenterButton: {
+    position: 'absolute',
+    right: spacing.md,
+    bottom: TAB_BAR_HEIGHT + 80,
+    width: 44,
+    height: 44,
+    backgroundColor: colors.background.secondary,
+    borderRadius: borders.radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.md,
+  },
+  resultsCountBadge: {
+    position: 'absolute',
+    bottom: TAB_BAR_HEIGHT + 80,
+    left: spacing.md,
+    backgroundColor: colors.background.secondary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borders.radius.full,
+    ...shadows.sm,
+  },
+  resultsCountText: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.secondary,
+    fontWeight: typography.weights.medium,
   },
   placeCardContainer: {
     position: 'absolute',
-    bottom: 80,
+    bottom: TAB_BAR_HEIGHT + 70,
     left: 0,
     right: 0,
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
   },
   placeCard: {
     backgroundColor: colors.background.secondary,
@@ -818,7 +974,7 @@ const styles = StyleSheet.create({
   },
   emptyStateContainer: {
     position: 'absolute',
-    bottom: 100,
+    bottom: TAB_BAR_HEIGHT + 80,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -864,15 +1020,13 @@ const styles = StyleSheet.create({
   searchSpinner: {
     marginLeft: spacing.sm,
   },
-  chatInputSafeArea: {
+  chatInputContainer: {
     position: 'absolute',
-    bottom: 0,
+    bottom: TAB_BAR_HEIGHT,
     left: 0,
     right: 0,
-  },
-  chatInputContainer: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     backgroundColor: colors.background.secondary,
     borderTopWidth: 1,
     borderTopColor: colors.border.muted,
@@ -910,7 +1064,7 @@ const styles = StyleSheet.create({
   },
   chatResponseContainer: {
     position: 'absolute',
-    bottom: 100,
+    bottom: TAB_BAR_HEIGHT + 70,
     left: 0,
     right: 0,
     paddingHorizontal: spacing.md,

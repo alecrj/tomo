@@ -2,6 +2,129 @@
 
 ---
 
+## 🚨 CRITICAL: GOOGLE MAPS TILES NOT LOADING (Session 23)
+
+**Last Updated:** December 22, 2024
+
+### The Problem
+Google Maps tiles are NOT loading - shows white background with blue route polyline visible.
+- Apple Maps works (provider=undefined) ✅
+- Google Maps doesn't work (provider=PROVIDER_GOOGLE) ❌
+- Routes API works with same API key ✅
+- `onMapReady` fires ✅
+- `onMapLoaded` never fires ❌
+
+### What We've Tried (All Failed)
+1. ❌ Verified API key in AppDelegate.swift
+2. ❌ Removed duplicate API key from Info.plist
+3. ❌ Removed `useFrameworks: 'static'` setting
+4. ❌ Enabled `NSAllowsArbitraryLoads: true`
+5. ❌ Removed customMapStyle (tested without dark theme)
+6. ❌ Clean rebuild with pod install
+
+### Console Errors (Xcode)
+```
+-[GMSx_CCTBootCountLogTransformer transform:]: Could not get boot count: Error Domain=NSPOSIXErrorDomain Code=1 "Operation not permitted"
++[GMSx_CCTClearcutUploader crashIfNecessary] Multiple instances of CCTClearcutUploader were instantiated.
+```
+
+### Current Config
+- react-native-maps: 1.19.1
+- GoogleMaps pod: 8.4.0
+- Expo SDK: 54.0.27
+- React Native: 0.81.5
+- New Architecture: DISABLED
+- API Key: AIzaSyDR9zUARYSyyr3FZe3jjkHXYaftWE6lXMM (unrestricted)
+
+### NEXT STEPS TO TRY
+1. **Upgrade react-native-maps** to 1.20.x or newer (check if works with old arch)
+2. **Test minimal MapView** - just PROVIDER_GOOGLE, nothing else
+3. **Check UIUserInterfaceStyle** - Info.plist says "Light" but app uses dark theme
+4. **Try different GoogleMaps pod version** - maybe 8.4.0 has issues
+
+---
+
+## 🚀 CURRENT STATUS: BLOCKED ON MAPS (Session 22-23)
+
+**Last Updated:** December 22, 2024
+
+### App Simplified to Core Vision
+The app has been streamlined to focus on the core experience: **ChatGPT that knows where you are, remembers you, and has maps built in.**
+
+### Session 23 Work
+- 🔴 Google Maps tiles not loading - BLOCKING ISSUE
+- ✅ Auto-retry for closed places (silently finds open alternatives)
+- ✅ Conversational system prompt (not every message needs places)
+- ✅ Removed PlaceCardSkeleton loading state
+
+### Session 22 Fixes
+- ✅ Removed broken `/memory` link from settings screen
+- ✅ Cleaned up unused imports and styles
+- ✅ TypeScript passes clean
+
+### Final App Structure (14 screens total)
+
+**4 Main Tabs:**
+| Tab | Screen | Purpose |
+|-----|--------|---------|
+| Chat | `app/(tabs)/index.tsx` | The soul - conversational AI with place recommendations |
+| Map | `app/(tabs)/map.tsx` | Browse/explore with Google Maps |
+| Saved | `app/(tabs)/saved.tsx` | Your saved places collection |
+| You | `app/(tabs)/you.tsx` | Settings, stats, preferences |
+
+**Feature Screens:**
+| Screen | File | Purpose |
+|--------|------|---------|
+| Navigation | `app/navigation.tsx` | Turn-by-turn with compass |
+| Voice | `app/voice.tsx` | Hands-free gpt-realtime |
+| Settings | `app/settings.tsx` | Preferences & account |
+| Expenses | `app/expenses.tsx` | Budget tracking |
+| Trip Recap | `app/trip-recap.tsx` | AI-generated summary |
+| Onboarding | `app/onboarding.tsx` | First-time setup |
+| Plan (hidden) | `app/(tabs)/plan.tsx` | Itinerary view (href: null) |
+
+**Root Screens:**
+| Screen | File | Purpose |
+|--------|------|---------|
+| Splash | `app/index.tsx` | Routes to tabs or onboarding |
+| Root Layout | `app/_layout.tsx` | ErrorBoundary + navigation stack |
+
+**Screens Removed (to simplify):**
+- `chat.tsx` - Home IS chat now
+- `companion.tsx` - Unused
+- `conversations.tsx` - Not needed
+- `destination.tsx` - PlaceCard handles this
+- `itinerary.tsx` - Itinerary via chat
+- `memory.tsx` - Memories work automatically
+- `notifications.tsx` - Toasts only
+
+### What's Working
+- ✅ Conversational AI with GPT-4o
+- ✅ Place recommendations with PlaceCards
+- ✅ Google Maps integration
+- ✅ Turn-by-turn navigation with compass
+- ✅ Voice mode with gpt-realtime
+- ✅ Camera translation
+- ✅ Memory system (learns preferences)
+- ✅ Saved places
+- ✅ Budget tracking
+- ✅ Trip recap with AI summary
+- ✅ Offline mode (graceful fallback)
+
+### Quick Commands
+```bash
+# Development
+npx expo start --dev-client
+
+# Build for device
+npx expo run:ios --device
+
+# Type check
+npx tsc --noEmit
+```
+
+---
+
 ## 🎯 THE END GOAL
 
 **Tomo = The ONLY app a traveler needs.**

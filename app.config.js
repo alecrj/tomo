@@ -29,14 +29,7 @@ module.exports = ({ config }) => {
     plugins: [
       'expo-router',
       'expo-location',
-      [
-        'expo-build-properties',
-        {
-          ios: {
-            useFrameworks: 'static',
-          },
-        },
-      ],
+      'expo-build-properties',
       // Note: react-native-maps v1.19.1 doesn't have a config plugin
       // Google Maps API key is configured in AppDelegate.swift
     ],

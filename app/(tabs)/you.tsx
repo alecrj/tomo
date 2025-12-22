@@ -12,24 +12,17 @@ import { useRouter } from 'expo-router';
 // Animations disabled temporarily for stability
 // import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
-  Brain,
   Wallet,
-  Bell,
   Settings,
   ChevronRight,
-  MapPin,
-  Calendar,
   BarChart3,
-  FileText,
   Mic,
   HelpCircle,
 } from 'lucide-react-native';
 import { colors, spacing, typography, borders } from '../../constants/theme';
 import { useTripStore } from '../../stores/useTripStore';
 import { useBudgetStore } from '../../stores/useBudgetStore';
-import { useNotificationStore } from '../../stores/useNotificationStore';
 import { useLocationStore } from '../../stores/useLocationStore';
-import { useMemoryStore } from '../../stores/useMemoryStore';
 import { usePreferencesStore } from '../../stores/usePreferencesStore';
 import { safeHaptics, ImpactFeedbackStyle } from '../../utils/haptics';
 import { ProfileCard } from '../../components/ProfileCard';
@@ -53,10 +46,7 @@ export default function YouScreen() {
       .filter((e) => e.timestamp >= todayStart.getTime() && e.timestamp <= todayEnd.getTime())
       .reduce((sum, e) => sum + e.amount, 0);
   }, [expenses]);
-  const notifications = useNotificationStore((state) => state.notifications);
-  const unreadCount = useMemo(() => notifications.filter((n) => !n.dismissed).length, [notifications]);
   const neighborhood = useLocationStore((state) => state.neighborhood);
-  const memories = useMemoryStore((state) => state.memories);
   const userName = usePreferencesStore((state) => state.userName);
 
   // Trip day calculation
@@ -141,22 +131,6 @@ export default function YouScreen() {
           <View style={styles.menuSection}>
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => handleNavigate('/memory')}
-            >
-              <View style={[styles.menuIcon, { backgroundColor: colors.accent.muted }]}>
-                <Brain size={20} color={colors.accent.primary} />
-              </View>
-              <View style={styles.menuContent}>
-                <Text style={styles.menuTitle}>What Tomo Knows</Text>
-                <Text style={styles.menuSubtitle}>
-                  {memories.length} things learned about you
-                </Text>
-              </View>
-              <ChevronRight size={20} color={colors.text.tertiary} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItem}
               onPress={() => handleNavigate('/expenses')}
             >
               <View style={[styles.menuIcon, { backgroundColor: colors.status.warningMuted }]}>
@@ -169,26 +143,6 @@ export default function YouScreen() {
               <ChevronRight size={20} color={colors.text.tertiary} />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => handleNavigate('/notifications')}
-            >
-              <View style={[styles.menuIcon, { backgroundColor: colors.status.infoMuted }]}>
-                <Bell size={20} color={colors.status.info} />
-              </View>
-              <View style={styles.menuContent}>
-                <Text style={styles.menuTitle}>Notifications</Text>
-                <Text style={styles.menuSubtitle}>
-                  {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
-                </Text>
-              </View>
-              {unreadCount > 0 && <View style={styles.badge}><Text style={styles.badgeText}>{unreadCount}</Text></View>}
-              <ChevronRight size={20} color={colors.text.tertiary} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Secondary menu */}
-          <View style={styles.menuSection}>
             <TouchableOpacity
               style={styles.menuItem}
               onPress={() => handleNavigate('/trip-recap')}
@@ -207,8 +161,8 @@ export default function YouScreen() {
               style={styles.menuItem}
               onPress={() => handleNavigate('/voice')}
             >
-              <View style={[styles.menuIcon, { backgroundColor: colors.status.errorMuted }]}>
-                <Mic size={20} color={colors.status.error} />
+              <View style={[styles.menuIcon, { backgroundColor: colors.accent.muted }]}>
+                <Mic size={20} color={colors.accent.primary} />
               </View>
               <View style={styles.menuContent}>
                 <Text style={styles.menuTitle}>Voice Mode</Text>
@@ -216,7 +170,10 @@ export default function YouScreen() {
               </View>
               <ChevronRight size={20} color={colors.text.tertiary} />
             </TouchableOpacity>
+          </View>
 
+          {/* Settings */}
+          <View style={styles.menuSection}>
             <TouchableOpacity
               style={styles.menuItem}
               onPress={() => handleNavigate('/settings')}
@@ -235,7 +192,7 @@ export default function YouScreen() {
           {/* Help */}
           <TouchableOpacity
             style={styles.helpButton}
-            onPress={() => handleNavigate('/chat')}
+            onPress={() => router.push('/(tabs)')}
           >
             <HelpCircle size={16} color={colors.text.tertiary} />
             <Text style={styles.helpText}>Need help? Ask Tomo anything</Text>

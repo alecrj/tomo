@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { router } from 'expo-router';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import {
   ArrowLeft,
   Share2,
@@ -367,8 +367,8 @@ export default function TripRecapScreen() {
                 <MapView
                   ref={mapRef}
                   style={styles.map}
-                  provider={PROVIDER_GOOGLE}
-                  customMapStyle={mapStyle}
+                  provider={PROVIDER_DEFAULT}
+                  userInterfaceStyle="dark"
                   initialRegion={getInitialRegion()}
                   scrollEnabled={true}
                   zoomEnabled={true}

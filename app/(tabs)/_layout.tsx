@@ -1,16 +1,25 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { View, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import {
-  Feather,
+  MessageCircle,
   MapPin,
-  Calendar,
   Heart,
   User,
 } from 'lucide-react-native';
 import { colors, spacing } from '../../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+/**
+ * TOMO - Simplified 4-Tab Navigation
+ *
+ * Home (Chat) - The soul of the app. Ask anything, get one confident answer.
+ * Map - Browse and explore nearby places with Google Maps.
+ * Saved - Your saved places collection.
+ * You - Settings, preferences, trip history.
+ *
+ * Plan tab REMOVED - itineraries are now created via chat ("plan my day")
+ */
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
 
@@ -39,10 +48,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
-            <Feather size={22} color={color} />
-          ),
+          title: 'Chat',
+          tabBarIcon: ({ color }) => <MessageCircle size={22} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -50,20 +57,6 @@ export default function TabLayout() {
         options={{
           title: 'Map',
           tabBarIcon: ({ color }) => <MapPin size={22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="plan"
-        options={{
-          title: 'Plan',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.chatTab, focused && styles.chatTabActive]}>
-              <Calendar
-                size={20}
-                color={focused ? colors.text.inverse : color}
-              />
-            </View>
-          ),
         }}
       />
       <Tabs.Screen
@@ -80,19 +73,15 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <User size={22} color={color} />,
         }}
       />
+      {/* Plan tab hidden - itineraries created via chat */}
+      <Tabs.Screen
+        name="plan"
+        options={{
+          href: null, // Hide from tab bar
+        }}
+      />
     </Tabs>
   );
 }
 
-const styles = StyleSheet.create({
-  chatTab: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chatTabActive: {
-    backgroundColor: colors.text.primary,
-  },
-});
+const styles = StyleSheet.create({});

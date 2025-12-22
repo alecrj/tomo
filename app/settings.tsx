@@ -15,7 +15,7 @@ import { useRouter } from 'expo-router';
 // Animations disabled temporarily for stability
 // import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
-import { ArrowLeft, MapPin, DollarSign, Utensils, Heart, Users, Check, Navigation, Brain, Thermometer, MessageCircle, Bell, Smile, AlignLeft, Train, Clock, CloudRain, Wallet, Calendar, Globe } from 'lucide-react-native';
+import { ArrowLeft, MapPin, DollarSign, Utensils, Heart, Users, Check, Navigation, Thermometer, MessageCircle, Bell, Train, Clock, CloudRain, Wallet, Calendar, Globe } from 'lucide-react-native';
 import { colors, spacing, typography, shadows, borders } from '../constants/theme';
 import { usePreferencesStore, TomoTone, EmojiUsage, ResponseLength, Language, LANGUAGE_NAMES } from '../stores/usePreferencesStore';
 import { useBudgetStore } from '../stores/useBudgetStore';
@@ -235,26 +235,6 @@ export default function SettingsScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Memory Link */}
-          <TouchableOpacity
-            style={styles.memoryLink}
-            onPress={() => {
-              safeHaptics.impact(ImpactFeedbackStyle.Light);
-              router.push('/memory');
-            }}
-          >
-            <View style={styles.memoryLinkContent}>
-              <Brain size={24} color={colors.accent.primary} />
-              <View style={styles.memoryLinkText}>
-                <Text style={styles.memoryLinkTitle}>Memory</Text>
-                <Text style={styles.memoryLinkDescription}>
-                  View and manage things Tomo remembers about you
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.memoryLinkArrow}>›</Text>
-          </TouchableOpacity>
-
           {/* Home Base Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -763,42 +743,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: spacing.lg,
-  },
-  memoryLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.background.secondary,
-    borderRadius: borders.radius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border.muted,
-  },
-  memoryLinkContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: spacing.md,
-  },
-  memoryLinkText: {
-    flex: 1,
-  },
-  memoryLinkTitle: {
-    fontSize: typography.sizes.base,
-    fontWeight: typography.weights.semibold,
-    color: colors.text.primary,
-    marginBottom: 4,
-  },
-  memoryLinkDescription: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-    lineHeight: 18,
-  },
-  memoryLinkArrow: {
-    fontSize: 28,
-    color: colors.text.tertiary,
-    marginLeft: spacing.sm,
   },
   section: {
     backgroundColor: colors.background.secondary,

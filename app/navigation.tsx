@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Camera } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_DEFAULT, Camera } from 'react-native-maps';
 import { Magnetometer } from 'expo-sensors';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import {
@@ -43,8 +43,8 @@ import type { TransitRoute, Coordinates } from '../types';
 
 const { width, height } = Dimensions.get('window');
 
-// Use Google Maps everywhere for consistent experience
-const MAP_PROVIDER = PROVIDER_GOOGLE;
+// Use Apple Maps for tiles, Google Routes API for directions
+const MAP_PROVIDER = PROVIDER_DEFAULT;
 
 const TRAVEL_MODES: { mode: TravelMode; label: string; icon: typeof Car }[] = [
   { mode: 'WALK', label: 'Walk', icon: Footprints },
@@ -116,6 +116,11 @@ export default function NavigationScreen() {
   useEffect(() => {
     async function fetchRoute() {
       if (coordinates && currentDestination) {
+        console.log('[Navigation] Fetching route...', {
+          from: coordinates,
+          to: currentDestination.coordinates,
+          mode: selectedMode
+        });
         setIsLoadingRoute(true);
         safeHaptics.impact(ImpactFeedbackStyle.Light);
 
@@ -126,9 +131,17 @@ export default function NavigationScreen() {
         );
 
         if (fetchedRoute) {
+          console.log('[Navigation] Route fetched:', {
+            duration: fetchedRoute.totalDuration,
+            distance: fetchedRoute.totalDistance,
+            hasPolyline: !!fetchedRoute.polyline,
+            steps: fetchedRoute.steps.length
+          });
           setRoute(fetchedRoute);
           startNavigation(currentDestination, fetchedRoute);
           setCurrentStepIndex(0);
+        } else {
+          console.log('[Navigation] No route returned from API');
         }
         setIsLoadingRoute(false);
       }
@@ -379,12 +392,12 @@ export default function NavigationScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Full Screen Map - Google Maps style navigation */}
+      {/* Apple Maps with dark mode - Google Routes API for directions */}
       <MapView
         ref={mapRef}
         style={styles.map}
         provider={MAP_PROVIDER}
-        customMapStyle={mapStyle}
+        userInterfaceStyle="dark"
         showsUserLocation
         showsMyLocationButton={false}
         showsCompass={false}
@@ -392,6 +405,8 @@ export default function NavigationScreen() {
         rotateEnabled
         scrollEnabled
         onPanDrag={handleMapPanDrag}
+        onMapReady={() => console.log('[Navigation] Apple Maps ready')}
+        onMapLoaded={() => console.log('[Navigation] Map tiles loaded')}
         initialRegion={{
           latitude: coordinates.latitude,
           longitude: coordinates.longitude,
