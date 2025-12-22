@@ -113,11 +113,21 @@ function formatArrivalTime(minutes: number): string {
   });
 }
 
-// Get maneuver icon based on instruction
-function getManeuverIcon(instruction: string): React.ReactNode {
-  const lower = instruction.toLowerCase();
+// Get icon based on step mode and instruction
+function getStepIcon(step: { mode: string; instruction: string }): React.ReactNode {
   const iconSize = 32;
   const iconColor = colors.text.primary;
+
+  // Transit modes
+  if (step.mode === 'train') {
+    return <Train size={iconSize} color={iconColor} />;
+  }
+  if (step.mode === 'bus') {
+    return <Car size={iconSize} color={iconColor} />; // Use Car as bus icon
+  }
+
+  // Walking maneuvers
+  const lower = step.instruction.toLowerCase();
 
   if (lower.includes('turn left') || lower.includes('left onto')) {
     return <CornerUpLeft size={iconSize} color={iconColor} />;
@@ -137,8 +147,8 @@ function getManeuverIcon(instruction: string): React.ReactNode {
   if (lower.includes('destination') || lower.includes('arrive')) {
     return <MapPin size={iconSize} color={iconColor} />;
   }
-  // Default: continue straight
-  return <ArrowUp size={iconSize} color={iconColor} />;
+  // Default: continue straight / walking
+  return <Footprints size={iconSize} color={iconColor} />;
 }
 
 // Extract street name from instruction
@@ -228,11 +238,21 @@ export default function NavigationScreen() {
   // Fetch route on mount and when travel mode changes
   useEffect(() => {
     async function fetchRoute() {
-      if (coordinates && currentDestination) {
+      if (coordinates && currentDestination?.coordinates) {
+        // Extract plain coordinate values (avoid Zustand proxy issues)
+        const fromCoords = {
+          latitude: Number(coordinates.latitude),
+          longitude: Number(coordinates.longitude),
+        };
+        const toCoords = {
+          latitude: Number(currentDestination.coordinates.latitude),
+          longitude: Number(currentDestination.coordinates.longitude),
+        };
+
         // Debug: Log coordinates being used
         console.log('[Navigation] Fetching route:', {
-          from: coordinates,
-          to: currentDestination.coordinates,
+          from: fromCoords,
+          to: toCoords,
           destination: currentDestination.title,
           mode: travelMode,
         });
@@ -241,8 +261,8 @@ export default function NavigationScreen() {
         safeHaptics.impact(ImpactFeedbackStyle.Light);
 
         const fetchedRoute = await getDirections(
-          coordinates,
-          currentDestination.coordinates,
+          fromCoords,
+          toCoords,
           travelMode
         );
 
@@ -270,16 +290,22 @@ export default function NavigationScreen() {
   // Recalculate route when waypoints change
   useEffect(() => {
     async function recalculateRoute() {
-      if (!coordinates || !currentDestination || waypoints.length === 0) return;
+      if (!coordinates || !currentDestination?.coordinates || waypoints.length === 0) return;
 
       setIsLoadingRoute(true);
       safeHaptics.impact(ImpactFeedbackStyle.Light);
 
-      // Build waypoint array: user location -> waypoints -> destination
+      // Build waypoint array with plain coordinates (avoid Zustand proxy issues)
       const allPoints = [
-        coordinates,
-        ...waypoints.map(w => w.coordinates),
-        currentDestination.coordinates,
+        { latitude: Number(coordinates.latitude), longitude: Number(coordinates.longitude) },
+        ...waypoints.map(w => ({
+          latitude: Number(w.coordinates.latitude),
+          longitude: Number(w.coordinates.longitude),
+        })),
+        {
+          latitude: Number(currentDestination.coordinates.latitude),
+          longitude: Number(currentDestination.coordinates.longitude),
+        },
       ];
 
       const newRoute = await getMultiWaypointRoute(allPoints);
@@ -703,21 +729,40 @@ export default function NavigationScreen() {
       {currentStep && !hasArrived && !showChat && (
         <SafeAreaView style={styles.turnHeader} edges={['top']}>
           <View style={styles.turnHeaderContent}>
-            <View style={styles.maneuverIcon}>
-              {getManeuverIcon(currentStep.instruction)}
+            <View style={[
+              styles.maneuverIcon,
+              currentStep.mode === 'train' && styles.transitIcon,
+              currentStep.mode === 'bus' && styles.busIcon,
+            ]}>
+              {getStepIcon(currentStep)}
             </View>
             <View style={styles.turnInfo}>
-              <View style={styles.distanceRow}>
-                <Text style={styles.turnDistance}>
-                  {formatDistance(currentStep.distance || distanceToDestination)}
-                </Text>
-                <Text style={styles.turnDistanceUnit}>
-                  {formatDistanceUnit(currentStep.distance || distanceToDestination)}
-                </Text>
-              </View>
-              <Text style={styles.streetName} numberOfLines={1}>
-                {extractStreetName(currentStep.instruction)}
-              </Text>
+              {/* For transit: show line name and duration */}
+              {(currentStep.mode === 'train' || currentStep.mode === 'bus') ? (
+                <>
+                  <Text style={styles.transitLine} numberOfLines={1}>
+                    {currentStep.line || 'Transit'}
+                  </Text>
+                  <Text style={styles.streetName} numberOfLines={1}>
+                    {currentStep.details || currentStep.instruction.replace(/<[^>]*>/g, '')}
+                  </Text>
+                </>
+              ) : (
+                /* For walking: show distance and street name */
+                <>
+                  <View style={styles.distanceRow}>
+                    <Text style={styles.turnDistance}>
+                      {formatDistance(currentStep.distance || distanceToDestination)}
+                    </Text>
+                    <Text style={styles.turnDistanceUnit}>
+                      {formatDistanceUnit(currentStep.distance || distanceToDestination)}
+                    </Text>
+                  </View>
+                  <Text style={styles.streetName} numberOfLines={1}>
+                    {extractStreetName(currentStep.instruction)}
+                  </Text>
+                </>
+              )}
             </View>
           </View>
 
@@ -1056,6 +1101,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  transitIcon: {
+    backgroundColor: '#4285F4', // Google Maps blue for trains
+  },
+  busIcon: {
+    backgroundColor: '#34A853', // Google Maps green for buses
+  },
   turnInfo: {
     flex: 1,
   },
@@ -1074,6 +1125,11 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xl,
     fontWeight: typography.weights.medium,
     color: colors.text.secondary,
+  },
+  transitLine: {
+    fontSize: typography.sizes['2xl'],
+    fontWeight: typography.weights.bold,
+    color: colors.text.primary,
   },
   streetName: {
     fontSize: typography.sizes.lg,
