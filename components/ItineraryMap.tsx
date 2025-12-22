@@ -299,10 +299,13 @@ export default function ItineraryMap({
         ref={mapRef}
         style={styles.map}
         provider={MAP_PROVIDER}
+        mapType="mutedStandard"
         userInterfaceStyle="dark"
         initialRegion={initialRegion}
         showsUserLocation
         showsMyLocationButton={false}
+        showsPointsOfInterest={false}
+        showsBuildings={false}
       >
         {/* Activity markers with numbers */}
         {activitiesWithCoords.map((activity, index) => (

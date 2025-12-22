@@ -392,21 +392,23 @@ export default function NavigationScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Apple Maps with dark mode - Google Routes API for directions */}
+      {/* Apple Maps - muted style, clean for navigation */}
       <MapView
         ref={mapRef}
         style={styles.map}
         provider={MAP_PROVIDER}
+        mapType="mutedStandard"
         userInterfaceStyle="dark"
         showsUserLocation
         showsMyLocationButton={false}
         showsCompass={false}
+        showsPointsOfInterest={false}
+        showsBuildings={false}
+        showsTraffic={false}
         pitchEnabled
         rotateEnabled
         scrollEnabled
         onPanDrag={handleMapPanDrag}
-        onMapReady={() => console.log('[Navigation] Apple Maps ready')}
-        onMapLoaded={() => console.log('[Navigation] Map tiles loaded')}
         initialRegion={{
           latitude: coordinates.latitude,
           longitude: coordinates.longitude,

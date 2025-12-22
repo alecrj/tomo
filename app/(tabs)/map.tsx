@@ -418,15 +418,19 @@ export default function MapScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Apple Maps with dark mode */}
+      {/* Apple Maps - muted style, no Apple POIs (we show our own markers) */}
       <MapView
         ref={mapRef}
         style={styles.map}
         provider={MAP_PROVIDER}
+        mapType="mutedStandard"
         userInterfaceStyle="dark"
         initialRegion={initialRegion}
         showsUserLocation
         showsMyLocationButton={false}
+        showsPointsOfInterest={false}
+        showsBuildings={false}
+        showsTraffic={false}
         // Move Apple Maps attribution to bottom right, above tab bar
         legalLabelInsets={{ bottom: TAB_BAR_HEIGHT + 60, right: 10, top: 0, left: 0 }}
       >

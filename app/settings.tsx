@@ -669,6 +669,17 @@ export default function SettingsScreen() {
             <Text style={styles.saveButtonText}>Save Settings</Text>
           </TouchableOpacity>
 
+          {/* Attribution */}
+          <View style={styles.attributionSection}>
+            <Text style={styles.attributionText}>
+              Place data powered by Google
+            </Text>
+            <Text style={styles.attributionText}>
+              Maps by Apple
+            </Text>
+            <Text style={styles.versionText}>Tomo v1.0.0</Text>
+          </View>
+
           {/* Developer Options */}
           <View style={styles.devSection}>
             <Text style={styles.devSectionTitle}>Developer Options</Text>
@@ -890,6 +901,21 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.semibold,
     color: colors.text.inverse,
+  },
+  attributionSection: {
+    alignItems: 'center',
+    marginTop: spacing.xl * 2,
+    paddingVertical: spacing.lg,
+  },
+  attributionText: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.tertiary,
+    marginBottom: spacing.xs,
+  },
+  versionText: {
+    fontSize: typography.sizes.xs,
+    color: colors.text.tertiary,
+    marginTop: spacing.sm,
   },
   bottomPadding: {
     height: spacing.xl,

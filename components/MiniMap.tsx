@@ -62,6 +62,7 @@ export function MiniMap({ onExpand, size = 'small' }: MiniMapProps) {
         ref={mapRef}
         style={styles.map}
         provider={MAP_PROVIDER}
+        mapType="mutedStandard"
         userInterfaceStyle="dark"
         scrollEnabled={false}
         zoomEnabled={false}
@@ -69,6 +70,7 @@ export function MiniMap({ onExpand, size = 'small' }: MiniMapProps) {
         pitchEnabled={false}
         showsUserLocation
         showsMyLocationButton={false}
+        showsPointsOfInterest={false}
         initialRegion={{
           latitude: coordinates.latitude,
           longitude: coordinates.longitude,
