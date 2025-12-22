@@ -1,6 +1,6 @@
 # Tomo - AI Travel Companion
 
-## Current Status (Session 22)
+## Current Status (Session 23)
 
 **Last Updated:** December 22, 2024
 
@@ -19,7 +19,7 @@
 **Feature Screens:**
 | Screen | Purpose |
 |--------|---------|
-| `app/navigation.tsx` | Turn-by-turn with compass |
+| `app/navigation.tsx` | Apple Maps-style turn-by-turn navigation |
 | `app/voice.tsx` | Hands-free gpt-realtime |
 | `app/settings.tsx` | Preferences & account |
 | `app/expenses.tsx` | Budget tracking |
@@ -30,7 +30,9 @@
 - Conversational AI with GPT-4o
 - Place recommendations with PlaceCards
 - Apple Maps with dark mode
-- Turn-by-turn navigation with compass
+- **Apple Maps-style navigation UI** (turn header, end route, stats bar)
+- **Smart navigation chat** (find places, add stops mid-route)
+- **Waypoint support** (multi-stop routes)
 - Voice mode with gpt-realtime
 - Camera translation
 - Memory system (learns preferences)
@@ -142,6 +144,50 @@ Uses WebRTC for low-latency voice-to-voice. Required package: `react-native-webr
 
 ---
 
+## Smart Navigation System
+
+The navigation screen (`app/navigation.tsx`) provides Apple Maps-style navigation with smart chat.
+
+### UI Components
+```
+┌──────────────────────────────────────────┐
+│  [Turn Icon]  100 m                      │ ← Turn Header
+│               Main Street                │
+├──────────────────────────────────────────┤
+│                                          │
+│              [MAP VIEW]           [📍]   │ ← Control buttons
+│              Blue route line      [🔊]   │
+│              Red destination      [💬]   │
+│                                          │
+├──────────────────────────────────────────┤
+│ [End]  | 2:45 PM | 12 min | 850 m       │ ← Bottom Bar
+└──────────────────────────────────────────┘
+```
+
+### Smart Chat Features
+- **Find places:** "Where's the nearest bathroom?"
+- **Add stops:** Searches Google Places, calculates detour time
+- **Action buttons:** "Add stop (+3 min)" / "Go there instead"
+- **Route info:** "How much longer until I arrive?"
+
+### Key Functions
+| Function | File | Purpose |
+|----------|------|---------|
+| `smartNavigationChat()` | `services/openai.ts` | AI chat with place search |
+| `detectPlaceIntent()` | `services/openai.ts` | Maps requests to Places types |
+| `addWaypoint()` | `stores/useNavigationStore.ts` | Add stop to route |
+
+### Place Intent Detection
+| User Says | Detected Type |
+|-----------|---------------|
+| "bathroom" / "toilet" | `toilet` |
+| "coffee" / "cafe" | `cafe` |
+| "7-11" / "convenience" | `convenience_store` |
+| "ATM" / "cash" | `atm` |
+| "food" / "hungry" | `restaurant` |
+
+---
+
 ## Map Configuration
 
 Using **Apple Maps** for tiles with **Google APIs** for data:
@@ -172,7 +218,32 @@ userInterfaceStyle="dark"
 
 ## Features Implemented
 
-### Session 21 (Current)
+### Session 23 (Current)
+- **Apple Maps-style navigation UI:**
+  - Turn instruction header (big distance + maneuver icon + street name)
+  - Bottom stats bar (arrival time, duration, distance)
+  - End Route button (red, prominent)
+  - Overview button (see full route)
+  - Re-center button
+  - Volume/mute button
+- **Smart navigation chat:**
+  - Find places mid-route ("where's the nearest bathroom?")
+  - Get detour time calculations
+  - Action buttons to add stops
+  - Waypoint support for multi-stop routes
+- Files modified:
+  - `app/navigation.tsx` - Complete rewrite
+  - `stores/useNavigationStore.ts` - Added waypoint support
+  - `services/openai.ts` - Added `smartNavigationChat()` function
+
+### Session 22
+- Trimmed CLAUDE.md from 54k to 6k chars
+- Fixed chat bar positioning in map view
+- Added Apple Maps polish (mutedStandard, no POIs)
+- Fixed category mappings (shopping_mall → store, Nature → Parks)
+- Increased search results and radius
+
+### Session 21
 - Switched to Apple Maps tiles (Google had rendering issues)
 - Added dark mode via `userInterfaceStyle="dark"`
 - Added Open Now filter
@@ -220,10 +291,15 @@ cd ios && xcodebuild -workspace tomo.xcworkspace -scheme tomo -destination 'id=D
 
 ## Known Issues to Fix
 
-1. **Chat bar positioning** - Adjust TAB_BAR_HEIGHT constant
-2. **Category mappings** - Nature showing wrong places
-3. **Search results** - Not showing all nearby spots
-4. **Map styling** - Make less obviously Apple Maps
+1. ~~Chat bar positioning~~ - FIXED
+2. ~~Category mappings~~ - FIXED
+3. ~~Search results~~ - FIXED (increased to 20 results, 3km radius)
+4. ~~Map styling~~ - FIXED (mutedStandard, no POIs)
+
+**Remaining:**
+- Test smart navigation chat on device
+- Test waypoint addition/removal
+- Verify all navigation features work end-to-end
 
 ---
 

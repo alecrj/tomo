@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,30 +10,42 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  ScrollView,
+  Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, Camera } from 'react-native-maps';
 import { Magnetometer } from 'expo-sensors';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../utils/haptics';
 import {
+  ArrowUp,
+  ArrowUpLeft,
+  ArrowUpRight,
   ArrowLeft,
-  Navigation as NavigationIcon,
-  X,
-  Car,
-  Train,
-  Footprints,
+  ArrowRight,
+  CornerUpLeft,
   CornerUpRight,
-  MapPin,
-  MessageCircle,
-  Send,
+  RotateCcw,
+  X,
   ChevronUp,
   ChevronDown,
   Locate,
+  Map,
+  MessageCircle,
+  Send,
+  MapPin,
+  Plus,
+  Navigation2,
+  Clock,
+  Route,
+  Volume2,
+  VolumeX,
 } from 'lucide-react-native';
-import { colors, spacing, borders, shadows, mapStyle, typography } from '../constants/theme';
+import { colors, spacing, borders, shadows, typography } from '../constants/theme';
 import { getDirections, TravelMode } from '../services/routes';
-import { navigationChat, NavigationContext } from '../services/openai';
+import { smartNavigationChat, NavigationContext, NearbyPlace, SmartNavigationResponse } from '../services/openai';
+import { searchNearby } from '../services/places';
 import { useNavigationStore } from '../stores/useNavigationStore';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useTripStore } from '../stores/useTripStore';
@@ -41,17 +53,10 @@ import { decodePolyline } from '../utils/polyline';
 import { TypingIndicator } from '../components/TypingIndicator';
 import type { TransitRoute, Coordinates } from '../types';
 
-const { width, height } = Dimensions.get('window');
-
-// Use Apple Maps for tiles, Google Routes API for directions
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MAP_PROVIDER = PROVIDER_DEFAULT;
 
-const TRAVEL_MODES: { mode: TravelMode; label: string; icon: typeof Car }[] = [
-  { mode: 'WALK', label: 'Walk', icon: Footprints },
-  { mode: 'TRANSIT', label: 'Transit', icon: Train },
-  { mode: 'DRIVE', label: 'Drive', icon: Car },
-];
-
+// Helper functions
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371e3;
   const phi1 = (lat1 * Math.PI) / 180;
@@ -69,9 +74,13 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 
 function formatDistance(meters: number): string {
   if (meters < 1000) {
-    return `${Math.round(meters)} m`;
+    return `${Math.round(meters)}`;
   }
-  return `${(meters / 1000).toFixed(1)} km`;
+  return `${(meters / 1000).toFixed(1)}`;
+}
+
+function formatDistanceUnit(meters: number): string {
+  return meters < 1000 ? 'm' : 'km';
 }
 
 function formatDuration(minutes: number): string {
@@ -83,91 +92,147 @@ function formatDuration(minutes: number): string {
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
+function formatArrivalTime(minutes: number): string {
+  const arrival = new Date();
+  arrival.setMinutes(arrival.getMinutes() + Math.round(minutes));
+  return arrival.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+// Get maneuver icon based on instruction
+function getManeuverIcon(instruction: string): React.ReactNode {
+  const lower = instruction.toLowerCase();
+  const iconSize = 32;
+  const iconColor = colors.text.primary;
+
+  if (lower.includes('turn left') || lower.includes('left onto')) {
+    return <CornerUpLeft size={iconSize} color={iconColor} />;
+  }
+  if (lower.includes('turn right') || lower.includes('right onto')) {
+    return <CornerUpRight size={iconSize} color={iconColor} />;
+  }
+  if (lower.includes('slight left') || lower.includes('bear left')) {
+    return <ArrowUpLeft size={iconSize} color={iconColor} />;
+  }
+  if (lower.includes('slight right') || lower.includes('bear right')) {
+    return <ArrowUpRight size={iconSize} color={iconColor} />;
+  }
+  if (lower.includes('u-turn') || lower.includes('make a u')) {
+    return <RotateCcw size={iconSize} color={iconColor} />;
+  }
+  if (lower.includes('destination') || lower.includes('arrive')) {
+    return <MapPin size={iconSize} color={iconColor} />;
+  }
+  // Default: continue straight
+  return <ArrowUp size={iconSize} color={iconColor} />;
+}
+
+// Extract street name from instruction
+function extractStreetName(instruction: string): string {
+  // Remove HTML tags
+  const clean = instruction.replace(/<[^>]*>/g, '');
+
+  // Common patterns: "Turn left onto Main St" -> "Main St"
+  const ontoMatch = clean.match(/onto\s+(.+?)(?:\.|$)/i);
+  if (ontoMatch) return ontoMatch[1].trim();
+
+  // "Continue on Main St" -> "Main St"
+  const continueMatch = clean.match(/continue\s+(?:on\s+)?(.+?)(?:\.|$)/i);
+  if (continueMatch) return continueMatch[1].trim();
+
+  // "Head north on Main St" -> "Main St"
+  const headMatch = clean.match(/head\s+\w+\s+on\s+(.+?)(?:\.|$)/i);
+  if (headMatch) return headMatch[1].trim();
+
+  // Just return the clean instruction
+  return clean;
+}
+
+// Quick action interface
+interface QuickAction {
+  label: string;
+  message: string;
+  icon: React.ReactNode;
+}
+
 export default function NavigationScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
 
+  // Store state
   const currentDestination = useNavigationStore((state) => state.currentDestination);
   const startNavigation = useNavigationStore((state) => state.startNavigation);
   const markArrived = useNavigationStore((state) => state.markArrived);
   const exitCompanionMode = useNavigationStore((state) => state.exitCompanionMode);
+  const addWaypoint = useNavigationStore((state) => state.addWaypoint);
+  const waypoints = useNavigationStore((state) => state.waypoints);
   const coordinates = useLocationStore((state) => state.coordinates);
   const addVisit = useTripStore((state) => state.addVisit);
 
+  // Local state
   const [route, setRoute] = useState<TransitRoute | null>(null);
   const [hasArrived, setHasArrived] = useState(false);
-  const [selectedMode, setSelectedMode] = useState<TravelMode>('WALK');
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-
-  // Compass heading for Google Maps-style navigation
   const [heading, setHeading] = useState(0);
   const [isFollowingUser, setIsFollowingUser] = useState(true);
+  const [isOverviewMode, setIsOverviewMode] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
 
-  // Chat overlay state
+  // Chat state
   const [showChat, setShowChat] = useState(false);
   const [chatInput, setChatInput] = useState('');
-  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([]);
+  const [chatMessages, setChatMessages] = useState<Array<{
+    role: 'user' | 'assistant';
+    text: string;
+    places?: NearbyPlace[];
+    actions?: SmartNavigationResponse['suggestedActions'];
+  }>>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatSlideAnim = useRef(new Animated.Value(0)).current;
 
   const routeCoordinates = route?.polyline ? decodePolyline(route.polyline) : [];
 
-  // Fetch route
+  // Fetch route on mount
   useEffect(() => {
     async function fetchRoute() {
       if (coordinates && currentDestination) {
-        console.log('[Navigation] Fetching route...', {
-          from: coordinates,
-          to: currentDestination.coordinates,
-          mode: selectedMode
-        });
         setIsLoadingRoute(true);
         safeHaptics.impact(ImpactFeedbackStyle.Light);
 
         const fetchedRoute = await getDirections(
           coordinates,
           currentDestination.coordinates,
-          selectedMode
+          'WALK'
         );
 
         if (fetchedRoute) {
-          console.log('[Navigation] Route fetched:', {
-            duration: fetchedRoute.totalDuration,
-            distance: fetchedRoute.totalDistance,
-            hasPolyline: !!fetchedRoute.polyline,
-            steps: fetchedRoute.steps.length
-          });
           setRoute(fetchedRoute);
           startNavigation(currentDestination, fetchedRoute);
           setCurrentStepIndex(0);
-        } else {
-          console.log('[Navigation] No route returned from API');
         }
         setIsLoadingRoute(false);
       }
     }
     fetchRoute();
-  }, [currentDestination?.id, selectedMode]);
+  }, [currentDestination?.id]);
 
-  // Subscribe to compass heading for Google Maps-style navigation
-  // Reduced from 100ms (10x/sec) to 300ms (3x/sec) to prevent excessive re-renders
+  // Compass heading subscription
   useEffect(() => {
     let subscription: { remove: () => void } | null = null;
     let lastHeading = 0;
 
     const subscribe = async () => {
-      // Update heading 3 times per second (was 10x/sec - too frequent)
       Magnetometer.setUpdateInterval(300);
-      subscription = Magnetometer.addListener((data: { x: number; y: number; z: number }) => {
-        // Calculate heading from magnetometer data
+      subscription = Magnetometer.addListener((data) => {
         let angle = Math.atan2(data.y, data.x) * (180 / Math.PI);
-        // Normalize to 0-360
         if (angle < 0) angle += 360;
-        // Invert for map rotation (map rotates opposite to device)
         const newHeading = 360 - angle;
 
-        // Only update if heading changed significantly (> 5 degrees)
-        // This prevents jittery updates from small sensor noise
         if (Math.abs(newHeading - lastHeading) > 5) {
           lastHeading = newHeading;
           setHeading(newHeading);
@@ -176,45 +241,29 @@ export default function NavigationScreen() {
     };
 
     subscribe();
-
-    return () => {
-      subscription?.remove();
-    };
+    return () => subscription?.remove();
   }, []);
 
-  // Google Maps-style camera: behind user, looking forward, rotates with heading
+  // Camera follow - navigation mode
   useEffect(() => {
-    if (isFollowingUser && coordinates && mapRef.current && !hasArrived && route) {
-      // Offset camera center to put user at bottom 1/3 of screen
-      // This makes it feel like you're looking ahead, not down at yourself
-      const OFFSET_DISTANCE = 0.0006; // ~60-70 meters ahead
+    if (isFollowingUser && !isOverviewMode && coordinates && mapRef.current && !hasArrived && route) {
+      const OFFSET_DISTANCE = 0.0006;
       const headingRad = (heading * Math.PI) / 180;
 
       const offsetLat = coordinates.latitude + OFFSET_DISTANCE * Math.cos(headingRad);
       const offsetLng = coordinates.longitude + OFFSET_DISTANCE * Math.sin(headingRad);
 
       const camera: Camera = {
-        center: {
-          latitude: offsetLat,
-          longitude: offsetLng,
-        },
-        pitch: 60, // High tilt for street-level feel
-        heading: heading, // Rotate with device compass
-        zoom: 18, // Close zoom to see street details
-        altitude: 300, // Low altitude
+        center: { latitude: offsetLat, longitude: offsetLng },
+        pitch: 60,
+        heading: heading,
+        zoom: 18,
+        altitude: 300,
       };
 
       mapRef.current.animateCamera(camera, { duration: 300 });
     }
-  }, [coordinates, heading, isFollowingUser, hasArrived, route]);
-
-  // Initial camera setup when route loads
-  useEffect(() => {
-    if (mapRef.current && routeCoordinates.length > 0 && coordinates && !hasArrived) {
-      // Start in navigation mode immediately
-      setIsFollowingUser(true);
-    }
-  }, [routeCoordinates.length]);
+  }, [coordinates, heading, isFollowingUser, isOverviewMode, hasArrived, route]);
 
   // Check for arrival
   useEffect(() => {
@@ -234,11 +283,10 @@ export default function NavigationScreen() {
     }
   }, [coordinates, currentDestination, hasArrived]);
 
-  // Progressive step advancement based on distance traveled
+  // Step advancement
   useEffect(() => {
     if (!coordinates || !route?.steps || hasArrived || !currentDestination) return;
 
-    const totalDistance = route.totalDistance;
     const distanceToDestination = calculateDistance(
       coordinates.latitude,
       coordinates.longitude,
@@ -246,46 +294,56 @@ export default function NavigationScreen() {
       currentDestination.coordinates.longitude
     );
 
-    // Calculate progress (0 to 1)
-    const progress = 1 - distanceToDestination / totalDistance;
-
-    // Map progress to step index
-    const stepCount = route.steps.length;
+    const progress = 1 - distanceToDestination / route.totalDistance;
     const expectedStepIndex = Math.min(
-      Math.floor(progress * stepCount),
-      stepCount - 1
+      Math.floor(progress * route.steps.length),
+      route.steps.length - 1
     );
 
-    // Only advance forward, never go back
     if (expectedStepIndex > currentStepIndex) {
       setCurrentStepIndex(expectedStepIndex);
       safeHaptics.impact(ImpactFeedbackStyle.Light);
     }
   }, [coordinates, route, currentStepIndex, hasArrived, currentDestination]);
 
-  const handleClose = () => {
+  // Chat panel animation
+  useEffect(() => {
+    Animated.timing(chatSlideAnim, {
+      toValue: showChat ? 1 : 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [showChat]);
+
+  // Handlers
+  const handleEndRoute = () => {
     safeHaptics.impact(ImpactFeedbackStyle.Medium);
     exitCompanionMode();
     router.back();
   };
 
-  const handleModeChange = (mode: TravelMode) => {
-    if (mode !== selectedMode) {
-      safeHaptics.selection();
-      setSelectedMode(mode);
-      setRoute(null);
+  const handleRecenter = () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
+    setIsFollowingUser(true);
+    setIsOverviewMode(false);
+  };
+
+  const handleOverview = () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
+    setIsOverviewMode(true);
+    setIsFollowingUser(false);
+
+    if (mapRef.current && routeCoordinates.length > 0 && coordinates) {
+      const allCoords = [coordinates, ...routeCoordinates];
+      mapRef.current.fitToCoordinates(allCoords, {
+        edgePadding: { top: 100, right: 50, bottom: 200, left: 50 },
+        animated: true,
+      });
     }
   };
 
-  // Handle user panning the map - disable follow mode
   const handleMapPanDrag = () => {
     setIsFollowingUser(false);
-  };
-
-  // Re-center on user position
-  const handleRecenter = () => {
-    safeHaptics.impact(ImpactFeedbackStyle.Medium);
-    setIsFollowingUser(true);
   };
 
   const handleArrived = () => {
@@ -304,6 +362,7 @@ export default function NavigationScreen() {
     router.back();
   };
 
+  // Smart chat handler with place search
   const handleChatSend = async (message?: string) => {
     const userMessage = (message || chatInput).trim();
     if (!userMessage) return;
@@ -314,7 +373,15 @@ export default function NavigationScreen() {
     setIsChatLoading(true);
 
     try {
-      // Build navigation context for AI
+      const distanceRemaining = currentDestination && coordinates
+        ? calculateDistance(
+            coordinates.latitude,
+            coordinates.longitude,
+            currentDestination.coordinates.latitude,
+            currentDestination.coordinates.longitude
+          )
+        : route?.totalDistance || 0;
+
       const navContext: NavigationContext = {
         userLocation: coordinates!,
         destination: {
@@ -328,74 +395,124 @@ export default function NavigationScreen() {
         } : undefined,
         totalDuration: route?.totalDuration || 0,
         totalDistance: route?.totalDistance || 0,
-        distanceRemaining: distanceToDestination || route?.totalDistance || 0,
-        travelMode: selectedMode,
+        distanceRemaining,
+        travelMode: 'WALK',
+        waypoints: waypoints.map((w) => ({
+          name: w.name,
+          coordinates: w.coordinates,
+        })),
       };
 
-      const response = await navigationChat(userMessage, navContext);
-      setChatMessages((prev) => [...prev, { role: 'assistant', text: response.text }]);
+      // Search function for smart chat
+      const searchPlaces = async (
+        query: string,
+        coords: Coordinates,
+        type?: string
+      ): Promise<NearbyPlace[]> => {
+        const results = await searchNearby(coords, query, type, 1000);
+        return results.map((place) => ({
+          id: place.id,
+          name: place.displayName.text,
+          address: place.formattedAddress,
+          coordinates: {
+            latitude: place.location.latitude,
+            longitude: place.location.longitude,
+          },
+          rating: place.rating,
+          isOpen: place.regularOpeningHours?.openNow,
+        }));
+      };
 
-      // Handle actions from the response
-      if (response.action?.type === 'add_stop' && response.action.place) {
-        // TODO: Implement waypoint/stop addition
-      }
+      const response = await smartNavigationChat(userMessage, navContext, searchPlaces);
+
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          text: response.text,
+          places: response.places,
+          actions: response.suggestedActions,
+        },
+      ]);
 
       safeHaptics.notification(NotificationFeedbackType.Success);
     } catch (error) {
-      console.error('[Navigation] Chat error:', error);
-      setChatMessages((prev) => [...prev, {
-        role: 'assistant',
-        text: "Sorry, I couldn't process that. Try again in a moment."
-      }]);
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'assistant', text: "Sorry, I couldn't process that. Try again." },
+      ]);
     } finally {
       setIsChatLoading(false);
     }
   };
 
-  // Quick action chips for navigation
-  const QUICK_ACTIONS = [
-    { label: 'Pit stop', message: 'Find me a quick pit stop nearby' },
-    { label: 'Bathroom', message: 'Where is the nearest bathroom?' },
-    { label: 'Coffee', message: 'Find a coffee shop on my route' },
-    { label: 'How long?', message: 'How much longer until I arrive?' },
+  // Handle action button press (add stop, change destination, etc.)
+  const handleActionPress = (action: { label: string; type: string; placeId?: string }, places?: NearbyPlace[]) => {
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
+
+    if (action.type === 'add_stop' && action.placeId && places) {
+      const place = places.find((p) => p.id === action.placeId);
+      if (place) {
+        addWaypoint({
+          name: place.name,
+          address: place.address,
+          coordinates: place.coordinates,
+          addedTime: place.detourTime,
+        });
+        setChatMessages((prev) => [
+          ...prev,
+          { role: 'assistant', text: `Added ${place.name} as a stop. Your route has been updated.` },
+        ]);
+      }
+    } else if (action.type === 'dismiss') {
+      // Just close the chat
+      setShowChat(false);
+    }
+  };
+
+  // Quick actions
+  const QUICK_ACTIONS: QuickAction[] = [
+    { label: 'Bathroom', message: "Where's the nearest bathroom?", icon: <MapPin size={14} color={colors.accent.primary} /> },
+    { label: 'Coffee', message: 'Find me a coffee shop', icon: <MapPin size={14} color={colors.accent.primary} /> },
+    { label: '7-Eleven', message: "Where's the nearest 7-Eleven?", icon: <MapPin size={14} color={colors.accent.primary} /> },
+    { label: 'How long?', message: 'How much longer until I arrive?', icon: <Clock size={14} color={colors.accent.primary} /> },
   ];
 
+  // Empty state
   if (!currentDestination || !coordinates) {
     return (
       <View style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <SafeAreaView style={styles.safeArea} edges={['top']}>
-          <View style={styles.emptyState}>
-            <NavigationIcon size={48} color={colors.text.tertiary} />
-            <Text style={styles.emptyText}>No destination set</Text>
-            <TouchableOpacity style={styles.goBackButton} onPress={() => router.back()}>
-              <Text style={styles.goBackText}>Go back</Text>
-            </TouchableOpacity>
-          </View>
+        <SafeAreaView style={styles.emptyState}>
+          <Navigation2 size={48} color={colors.text.tertiary} />
+          <Text style={styles.emptyText}>No destination set</Text>
+          <TouchableOpacity style={styles.goBackButton} onPress={() => router.back()}>
+            <Text style={styles.goBackText}>Go back</Text>
+          </TouchableOpacity>
         </SafeAreaView>
       </View>
     );
   }
 
   const currentStep = route?.steps[currentStepIndex];
-  const distanceToDestination =
-    coordinates && currentDestination
-      ? calculateDistance(
-          coordinates.latitude,
-          coordinates.longitude,
-          currentDestination.coordinates.latitude,
-          currentDestination.coordinates.longitude
-        )
-      : null;
+  const distanceToDestination = calculateDistance(
+    coordinates.latitude,
+    coordinates.longitude,
+    currentDestination.coordinates.latitude,
+    currentDestination.coordinates.longitude
+  );
+  const etaMinutes = route
+    ? Math.round(route.totalDuration * (distanceToDestination / route.totalDistance))
+    : 0;
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Apple Maps - muted style, clean for navigation */}
+      {/* Map */}
       <MapView
         ref={mapRef}
-        style={styles.map}
+        style={StyleSheet.absoluteFillObject}
         provider={MAP_PROVIDER}
         mapType="mutedStandard"
         userInterfaceStyle="dark"
@@ -416,70 +533,94 @@ export default function NavigationScreen() {
           longitudeDelta: 0.005,
         }}
       >
-        {/* Route Polyline - Draw first so it's behind marker */}
+        {/* Route polyline */}
         {routeCoordinates.length > 0 && (
           <>
-            {/* Route outline for contrast */}
-            <Polyline
-              coordinates={routeCoordinates}
-              strokeColor="#000000"
-              strokeWidth={10}
-            />
-            {/* Main route line - bright blue like Google Maps */}
-            <Polyline
-              coordinates={routeCoordinates}
-              strokeColor="#4285F4"
-              strokeWidth={6}
-            />
+            <Polyline coordinates={routeCoordinates} strokeColor="#000000" strokeWidth={10} />
+            <Polyline coordinates={routeCoordinates} strokeColor="#4285F4" strokeWidth={6} />
           </>
         )}
 
-        {/* Destination Marker */}
+        {/* Waypoint markers */}
+        {waypoints.map((wp, index) => (
+          <Marker key={wp.id} coordinate={wp.coordinates}>
+            <View style={styles.waypointMarker}>
+              <Text style={styles.waypointMarkerText}>{index + 1}</Text>
+            </View>
+          </Marker>
+        ))}
+
+        {/* Destination marker */}
         <Marker coordinate={currentDestination.coordinates} title={currentDestination.title}>
           <View style={styles.destinationMarker}>
-            <View style={styles.destinationMarkerInner}>
-              <MapPin size={18} color="#FFFFFF" />
-            </View>
+            <MapPin size={20} color="#FFFFFF" />
           </View>
         </Marker>
       </MapView>
 
-      {/* Top Bar */}
-      <SafeAreaView style={styles.topBar} edges={['top']}>
-        <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-          <X size={24} color={colors.text.primary} />
-        </TouchableOpacity>
-        <View style={styles.destinationInfo}>
-          <Text style={styles.destinationName} numberOfLines={1}>
-            {currentDestination.title}
-          </Text>
-          {route && (
-            <Text style={styles.destinationMeta}>
-              {formatDuration(route.totalDuration)} · {formatDistance(route.totalDistance)}
-            </Text>
-          )}
-        </View>
-      </SafeAreaView>
+      {/* Turn Instruction Header - Apple Maps style */}
+      {currentStep && !hasArrived && !showChat && (
+        <SafeAreaView style={styles.turnHeader} edges={['top']}>
+          <View style={styles.turnHeaderContent}>
+            <View style={styles.maneuverIcon}>
+              {getManeuverIcon(currentStep.instruction)}
+            </View>
+            <View style={styles.turnInfo}>
+              <View style={styles.distanceRow}>
+                <Text style={styles.turnDistance}>
+                  {formatDistance(currentStep.distance || distanceToDestination)}
+                </Text>
+                <Text style={styles.turnDistanceUnit}>
+                  {formatDistanceUnit(currentStep.distance || distanceToDestination)}
+                </Text>
+              </View>
+              <Text style={styles.streetName} numberOfLines={1}>
+                {extractStreetName(currentStep.instruction)}
+              </Text>
+            </View>
+          </View>
+        </SafeAreaView>
+      )}
 
-      {/* Travel Mode Selector */}
-      <View style={styles.modeSelector}>
-        {TRAVEL_MODES.map(({ mode, label, icon: Icon }) => (
-          <TouchableOpacity
-            key={mode}
-            style={[styles.modeButton, selectedMode === mode && styles.modeButtonActive]}
-            onPress={() => handleModeChange(mode)}
-          >
-            <Icon size={18} color={selectedMode === mode ? colors.text.inverse : colors.text.secondary} />
-            <Text
-              style={[styles.modeButtonText, selectedMode === mode && styles.modeButtonTextActive]}
-            >
-              {label}
-            </Text>
+      {/* Control buttons - right side */}
+      <View style={[styles.controlButtons, { top: insets.top + 100 }]}>
+        {/* Overview button */}
+        <TouchableOpacity
+          style={[styles.controlButton, isOverviewMode && styles.controlButtonActive]}
+          onPress={handleOverview}
+        >
+          <Map size={20} color={isOverviewMode ? colors.text.inverse : colors.text.primary} />
+        </TouchableOpacity>
+
+        {/* Re-center button */}
+        {(!isFollowingUser || isOverviewMode) && (
+          <TouchableOpacity style={styles.controlButton} onPress={handleRecenter}>
+            <Locate size={20} color={colors.accent.primary} />
           </TouchableOpacity>
-        ))}
+        )}
+
+        {/* Mute button */}
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={() => setIsMuted(!isMuted)}
+        >
+          {isMuted ? (
+            <VolumeX size={20} color={colors.text.secondary} />
+          ) : (
+            <Volume2 size={20} color={colors.text.primary} />
+          )}
+        </TouchableOpacity>
+
+        {/* Chat button */}
+        <TouchableOpacity
+          style={[styles.controlButton, showChat && styles.controlButtonActive]}
+          onPress={() => setShowChat(!showChat)}
+        >
+          <MessageCircle size={20} color={showChat ? colors.text.inverse : colors.text.primary} />
+        </TouchableOpacity>
       </View>
 
-      {/* Loading Overlay */}
+      {/* Loading overlay */}
       {isLoadingRoute && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={colors.accent.primary} />
@@ -487,114 +628,9 @@ export default function NavigationScreen() {
         </View>
       )}
 
-      {/* Re-center button - shows when user pans away */}
-      {!isFollowingUser && !hasArrived && (
-        <TouchableOpacity style={styles.recenterButton} onPress={handleRecenter}>
-          <Locate size={22} color={colors.accent.primary} />
-        </TouchableOpacity>
-      )}
-
-      {/* Chat Overlay Toggle */}
-      <TouchableOpacity
-        style={[styles.chatToggle, showChat && styles.chatToggleActive]}
-        onPress={() => {
-          safeHaptics.impact(ImpactFeedbackStyle.Light);
-          setShowChat(!showChat);
-        }}
-      >
-        <MessageCircle size={20} color={showChat ? colors.text.inverse : colors.accent.primary} />
-      </TouchableOpacity>
-
-      {/* Chat Overlay */}
-      {showChat && (
-        <KeyboardAvoidingView
-          style={styles.chatOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.chatHeader}>
-            <Text style={styles.chatTitle}>Ask Tomo</Text>
-            <TouchableOpacity onPress={() => setShowChat(false)}>
-              <ChevronDown size={20} color={colors.text.secondary} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.chatMessages}>
-            {chatMessages.length === 0 && (
-              <>
-                <Text style={styles.chatHint}>
-                  Ask me anything while navigating!
-                </Text>
-                <View style={styles.quickActionsContainer}>
-                  {QUICK_ACTIONS.map((action) => (
-                    <TouchableOpacity
-                      key={action.label}
-                      style={styles.quickActionChip}
-                      onPress={() => handleChatSend(action.message)}
-                    >
-                      <Text style={styles.quickActionText}>{action.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
-            {chatMessages.map((msg, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.chatBubble,
-                  msg.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleAssistant,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.chatBubbleText,
-                    msg.role === 'user' ? styles.chatBubbleTextUser : styles.chatBubbleTextAssistant,
-                  ]}
-                >
-                  {msg.text}
-                </Text>
-              </View>
-            ))}
-            {isChatLoading && <TypingIndicator size="small" />}
-          </View>
-
-          <View style={styles.chatInputContainer}>
-            <TextInput
-              style={styles.chatInput}
-              placeholder="Ask something..."
-              placeholderTextColor={colors.text.tertiary}
-              value={chatInput}
-              onChangeText={setChatInput}
-              onSubmitEditing={() => handleChatSend()}
-              returnKeyType="send"
-            />
-            <TouchableOpacity style={styles.chatSendButton} onPress={() => handleChatSend()}>
-              <Send size={16} color={colors.text.inverse} />
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      )}
-
-      {/* Current Step Card */}
-      {currentStep && !hasArrived && !showChat && (
-        <View style={styles.stepCard}>
-          <View style={styles.stepIconContainer}>
-            <CornerUpRight size={24} color={colors.accent.primary} />
-          </View>
-          <View style={styles.stepContent}>
-            <Text style={styles.stepInstruction} numberOfLines={2}>
-              {currentStep.instruction}
-            </Text>
-            {currentStep.distance && (
-              <Text style={styles.stepDistance}>{formatDistance(currentStep.distance)}</Text>
-            )}
-          </View>
-        </View>
-      )}
-
-      {/* Arrived Card */}
+      {/* Arrived card */}
       {hasArrived && (
-        <View style={styles.arrivedCard}>
+        <View style={[styles.arrivedCard, { bottom: insets.bottom + 20 }]}>
           <View style={styles.arrivedContent}>
             <Text style={styles.arrivedTitle}>You've arrived!</Text>
             <Text style={styles.arrivedSubtitle}>{currentDestination.title}</Text>
@@ -605,28 +641,148 @@ export default function NavigationScreen() {
         </View>
       )}
 
-      {/* Bottom Info Bar */}
+      {/* Smart Chat Panel */}
+      {showChat && (
+        <Animated.View
+          style={[
+            styles.chatPanel,
+            {
+              transform: [{
+                translateY: chatSlideAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [400, 0],
+                }),
+              }],
+            },
+          ]}
+        >
+          <View style={styles.chatHeader}>
+            <Text style={styles.chatTitle}>Ask Tomo</Text>
+            <TouchableOpacity onPress={() => setShowChat(false)}>
+              <ChevronDown size={24} color={colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.chatMessages} showsVerticalScrollIndicator={false}>
+            {chatMessages.length === 0 && (
+              <>
+                <Text style={styles.chatHint}>
+                  Find places, add stops, or ask questions
+                </Text>
+                <View style={styles.quickActionsContainer}>
+                  {QUICK_ACTIONS.map((action) => (
+                    <TouchableOpacity
+                      key={action.label}
+                      style={styles.quickActionChip}
+                      onPress={() => handleChatSend(action.message)}
+                    >
+                      {action.icon}
+                      <Text style={styles.quickActionText}>{action.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {chatMessages.map((msg, index) => (
+              <View key={index}>
+                <View
+                  style={[
+                    styles.chatBubble,
+                    msg.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleAssistant,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.chatBubbleText,
+                      msg.role === 'user' ? styles.chatBubbleTextUser : styles.chatBubbleTextAssistant,
+                    ]}
+                  >
+                    {msg.text}
+                  </Text>
+                </View>
+
+                {/* Action buttons for assistant messages */}
+                {msg.role === 'assistant' && msg.actions && msg.actions.length > 0 && (
+                  <View style={styles.actionButtonsContainer}>
+                    {msg.actions.map((action, actionIndex) => (
+                      <TouchableOpacity
+                        key={actionIndex}
+                        style={[
+                          styles.actionButton,
+                          action.type === 'add_stop' && styles.actionButtonPrimary,
+                        ]}
+                        onPress={() => handleActionPress(action, msg.places)}
+                      >
+                        {action.type === 'add_stop' && <Plus size={14} color={colors.text.inverse} />}
+                        <Text
+                          style={[
+                            styles.actionButtonText,
+                            action.type === 'add_stop' && styles.actionButtonTextPrimary,
+                          ]}
+                        >
+                          {action.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            ))}
+
+            {isChatLoading && <TypingIndicator size="small" />}
+          </ScrollView>
+
+          <View style={[styles.chatInputContainer, { paddingBottom: insets.bottom || spacing.md }]}>
+            <TextInput
+              style={styles.chatInput}
+              placeholder="Ask something..."
+              placeholderTextColor={colors.text.tertiary}
+              value={chatInput}
+              onChangeText={setChatInput}
+              onSubmitEditing={() => handleChatSend()}
+              returnKeyType="send"
+            />
+            <TouchableOpacity
+              style={[styles.chatSendButton, !chatInput.trim() && styles.chatSendButtonDisabled]}
+              onPress={() => handleChatSend()}
+              disabled={!chatInput.trim()}
+            >
+              <Send size={18} color={chatInput.trim() ? colors.text.inverse : colors.text.tertiary} />
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
+
+      {/* Bottom Stats Bar - Apple Maps style */}
       {route && !hasArrived && !showChat && (
-        <SafeAreaView style={styles.bottomBar} edges={['bottom']}>
-          <View style={styles.bottomInfo}>
-            <View>
-              <Text style={styles.etaLabel}>ETA</Text>
-              <Text style={styles.etaValue}>{formatDuration(route.totalDuration)}</Text>
+        <View style={[styles.bottomBar, { paddingBottom: insets.bottom || spacing.lg }]}>
+          {/* End Route button */}
+          <TouchableOpacity style={styles.endRouteButton} onPress={handleEndRoute}>
+            <X size={20} color="#FFFFFF" />
+            <Text style={styles.endRouteText}>End</Text>
+          </TouchableOpacity>
+
+          {/* Stats */}
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{formatArrivalTime(etaMinutes)}</Text>
+              <Text style={styles.statLabel}>Arrival</Text>
             </View>
-            <View style={styles.bottomDivider} />
-            <View>
-              <Text style={styles.etaLabel}>Distance</Text>
-              <Text style={styles.etaValue}>{formatDistance(route.totalDistance)}</Text>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{formatDuration(etaMinutes)}</Text>
+              <Text style={styles.statLabel}>Time</Text>
             </View>
-            <View style={styles.bottomDivider} />
-            <View>
-              <Text style={styles.etaLabel}>Remaining</Text>
-              <Text style={styles.etaValue}>
-                {distanceToDestination ? formatDistance(distanceToDestination) : '--'}
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>
+                {formatDistance(distanceToDestination)} {formatDistanceUnit(distanceToDestination)}
               </Text>
+              <Text style={styles.statLabel}>Distance</Text>
             </View>
           </View>
-        </SafeAreaView>
+        </View>
       )}
     </View>
   );
@@ -637,17 +793,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background.primary,
   },
-  safeArea: {
-    flex: 1,
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
-  },
   emptyState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.background.primary,
   },
   emptyText: {
     fontSize: typography.sizes.lg,
@@ -666,17 +815,64 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.semibold,
   },
-  topBar: {
+
+  // Turn instruction header - Apple Maps style
+  turnHeader: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
+    backgroundColor: colors.background.secondary,
+    ...shadows.lg,
+  },
+  turnHeaderContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+    gap: spacing.lg,
   },
-  closeButton: {
+  maneuverIcon: {
+    width: 56,
+    height: 56,
+    backgroundColor: colors.accent.primary,
+    borderRadius: borders.radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  turnInfo: {
+    flex: 1,
+  },
+  distanceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  turnDistance: {
+    fontSize: 42,
+    fontWeight: typography.weights.bold,
+    color: colors.text.primary,
+    lineHeight: 46,
+  },
+  turnDistanceUnit: {
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.medium,
+    color: colors.text.secondary,
+  },
+  streetName: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.medium,
+    color: colors.text.secondary,
+    marginTop: 2,
+  },
+
+  // Control buttons
+  controlButtons: {
+    position: 'absolute',
+    right: spacing.md,
+    gap: spacing.sm,
+  },
+  controlButton: {
     width: 44,
     height: 44,
     backgroundColor: colors.background.secondary,
@@ -685,62 +881,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.md,
   },
-  destinationInfo: {
-    flex: 1,
-    marginLeft: spacing.md,
-    backgroundColor: colors.background.secondary,
-    borderRadius: borders.radius.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    ...shadows.md,
-  },
-  destinationName: {
-    fontSize: typography.sizes.base,
-    fontWeight: typography.weights.semibold,
-    color: colors.text.primary,
-  },
-  destinationMeta: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-    marginTop: 2,
-  },
-  modeSelector: {
-    position: 'absolute',
-    top: 120,
-    left: spacing.md,
-    right: spacing.md,
-    flexDirection: 'row',
-    backgroundColor: colors.background.secondary,
-    borderRadius: borders.radius.md,
-    padding: 4,
-    ...shadows.md,
-  },
-  modeButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.sm,
-    borderRadius: borders.radius.sm,
-    gap: 6,
-  },
-  modeButtonActive: {
+  controlButtonActive: {
     backgroundColor: colors.accent.primary,
   },
-  modeButtonText: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.medium,
-    color: colors.text.secondary,
-  },
-  modeButtonTextActive: {
-    color: colors.text.inverse,
-  },
+
+  // Loading
   loadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.surface.modalOverlay,
     alignItems: 'center',
     justifyContent: 'center',
@@ -750,34 +897,76 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.base,
     color: colors.text.primary,
   },
-  recenterButton: {
-    position: 'absolute',
-    top: 180,
-    left: spacing.md,
-    width: 48,
-    height: 48,
-    backgroundColor: colors.background.secondary,
-    borderRadius: borders.radius.full,
+
+  // Markers
+  destinationMarker: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EA4335',
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.md,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    ...shadows.lg,
   },
-  chatToggle: {
-    position: 'absolute',
-    top: 180,
-    right: spacing.md,
-    width: 48,
-    height: 48,
-    backgroundColor: colors.background.secondary,
-    borderRadius: borders.radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.md,
-  },
-  chatToggleActive: {
+  waypointMarker: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: colors.accent.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    ...shadows.md,
   },
-  chatOverlay: {
+  waypointMarkerText: {
+    color: '#FFFFFF',
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
+  },
+
+  // Arrived card
+  arrivedCard: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    backgroundColor: colors.status.success,
+    borderRadius: borders.radius.xl,
+    padding: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    ...shadows.lg,
+  },
+  arrivedContent: {
+    flex: 1,
+  },
+  arrivedTitle: {
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    color: '#FFFFFF',
+  },
+  arrivedSubtitle: {
+    fontSize: typography.sizes.base,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 2,
+  },
+  doneButton: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: borders.radius.md,
+  },
+  doneButtonText: {
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+    color: colors.status.success,
+  },
+
+  // Bottom stats bar
+  bottomBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -785,7 +974,62 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.secondary,
     borderTopLeftRadius: borders.radius.xl,
     borderTopRightRadius: borders.radius.xl,
-    maxHeight: height * 0.5,
+    paddingTop: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    ...shadows.lg,
+  },
+  endRouteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.status.error,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: borders.radius.full,
+  },
+  endRouteText: {
+    color: '#FFFFFF',
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+  },
+  statsContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
+    color: colors.text.primary,
+  },
+  statLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.text.secondary,
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: colors.border.default,
+  },
+
+  // Chat panel
+  chatPanel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.background.secondary,
+    borderTopLeftRadius: borders.radius.xl,
+    borderTopRightRadius: borders.radius.xl,
+    maxHeight: SCREEN_HEIGHT * 0.55,
     ...shadows.lg,
   },
   chatHeader: {
@@ -795,33 +1039,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.muted,
+    borderBottomColor: colors.border.default,
   },
   chatTitle: {
-    fontSize: typography.sizes.base,
+    fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
     color: colors.text.primary,
   },
   chatMessages: {
-    padding: spacing.md,
-    minHeight: 100,
-    maxHeight: 200,
+    flex: 1,
+    padding: spacing.lg,
+    maxHeight: 280,
   },
   chatHint: {
     fontSize: typography.sizes.sm,
     color: colors.text.tertiary,
     textAlign: 'center',
-    lineHeight: 20,
     marginBottom: spacing.md,
   },
   quickActionsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: spacing.xs,
-    marginTop: spacing.sm,
+    gap: spacing.sm,
   },
   quickActionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     backgroundColor: colors.accent.muted,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -833,7 +1078,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.medium,
   },
   chatBubble: {
-    maxWidth: '80%',
+    maxWidth: '85%',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: borders.radius.lg,
@@ -848,7 +1093,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.chat.assistantBubble,
   },
   chatBubbleText: {
-    fontSize: typography.sizes.sm,
+    fontSize: typography.sizes.base,
+    lineHeight: 22,
   },
   chatBubbleTextUser: {
     color: colors.chat.userText,
@@ -856,150 +1102,63 @@ const styles = StyleSheet.create({
   chatBubbleTextAssistant: {
     color: colors.chat.assistantText,
   },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+    paddingLeft: spacing.xs,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.background.tertiary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borders.radius.full,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+  },
+  actionButtonPrimary: {
+    backgroundColor: colors.accent.primary,
+    borderColor: colors.accent.primary,
+  },
+  actionButtonText: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.primary,
+    fontWeight: typography.weights.medium,
+  },
+  actionButtonTextPrimary: {
+    color: colors.text.inverse,
+  },
   chatInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border.muted,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
     gap: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.default,
   },
   chatInput: {
     flex: 1,
-    height: 40,
+    height: 44,
     backgroundColor: colors.surface.input,
     borderRadius: borders.radius.full,
-    paddingHorizontal: spacing.md,
-    fontSize: typography.sizes.sm,
+    paddingHorizontal: spacing.lg,
+    fontSize: typography.sizes.base,
     color: colors.text.primary,
   },
   chatSendButton: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     backgroundColor: colors.accent.primary,
     borderRadius: borders.radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepCard: {
-    position: 'absolute',
-    bottom: 140,
-    left: spacing.md,
-    right: spacing.md,
-    flexDirection: 'row',
-    backgroundColor: colors.background.secondary,
-    borderRadius: borders.radius.lg,
-    padding: spacing.lg,
-    ...shadows.lg,
-  },
-  stepIconContainer: {
-    width: 48,
-    height: 48,
-    backgroundColor: colors.accent.muted,
-    borderRadius: borders.radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepContent: {
-    flex: 1,
-    marginLeft: spacing.md,
-    justifyContent: 'center',
-  },
-  stepInstruction: {
-    fontSize: typography.sizes.base,
-    fontWeight: typography.weights.semibold,
-    color: colors.text.primary,
-    lineHeight: 22,
-  },
-  stepDistance: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-    marginTop: 4,
-  },
-  arrivedCard: {
-    position: 'absolute',
-    bottom: 140,
-    left: spacing.md,
-    right: spacing.md,
-    backgroundColor: colors.status.success,
-    borderRadius: borders.radius.lg,
-    padding: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    ...shadows.lg,
-  },
-  arrivedContent: {
-    flex: 1,
-  },
-  arrivedTitle: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
-  },
-  arrivedSubtitle: {
-    fontSize: typography.sizes.sm,
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginTop: 2,
-  },
-  doneButton: {
-    backgroundColor: colors.text.primary,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    borderRadius: borders.radius.md,
-  },
-  doneButtonText: {
-    fontSize: typography.sizes.base,
-    fontWeight: typography.weights.semibold,
-    color: colors.status.success,
-  },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: colors.background.secondary,
-    borderTopLeftRadius: borders.radius.xl,
-    borderTopRightRadius: borders.radius.xl,
-    ...shadows.lg,
-  },
-  bottomInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.xl,
-  },
-  bottomDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: colors.border.default,
-  },
-  etaLabel: {
-    fontSize: typography.sizes.xs,
-    color: colors.text.secondary,
-    textAlign: 'center',
-  },
-  etaValue: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
-    textAlign: 'center',
-    marginTop: 2,
-  },
-  destinationMarker: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  destinationMarkerInner: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#EA4335', // Google Maps red
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-    ...shadows.lg,
+  chatSendButtonDisabled: {
+    backgroundColor: colors.background.tertiary,
   },
 });

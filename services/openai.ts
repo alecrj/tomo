@@ -589,7 +589,7 @@ export async function generateItinerary(
   }
 }
 
-// === NAVIGATION CHAT ===
+// === SMART NAVIGATION CHAT ===
 
 export interface NavigationContext {
   userLocation: Coordinates;
@@ -606,17 +606,44 @@ export interface NavigationContext {
   totalDistance: number; // meters
   distanceRemaining: number; // meters
   travelMode: 'WALK' | 'TRANSIT' | 'DRIVE';
+  waypoints?: Array<{
+    name: string;
+    coordinates: Coordinates;
+  }>;
+}
+
+export interface NearbyPlace {
+  id: string;
+  name: string;
+  address: string;
+  coordinates: Coordinates;
+  rating?: number;
+  distance?: number; // meters from user
+  detourTime?: number; // additional minutes if added as stop
+  isOpen?: boolean;
 }
 
 export interface NavigationChatAction {
-  type: 'add_stop' | 'find_nearby' | 'change_route' | 'info' | 'none';
-  place?: {
-    name: string;
-    address: string;
-    coordinates: Coordinates;
+  type: 'add_stop' | 'change_destination' | 'show_on_map' | 'call_place' | 'none';
+  place?: NearbyPlace;
+}
+
+export interface SmartNavigationResponse {
+  text: string;
+  places?: NearbyPlace[];
+  suggestedActions?: Array<{
+    label: string;
+    type: 'add_stop' | 'change_destination' | 'show_on_map' | 'dismiss';
+    placeId?: string;
+  }>;
+  routeChange?: {
+    newEta: string;
+    addedTime: number; // minutes
+    addedDistance: number; // meters
   };
 }
 
+// Legacy interface for backward compatibility
 export interface NavigationChatResponse {
   text: string;
   action?: NavigationChatAction;
@@ -733,6 +760,336 @@ export async function navigationChat(
       text: "Sorry, I'm having trouble responding. Try again in a moment.",
     };
   }
+}
+
+// === SMART NAVIGATION CHAT WITH PLACE SEARCH ===
+
+/**
+ * Detect what type of place the user is looking for
+ */
+function detectPlaceIntent(message: string): { type: string | null; query: string | null } {
+  const lowerMsg = message.toLowerCase();
+
+  // Map common requests to Google Places types
+  const placePatterns: Array<{ patterns: RegExp[]; type: string; query: string }> = [
+    {
+      patterns: [/bathroom|restroom|toilet|wc|loo/],
+      type: 'toilet',
+      query: 'public restroom',
+    },
+    {
+      patterns: [/coffee|cafe|starbucks|espresso/],
+      type: 'cafe',
+      query: 'coffee shop',
+    },
+    {
+      patterns: [/7.?11|seven.?eleven|convenience|konbini/],
+      type: 'convenience_store',
+      query: '7-Eleven convenience store',
+    },
+    {
+      patterns: [/atm|cash|money|withdraw/],
+      type: 'atm',
+      query: 'ATM',
+    },
+    {
+      patterns: [/gas|petrol|fuel|gas station/],
+      type: 'gas_station',
+      query: 'gas station',
+    },
+    {
+      patterns: [/pharmacy|drugstore|medicine/],
+      type: 'pharmacy',
+      query: 'pharmacy',
+    },
+    {
+      patterns: [/food|hungry|eat|restaurant|lunch|dinner|breakfast/],
+      type: 'restaurant',
+      query: 'restaurant',
+    },
+    {
+      patterns: [/water|drink|thirsty/],
+      type: 'convenience_store',
+      query: 'convenience store',
+    },
+    {
+      patterns: [/parking|park my car/],
+      type: 'parking',
+      query: 'parking',
+    },
+    {
+      patterns: [/hotel|stay|sleep|accommodation/],
+      type: 'lodging',
+      query: 'hotel',
+    },
+    {
+      patterns: [/supermarket|grocery|groceries/],
+      type: 'supermarket',
+      query: 'supermarket',
+    },
+    {
+      patterns: [/bar|beer|drinks|alcohol|pub/],
+      type: 'bar',
+      query: 'bar',
+    },
+  ];
+
+  for (const { patterns, type, query } of placePatterns) {
+    for (const pattern of patterns) {
+      if (pattern.test(lowerMsg)) {
+        return { type, query };
+      }
+    }
+  }
+
+  return { type: null, query: null };
+}
+
+/**
+ * Calculate distance between two coordinates (Haversine formula)
+ */
+function calculateDistanceBetween(coord1: Coordinates, coord2: Coordinates): number {
+  const R = 6371e3; // Earth's radius in meters
+  const phi1 = (coord1.latitude * Math.PI) / 180;
+  const phi2 = (coord2.latitude * Math.PI) / 180;
+  const deltaPhi = ((coord2.latitude - coord1.latitude) * Math.PI) / 180;
+  const deltaLambda = ((coord2.longitude - coord1.longitude) * Math.PI) / 180;
+
+  const a =
+    Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+    Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}
+
+/**
+ * Estimate walking time in minutes for a given distance
+ */
+function estimateWalkingTime(meters: number): number {
+  // Average walking speed: 5 km/h = 83.33 m/min
+  return Math.round(meters / 83.33);
+}
+
+/**
+ * Build enhanced system prompt for smart navigation chat
+ */
+function buildSmartNavigationPrompt(
+  navContext: NavigationContext,
+  nearbyPlaces?: NearbyPlace[]
+): string {
+  const distanceRemaining = navContext.distanceRemaining < 1000
+    ? `${Math.round(navContext.distanceRemaining)} m`
+    : `${(navContext.distanceRemaining / 1000).toFixed(1)} km`;
+
+  const etaMinutes = Math.round(
+    navContext.totalDuration * (navContext.distanceRemaining / navContext.totalDistance)
+  );
+
+  const now = new Date();
+  const arrivalTime = new Date(now.getTime() + etaMinutes * 60000);
+  const arrivalTimeStr = arrivalTime.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  let placesContext = '';
+  if (nearbyPlaces && nearbyPlaces.length > 0) {
+    placesContext = `\n\nNEARBY PLACES FOUND:
+${nearbyPlaces.map((p, i) => `${i + 1}. ${p.name} - ${p.distance}m away${p.detourTime ? `, +${p.detourTime} min detour` : ''}${p.rating ? ` (★${p.rating})` : ''}${p.isOpen === false ? ' [CLOSED]' : ''}`).join('\n')}`;
+  }
+
+  const waypointsContext = navContext.waypoints && navContext.waypoints.length > 0
+    ? `\nCURRENT STOPS: ${navContext.waypoints.map(w => w.name).join(' → ')} → ${navContext.destination.name}`
+    : '';
+
+  return `You are Tomo, a smart AI travel companion helping during navigation. Be concise and helpful.
+
+NAVIGATION STATUS:
+- Going to: ${navContext.destination.name}
+- Distance remaining: ${distanceRemaining}
+- ETA: ${etaMinutes} min (arriving ~${arrivalTimeStr})
+- Travel mode: ${navContext.travelMode.toLowerCase()}
+${navContext.currentStep ? `- Next: ${navContext.currentStep.instruction}` : ''}${waypointsContext}${placesContext}
+
+INSTRUCTIONS:
+- If places were found, recommend the best one (consider: distance, rating, open status)
+- Always mention the distance and how much time adding a stop would add
+- If user wants to add a stop, confirm which place
+- Be brief - user is navigating
+- Don't use markdown formatting
+- If asked "how much longer" or similar, give remaining time and arrival time
+
+RESPONSE FORMAT (JSON):
+{
+  "text": "Your conversational response",
+  "recommendedPlaceIndex": 0 | 1 | 2 | null,
+  "intent": "add_stop" | "info" | "change_destination" | "general"
+}`;
+}
+
+/**
+ * Smart navigation chat with integrated place search
+ * This is the main function for intelligent in-navigation assistance
+ */
+export async function smartNavigationChat(
+  message: string,
+  navContext: NavigationContext,
+  searchPlaces: (query: string, coords: Coordinates, type?: string) => Promise<NearbyPlace[]>
+): Promise<SmartNavigationResponse> {
+  try {
+    // Check if offline
+    if (!checkOnline()) {
+      return {
+        text: "I'm offline right now. Keep following the current route!",
+      };
+    }
+
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      return { text: "Sorry, I can't respond right now." };
+    }
+
+    // Detect if user is looking for a place
+    const placeIntent = detectPlaceIntent(message);
+    let nearbyPlaces: NearbyPlace[] = [];
+
+    // If user is looking for something, search for it
+    if (placeIntent.type && placeIntent.query) {
+      const searchResults = await searchPlaces(
+        placeIntent.query,
+        navContext.userLocation,
+        placeIntent.type
+      );
+
+      // Calculate distance and detour time for each place
+      nearbyPlaces = searchResults.slice(0, 3).map((place) => {
+        const distanceFromUser = Math.round(
+          calculateDistanceBetween(navContext.userLocation, place.coordinates)
+        );
+        const distanceToDestination = calculateDistanceBetween(
+          place.coordinates,
+          navContext.destination.coordinates
+        );
+        const directDistance = navContext.distanceRemaining;
+
+        // Detour = (user→place + place→dest) - direct
+        const detourDistance = distanceFromUser + distanceToDestination - directDistance;
+        const detourTime = estimateWalkingTime(Math.max(0, detourDistance));
+
+        return {
+          ...place,
+          distance: distanceFromUser,
+          detourTime: detourTime > 0 ? detourTime : 1, // At least 1 min for the stop itself
+        };
+      });
+    }
+
+    // Build prompt with context
+    const systemPrompt = buildSmartNavigationPrompt(navContext, nearbyPlaces);
+
+    const response = await fetch(OPENAI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message },
+        ],
+        max_tokens: 300,
+        temperature: 0.7,
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      throw new Error('No content in response');
+    }
+
+    const parsed = safeJsonParse<{
+      text?: string;
+      recommendedPlaceIndex?: number;
+      intent?: string;
+    }>(content, 'smartNavigationChat');
+
+    if (!parsed) {
+      throw new Error('Failed to parse response');
+    }
+
+    // Build response with action buttons if places were found
+    const result: SmartNavigationResponse = {
+      text: parsed.text || "I'm not sure how to help with that.",
+    };
+
+    if (nearbyPlaces.length > 0) {
+      result.places = nearbyPlaces;
+
+      // Generate action buttons for the recommended place
+      const recommendedIndex = parsed.recommendedPlaceIndex ?? 0;
+      const recommendedPlace = nearbyPlaces[recommendedIndex];
+
+      if (recommendedPlace) {
+        result.suggestedActions = [
+          {
+            label: `Add stop (+${recommendedPlace.detourTime} min)`,
+            type: 'add_stop',
+            placeId: recommendedPlace.id,
+          },
+          {
+            label: 'Go there instead',
+            type: 'change_destination',
+            placeId: recommendedPlace.id,
+          },
+          {
+            label: 'Show on map',
+            type: 'show_on_map',
+            placeId: recommendedPlace.id,
+          },
+        ];
+
+        result.routeChange = {
+          newEta: formatArrivalTime(
+            navContext.totalDuration *
+              (navContext.distanceRemaining / navContext.totalDistance) +
+              recommendedPlace.detourTime!
+          ),
+          addedTime: recommendedPlace.detourTime!,
+          addedDistance: recommendedPlace.distance! * 2, // Rough estimate
+        };
+      }
+    }
+
+    return result;
+  } catch (error) {
+    return {
+      text: "Sorry, I'm having trouble responding. Try again in a moment.",
+    };
+  }
+}
+
+/**
+ * Format arrival time from minutes
+ */
+function formatArrivalTime(minutes: number): string {
+  const arrival = new Date();
+  arrival.setMinutes(arrival.getMinutes() + Math.round(minutes));
+  return arrival.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
 }
 
 /**
