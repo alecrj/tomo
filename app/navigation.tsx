@@ -52,6 +52,8 @@ import {
   Train,
   Footprints,
   Compass,
+  List,
+  Check,
 } from 'lucide-react-native';
 import { colors, spacing, borders, shadows, typography } from '../constants/theme';
 import { getDirections, getMultiWaypointRoute, TravelMode } from '../services/routes';
@@ -218,6 +220,10 @@ export default function NavigationScreen() {
   }>>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const chatSlideAnim = useRef(new Animated.Value(0)).current;
+
+  // Step list expansion state
+  const [showStepList, setShowStepList] = useState(false);
+  const stepListAnim = useRef(new Animated.Value(0)).current;
 
   const routeCoordinates = route?.polyline ? decodePolyline(route.polyline) : [];
 
@@ -471,6 +477,21 @@ export default function NavigationScreen() {
       useNativeDriver: true,
     }).start();
   }, [showChat]);
+
+  // Step list animation
+  useEffect(() => {
+    Animated.timing(stepListAnim, {
+      toValue: showStepList ? 1 : 0,
+      duration: 250,
+      useNativeDriver: false, // Can't use native driver for height
+    }).start();
+  }, [showStepList]);
+
+  // Toggle step list
+  const toggleStepList = () => {
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
+    setShowStepList(!showStepList);
+  };
 
   // Travel mode change handler
   const handleTravelModeChange = (mode: TravelMode) => {
@@ -745,7 +766,12 @@ export default function NavigationScreen() {
       {/* Turn Instruction Header - Apple Maps style */}
       {currentStep && !hasArrived && !showChat && (
         <SafeAreaView style={styles.turnHeader} edges={['top']}>
-          <View style={styles.turnHeaderContent}>
+          {/* Main turn header - tappable to expand step list */}
+          <TouchableOpacity
+            style={styles.turnHeaderContent}
+            onPress={toggleStepList}
+            activeOpacity={0.8}
+          >
             <View style={[
               styles.maneuverIcon,
               currentStep.mode === 'train' && styles.transitIcon,
@@ -781,7 +807,113 @@ export default function NavigationScreen() {
                 </>
               )}
             </View>
-          </View>
+            {/* Expand/collapse indicator */}
+            <View style={styles.expandIndicator}>
+              <List size={20} color={colors.text.secondary} />
+              {showStepList ? (
+                <ChevronUp size={16} color={colors.text.secondary} />
+              ) : (
+                <ChevronDown size={16} color={colors.text.secondary} />
+              )}
+            </View>
+          </TouchableOpacity>
+
+          {/* Expandable Step List */}
+          {showStepList && route?.steps && (
+            <Animated.View
+              style={[
+                styles.stepListContainer,
+                {
+                  opacity: stepListAnim,
+                  maxHeight: stepListAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 300],
+                  }),
+                },
+              ]}
+            >
+              <ScrollView
+                style={styles.stepList}
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled
+              >
+                {route.steps.map((step, index) => {
+                  const isCurrentStep = index === currentStepIndex;
+                  const isPastStep = index < currentStepIndex;
+                  const isTransit = step.mode === 'train' || step.mode === 'bus';
+
+                  return (
+                    <View
+                      key={index}
+                      style={[
+                        styles.stepListItem,
+                        isCurrentStep && styles.stepListItemCurrent,
+                        isPastStep && styles.stepListItemPast,
+                      ]}
+                    >
+                      {/* Step indicator */}
+                      <View style={[
+                        styles.stepIndicator,
+                        isCurrentStep && styles.stepIndicatorCurrent,
+                        isPastStep && styles.stepIndicatorPast,
+                      ]}>
+                        {isPastStep ? (
+                          <Check size={12} color={colors.text.inverse} />
+                        ) : isTransit ? (
+                          step.mode === 'train' ? (
+                            <Train size={12} color={isCurrentStep ? colors.text.inverse : colors.text.secondary} />
+                          ) : (
+                            <Car size={12} color={isCurrentStep ? colors.text.inverse : colors.text.secondary} />
+                          )
+                        ) : (
+                          <Footprints size={12} color={isCurrentStep ? colors.text.inverse : colors.text.secondary} />
+                        )}
+                      </View>
+
+                      {/* Step content */}
+                      <View style={styles.stepContent}>
+                        <Text
+                          style={[
+                            styles.stepInstruction,
+                            isCurrentStep && styles.stepInstructionCurrent,
+                            isPastStep && styles.stepInstructionPast,
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {isTransit && step.line ? `${step.line}: ` : ''}
+                          {step.instruction.replace(/<[^>]*>/g, '')}
+                        </Text>
+                        <View style={styles.stepMeta}>
+                          {step.distance && (
+                            <Text style={[styles.stepMetaText, isPastStep && styles.stepMetaTextPast]}>
+                              {formatDistance(step.distance)} {formatDistanceUnit(step.distance)}
+                            </Text>
+                          )}
+                          {step.duration && (
+                            <Text style={[styles.stepMetaText, isPastStep && styles.stepMetaTextPast]}>
+                              {Math.round(step.duration)} min
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+
+                {/* Final destination */}
+                <View style={styles.stepListItem}>
+                  <View style={[styles.stepIndicator, styles.stepIndicatorDestination]}>
+                    <MapPin size={12} color={colors.text.inverse} />
+                  </View>
+                  <View style={styles.stepContent}>
+                    <Text style={styles.stepInstructionCurrent} numberOfLines={1}>
+                      Arrive at {currentDestination?.title}
+                    </Text>
+                  </View>
+                </View>
+              </ScrollView>
+            </Animated.View>
+          )}
 
           {/* Travel Mode Selector */}
           <View style={styles.travelModeSelector}>
@@ -1104,6 +1236,86 @@ const styles = StyleSheet.create({
   turnInfo: {
     flex: 1,
   },
+  expandIndicator: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: spacing.md,
+  },
+
+  // Step list styles
+  stepListContainer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border.default,
+    overflow: 'hidden',
+  },
+  stepList: {
+    maxHeight: 280,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  stepListItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: spacing.sm,
+    gap: spacing.md,
+  },
+  stepListItemCurrent: {
+    backgroundColor: colors.accent.muted,
+    marginHorizontal: -spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: borders.radius.md,
+  },
+  stepListItemPast: {
+    opacity: 0.6,
+  },
+  stepIndicator: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.background.tertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  stepIndicatorCurrent: {
+    backgroundColor: colors.accent.primary,
+  },
+  stepIndicatorPast: {
+    backgroundColor: colors.status.success,
+  },
+  stepIndicatorDestination: {
+    backgroundColor: '#EA4335', // Red for destination
+  },
+  stepContent: {
+    flex: 1,
+  },
+  stepInstruction: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.secondary,
+    lineHeight: 18,
+  },
+  stepInstructionCurrent: {
+    fontSize: typography.sizes.base,
+    color: colors.text.primary,
+    fontWeight: typography.weights.medium,
+  },
+  stepInstructionPast: {
+    color: colors.text.tertiary,
+  },
+  stepMeta: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: 2,
+  },
+  stepMetaText: {
+    fontSize: typography.sizes.xs,
+    color: colors.text.tertiary,
+  },
+  stepMetaTextPast: {
+    opacity: 0.7,
+  },
+
   distanceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',

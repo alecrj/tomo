@@ -479,8 +479,14 @@ export async function getWalkingDirections(
   origin: Coordinates,
   destination: Coordinates
 ): Promise<TransitRoute | null> {
+  console.log('[Routes] getWalkingDirections called:', {
+    origin: { lat: origin.latitude, lng: origin.longitude },
+    destination: { lat: destination.latitude, lng: destination.longitude },
+  });
+
   // Check offline status first
   if (!checkOnline()) {
+    console.log('[Routes] Offline - using cached or fallback route');
     const cached = useOfflineStore.getState().getCachedRoute(origin, destination, 'WALK');
     if (cached) return cached;
     return createFallbackRoute(origin, destination, 'WALK');
@@ -509,6 +515,7 @@ export async function getWalkingDirections(
       units: 'METRIC',
     };
 
+    console.log('[Routes] Sending request to Routes API');
     const response = await fetch(ROUTES_API_URL, {
       method: 'POST',
       headers: {
@@ -520,10 +527,18 @@ export async function getWalkingDirections(
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.log('[Routes] API error:', response.status, errorText);
       throw new Error(`Routes API error: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log('[Routes] API response:', {
+      hasRoutes: !!data.routes,
+      routeCount: data.routes?.length,
+      duration: data.routes?.[0]?.duration,
+      distanceMeters: data.routes?.[0]?.distanceMeters,
+    });
 
     if (!data.routes || data.routes.length === 0) {
       // Fallback: create a basic walking route using straight-line distance
@@ -563,17 +578,22 @@ export async function getWalkingDirections(
 
     // Get duration - fallback to estimation if not provided or 0
     let totalDuration = Math.round(parseDuration(route.duration));
+    console.log('[Routes] Parsed duration:', { raw: route.duration, parsed: totalDuration });
     if (!totalDuration || totalDuration === 0) {
       totalDuration = estimateWalkingDuration(totalDistance);
+      console.log('[Routes] Using fallback duration estimation:', totalDuration);
     }
 
-    return {
+    const result = {
       steps,
       totalDuration,
       totalDistance,
       polyline: route.polyline?.encodedPolyline || '',
     };
+    console.log('[Routes] Final walking route:', { duration: result.totalDuration, distance: result.totalDistance });
+    return result;
   } catch (error) {
+    console.log('[Routes] getWalkingDirections error:', error);
     // Even on error, try to return a basic estimate
     try {
       const fallbackDistance = calculateStraightLineDistance(origin, destination);

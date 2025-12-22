@@ -41,9 +41,10 @@ async function verifyPlaceOpen(
   location: Coordinates
 ): Promise<{ isOpen: boolean; hours?: string; coordinates?: Coordinates; address?: string } | null> {
   try {
+    console.log('[OpenAI] verifyPlaceOpen searching for:', placeName, 'near:', location);
     const place = await searchPlace(placeName, location);
     if (place) {
-      return {
+      const result = {
         isOpen: place.regularOpeningHours?.openNow ?? true, // Default to true if unknown
         hours: place.regularOpeningHours?.weekdayDescriptions?.[0],
         // Return REAL coordinates from Google Places - critical for accurate navigation
@@ -53,9 +54,17 @@ async function verifyPlaceOpen(
         } : undefined,
         address: place.formattedAddress,
       };
+      console.log('[OpenAI] verifyPlaceOpen found:', {
+        name: place.displayName?.text,
+        coordinates: result.coordinates,
+        isOpen: result.isOpen,
+      });
+      return result;
     }
+    console.log('[OpenAI] verifyPlaceOpen: place not found');
     return null;
   } catch (error) {
+    console.log('[OpenAI] verifyPlaceOpen error:', error);
     return null;
   }
 }
@@ -310,6 +319,9 @@ export async function chat(
 
     // Enrich placeCard with real data from Google APIs
     if (result.placeCard && result.placeCard.name) {
+      console.log('[OpenAI] Enriching placeCard:', result.placeCard.name);
+      console.log('[OpenAI] GPT coordinates:', result.placeCard.coordinates);
+
       // Verify place is open using Google Places API - also gets REAL coordinates
       try {
         const openStatus = await verifyPlaceOpen(result.placeCard.name, context.location);
@@ -321,7 +333,10 @@ export async function chat(
 
           // CRITICAL: Replace GPT's coordinates with REAL coordinates from Google Places
           if (openStatus.coordinates) {
+            console.log('[OpenAI] Replacing GPT coords with Google Places coords:', openStatus.coordinates);
             result.placeCard.coordinates = openStatus.coordinates;
+          } else {
+            console.log('[OpenAI] WARNING: No coordinates from Google Places, keeping GPT coords');
           }
 
           // Update address with real address from Google
@@ -349,19 +364,23 @@ export async function chat(
           }
         }
       } catch (openError) {
-        // Silently continue if open status check fails
+        console.log('[OpenAI] Open status check failed:', openError);
       }
 
       // Fetch real walking distance/time from Routes API using REAL coordinates
       if (result.placeCard.coordinates) {
         try {
+          console.log('[OpenAI] Getting walking directions from:', context.location, 'to:', result.placeCard.coordinates);
           const route = await getWalkingDirections(context.location, result.placeCard.coordinates);
           if (route) {
             const walkMins = Math.round(route.totalDuration);
+            console.log('[OpenAI] Walking route result:', { duration: route.totalDuration, distance: route.totalDistance, walkMins });
             result.placeCard.distance = `${walkMins} min walk`;
+          } else {
+            console.log('[OpenAI] WARNING: No route returned from getWalkingDirections');
           }
         } catch (routeError) {
-          // Silently continue if route fetch fails
+          console.log('[OpenAI] Route fetch failed:', routeError);
         }
       }
 

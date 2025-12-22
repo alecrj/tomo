@@ -1,24 +1,37 @@
 # Tomo - AI Travel Companion
 
-## Current Status (Session 23)
+## Current Status (Session 23 - Continued)
 
 **Last Updated:** December 22, 2024
 
 **Map Solution:** Apple Maps tiles + Google APIs for places/routes data. Google Maps tiles had persistent rendering issues.
 
-### Session 23 Progress
+### Session 23 Progress (Continued)
 
-**Navigation Enhancements:**
+**Navigation Enhancements (Part 2):**
+- ✅ Fixed direction cone rotation (negated heading value)
+- ✅ **Expandable step list UI** - tap turn header to see all navigation steps
+  - Shows current step highlighted
+  - Past steps shown with checkmark
+  - Transit steps show line names
+  - Distance and time for each step
+  - Final destination at bottom
+- ✅ Added comprehensive debug logging for route time discrepancy investigation
+
+**Previous Navigation Work:**
 - ✅ Travel mode selector (Walk/Transit/Drive)
 - ✅ Custom user location marker with direction cone (like Google Maps)
 - ✅ Transit support with train/bus icons and line names
 - ✅ Voice guidance ready (requires native rebuild for expo-speech)
-- ✅ Routes API uses user's language preference (not hardcoded en-US)
-- ✅ Real coordinates from Google Places (fixes inaccurate routes)
+- ✅ Routes API uses user's language preference
+- ✅ Real coordinates from Google Places
 
-**Known Issues to Fix:**
-- [ ] Direction cone rotation inverted (turn left → cone goes right) - FIXED
-- [ ] Need step list UI (show all/next steps)
+**Debug Logging Added:**
+- `[OpenAI]` - Tracks GPT coordinates vs Google Places coordinates
+- `[Routes]` - Tracks Routes API requests and responses
+- `[Home]` - Tracks destination coordinates when "Take me there" is tapped
+
+Check console logs when testing to diagnose any remaining route time issues.
 
 ### App Structure
 
@@ -47,6 +60,7 @@
 - **Apple Maps-style navigation UI** (turn header, end route, stats bar)
 - **Travel mode selector** (Walk/Transit/Drive with route recalculation)
 - **Direction cone on user marker** (shows which way you're facing)
+- **Expandable step list** (tap turn header to see all steps)
 - **Smart navigation chat** (find places, add stops mid-route)
 - **Waypoint support** (multi-stop routes)
 - **Transit UI** (train/bus icons, line names, stop details)

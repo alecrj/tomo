@@ -307,6 +307,10 @@ export default function HomeScreen() {
     switch (action.type) {
       case 'navigate':
         if (placeCard) {
+          console.log('[Home] Navigate action - placeCard coordinates:', placeCard.coordinates);
+          console.log('[Home] Navigate action - placeCard distance:', placeCard.distance);
+          console.log('[Home] Navigate action - current user location:', coordinates);
+
           const destination: Destination = {
             id: `dest-${Date.now()}`,
             title: placeCard.name,
@@ -326,6 +330,7 @@ export default function HomeScreen() {
             },
             spots: [],
           };
+          console.log('[Home] Destination created with coordinates:', destination.coordinates);
           viewDestination(destination);
           router.push('/navigation');
         }
