@@ -54,6 +54,7 @@ import {
   Compass,
   List,
   Check,
+  Layers,
 } from 'lucide-react-native';
 import { colors, spacing, borders, shadows, typography } from '../constants/theme';
 import { getDirections, getMultiWaypointRoute, TravelMode } from '../services/routes';
@@ -208,6 +209,7 @@ export default function NavigationScreen() {
   const [travelMode, setTravelMode] = useState<TravelMode>('WALK');
   const [lastSpokenStep, setLastSpokenStep] = useState(-1);
   const [bearingToDestination, setBearingToDestination] = useState(0);
+  const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
 
   // Chat state
   const [showChat, setShowChat] = useState(false);
@@ -712,7 +714,7 @@ export default function NavigationScreen() {
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
         provider={MAP_PROVIDER}
-        mapType="mutedStandard"
+        mapType={mapType === 'standard' ? 'mutedStandard' : mapType}
         userInterfaceStyle="dark"
         showsUserLocation={false}
         showsMyLocationButton={false}
@@ -740,11 +742,15 @@ export default function NavigationScreen() {
         )}
 
         {/* Custom user location marker with direction cone */}
+        {/*
+          - When following user (map rotates with heading): cone points UP (rotation=0)
+          - When in overview mode (map is north-up): cone shows actual heading
+          - NO flat prop so marker stays upright on screen regardless of map pan/rotation
+        */}
         <Marker
           coordinate={coordinates}
           anchor={{ x: 0.5, y: 0.5 }}
-          flat
-          rotation={isNaN(heading) ? 0 : heading}
+          rotation={isFollowingUser && !isOverviewMode ? 0 : (isNaN(heading) ? 0 : heading)}
         >
           <View style={styles.userLocationContainer}>
             {/* Direction cone/beam - points in direction user is facing */}
@@ -987,6 +993,18 @@ export default function NavigationScreen() {
           </TouchableOpacity>
         )}
 
+        {/* Add Stop button - like Apple Maps */}
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={() => {
+            safeHaptics.impact(ImpactFeedbackStyle.Medium);
+            setChatInput('Find a stop along my route');
+            setShowChat(true);
+          }}
+        >
+          <Plus size={20} color={colors.accent.primary} />
+        </TouchableOpacity>
+
         {/* Mute button */}
         <TouchableOpacity
           style={styles.controlButton}
@@ -1011,6 +1029,22 @@ export default function NavigationScreen() {
           onPress={() => setShowChat(!showChat)}
         >
           <MessageCircle size={20} color={showChat ? colors.text.inverse : colors.text.primary} />
+        </TouchableOpacity>
+
+        {/* Map type toggle (standard/satellite/hybrid) */}
+        <TouchableOpacity
+          style={[styles.controlButton, mapType !== 'standard' && styles.controlButtonActive]}
+          onPress={() => {
+            safeHaptics.impact(ImpactFeedbackStyle.Light);
+            // Cycle through: standard → satellite → hybrid → standard
+            setMapType(prev => {
+              if (prev === 'standard') return 'satellite';
+              if (prev === 'satellite') return 'hybrid';
+              return 'standard';
+            });
+          }}
+        >
+          <Layers size={20} color={mapType !== 'standard' ? colors.text.inverse : colors.text.primary} />
         </TouchableOpacity>
       </View>
 
