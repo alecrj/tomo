@@ -347,9 +347,12 @@ export default function NavigationScreen() {
     const subscribe = async () => {
       Magnetometer.setUpdateInterval(300);
       subscription = Magnetometer.addListener((data) => {
-        let angle = Math.atan2(data.y, data.x) * (180 / Math.PI);
-        if (angle < 0) angle += 360;
-        const newHeading = 360 - angle;
+        // Correct formula: atan2(x, y) gives heading from magnetic north
+        // x points right, y points up (top of phone)
+        // When facing north: x≈0, y>0 → heading=0°
+        // When facing east: x>0, y≈0 → heading=90°
+        let newHeading = Math.atan2(data.x, data.y) * (180 / Math.PI);
+        if (newHeading < 0) newHeading += 360;
 
         if (Math.abs(newHeading - lastHeading) > 5) {
           lastHeading = newHeading;
@@ -689,9 +692,9 @@ export default function NavigationScreen() {
     currentDestination.coordinates.latitude,
     currentDestination.coordinates.longitude
   );
-  const etaMinutes = route
-    ? Math.round(route.totalDuration * (distanceToDestination / route.totalDistance))
-    : 0;
+  // Show route's actual duration (matches what chat showed)
+  // This is more accurate than estimating based on straight-line distance
+  const etaMinutes = route ? Math.round(route.totalDuration) : 0;
 
   return (
     <View style={styles.container}>
@@ -734,7 +737,7 @@ export default function NavigationScreen() {
           coordinate={coordinates}
           anchor={{ x: 0.5, y: 0.5 }}
           flat
-          rotation={-heading}
+          rotation={heading}
         >
           <View style={styles.userLocationContainer}>
             {/* Direction cone/beam - points up, rotates with heading */}
