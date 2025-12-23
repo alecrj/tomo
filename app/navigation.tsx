@@ -12,6 +12,7 @@ import {
   StatusBar,
   ScrollView,
   Animated,
+  Share,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -55,6 +56,9 @@ import {
   List,
   Check,
   Layers,
+  Share2,
+  Gauge,
+  Bookmark,
 } from 'lucide-react-native';
 import { colors, spacing, borders, shadows, typography } from '../constants/theme';
 import { getDirections, getMultiWaypointRoute, TravelMode } from '../services/routes';
@@ -210,6 +214,7 @@ export default function NavigationScreen() {
   const [lastSpokenStep, setLastSpokenStep] = useState(-1);
   const [bearingToDestination, setBearingToDestination] = useState(0);
   const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
+  const [currentSpeed, setCurrentSpeed] = useState<number | null>(null); // m/s
 
   // Chat state
   const [showChat, setShowChat] = useState(false);
@@ -373,6 +378,34 @@ export default function NavigationScreen() {
     return () => subscription?.remove();
   }, []);
 
+  // Speed tracking
+  useEffect(() => {
+    let subscription: Location.LocationSubscription | null = null;
+
+    const startTracking = async () => {
+      try {
+        subscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 2000, // Update every 2 seconds
+            distanceInterval: 5, // Or when moved 5 meters
+          },
+          (location) => {
+            // Speed is in m/s, can be -1 if unavailable
+            if (location.coords.speed !== null && location.coords.speed >= 0) {
+              setCurrentSpeed(location.coords.speed);
+            }
+          }
+        );
+      } catch (error) {
+        console.log('[Navigation] Speed tracking error:', error);
+      }
+    };
+
+    startTracking();
+    return () => subscription?.remove();
+  }, []);
+
   // Camera follow - navigation mode
   useEffect(() => {
     if (isFollowingUser && !isOverviewMode && coordinates && mapRef.current && !hasArrived && route) {
@@ -520,6 +553,28 @@ export default function NavigationScreen() {
     if (Speech) Speech.stop();
     exitCompanionMode();
     router.back();
+  };
+
+  // Share ETA with someone
+  const handleShareETA = async () => {
+    if (!currentDestination || !route) return;
+
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
+
+    const arrivalTime = new Date();
+    arrivalTime.setMinutes(arrivalTime.getMinutes() + etaMinutes);
+    const timeString = arrivalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const message = `I'm on my way to ${currentDestination.title}! 🚶\n\nETA: ${timeString} (${etaMinutes} min)\nDistance: ${formatDistance(distanceToDestination)} ${formatDistanceUnit(distanceToDestination)}`;
+
+    try {
+      await Share.share({
+        message,
+        title: `ETA to ${currentDestination.title}`,
+      });
+    } catch (error) {
+      console.log('[Navigation] Share error:', error);
+    }
   };
 
   const handleRecenter = () => {
@@ -743,18 +798,26 @@ export default function NavigationScreen() {
 
         {/* Custom user location marker with direction cone */}
         {/*
-          - When following user (map rotates with heading): cone points UP (rotation=0)
-          - When in overview mode (map is north-up): cone shows actual heading
-          - NO flat prop so marker stays upright on screen regardless of map pan/rotation
+          Cone ALWAYS points UP on screen (like Apple/Google Maps)
+          The MAP rotates to show your direction, not the marker
+          flat={false} = marker stays screen-aligned (faces camera)
+          rotation={0} = no rotation applied to marker
+          tracksViewChanges={false} = prevents re-rendering on map changes
         */}
         <Marker
           coordinate={coordinates}
           anchor={{ x: 0.5, y: 0.5 }}
-          rotation={isFollowingUser && !isOverviewMode ? 0 : (isNaN(heading) ? 0 : heading)}
+          flat={false}
+          rotation={0}
+          tracksViewChanges={false}
+          zIndex={1000}
         >
-          <View style={styles.userLocationContainer}>
+          <View style={styles.userLocationContainer} pointerEvents="none">
             {/* Direction cone/beam - points in direction user is facing */}
-            <View style={styles.directionCone} />
+            {/* Only show cone when in following mode (map rotates with heading) */}
+            {isFollowingUser && !isOverviewMode && (
+              <View style={styles.directionCone} />
+            )}
             {/* Blue dot */}
             <View style={styles.userLocationDot}>
               <View style={styles.userLocationInner} />
@@ -1212,7 +1275,24 @@ export default function NavigationScreen() {
               </Text>
               <Text style={styles.statLabel}>Distance</Text>
             </View>
+            {/* Speed indicator - only show when walking/moving */}
+            {currentSpeed !== null && currentSpeed > 0.5 && (
+              <>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>
+                    {(currentSpeed * 3.6).toFixed(1)}
+                  </Text>
+                  <Text style={styles.statLabel}>km/h</Text>
+                </View>
+              </>
+            )}
           </View>
+
+          {/* Share ETA button */}
+          <TouchableOpacity style={styles.shareButton} onPress={handleShareETA}>
+            <Share2 size={20} color={colors.text.primary} />
+          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -1583,6 +1663,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.semibold,
+  },
+  shareButton: {
+    width: 44,
+    height: 44,
+    backgroundColor: colors.surface.card,
+    borderRadius: borders.radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statsContainer: {
     flex: 1,
