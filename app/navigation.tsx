@@ -16,7 +16,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, Camera } from 'react-native-maps';
-import { Magnetometer } from 'expo-sensors';
+import * as Location from 'expo-location';
 // Speech is optional - requires native rebuild
 let Speech: any = null;
 try {
@@ -339,26 +339,32 @@ export default function NavigationScreen() {
     recalculateRoute();
   }, [waypoints.length]);
 
-  // Compass heading subscription
+  // Compass heading subscription using expo-location (same as Apple/Google Maps)
   useEffect(() => {
-    let subscription: { remove: () => void } | null = null;
+    let subscription: Location.LocationSubscription | null = null;
     let lastHeading = 0;
 
     const subscribe = async () => {
-      Magnetometer.setUpdateInterval(300);
-      subscription = Magnetometer.addListener((data) => {
-        // Correct formula: atan2(x, y) gives heading from magnetic north
-        // x points right, y points up (top of phone)
-        // When facing north: x≈0, y>0 → heading=0°
-        // When facing east: x>0, y≈0 → heading=90°
-        let newHeading = Math.atan2(data.x, data.y) * (180 / Math.PI);
-        if (newHeading < 0) newHeading += 360;
+      try {
+        // Use expo-location's heading which is properly calibrated
+        // This is the same API that Apple Maps and Google Maps use internally
+        subscription = await Location.watchHeadingAsync((headingData) => {
+          // trueHeading is relative to true north (accounts for magnetic declination)
+          // magHeading is relative to magnetic north
+          // Use trueHeading when available, fallback to magHeading
+          const newHeading = headingData.trueHeading >= 0
+            ? headingData.trueHeading
+            : headingData.magHeading;
 
-        if (Math.abs(newHeading - lastHeading) > 5) {
-          lastHeading = newHeading;
-          setHeading(newHeading);
-        }
-      });
+          // Only update if heading changed significantly (reduces jitter)
+          if (Math.abs(newHeading - lastHeading) > 3) {
+            lastHeading = newHeading;
+            setHeading(newHeading);
+          }
+        });
+      } catch (error) {
+        console.log('[Navigation] Heading subscription error:', error);
+      }
     };
 
     subscribe();
@@ -369,7 +375,8 @@ export default function NavigationScreen() {
   useEffect(() => {
     if (isFollowingUser && !isOverviewMode && coordinates && mapRef.current && !hasArrived && route) {
       const OFFSET_DISTANCE = 0.0006;
-      const headingRad = (heading * Math.PI) / 180;
+      const safeHeading = isNaN(heading) ? 0 : heading;
+      const headingRad = (safeHeading * Math.PI) / 180;
 
       const offsetLat = coordinates.latitude + OFFSET_DISTANCE * Math.cos(headingRad);
       const offsetLng = coordinates.longitude + OFFSET_DISTANCE * Math.sin(headingRad);
@@ -377,7 +384,7 @@ export default function NavigationScreen() {
       const camera: Camera = {
         center: { latitude: offsetLat, longitude: offsetLng },
         pitch: 60,
-        heading: heading,
+        heading: isNaN(heading) ? 0 : heading,
         zoom: 18,
         altitude: 300,
       };
@@ -737,10 +744,10 @@ export default function NavigationScreen() {
           coordinate={coordinates}
           anchor={{ x: 0.5, y: 0.5 }}
           flat
-          rotation={heading}
+          rotation={isNaN(heading) ? 0 : heading}
         >
           <View style={styles.userLocationContainer}>
-            {/* Direction cone/beam - points up, rotates with heading */}
+            {/* Direction cone/beam - points in direction user is facing */}
             <View style={styles.directionCone} />
             {/* Blue dot */}
             <View style={styles.userLocationDot}>
