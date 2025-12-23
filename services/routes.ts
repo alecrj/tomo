@@ -344,6 +344,22 @@ function parseTimeString(timeText: string): Date | null {
 // Travel mode type
 export type TravelMode = 'WALK' | 'TRANSIT' | 'DRIVE';
 
+// Route preferences for avoid options
+export interface RoutePreferences {
+  avoidHighways?: boolean;
+  avoidTolls?: boolean;
+  avoidFerries?: boolean;
+}
+
+// Alternate route with metadata
+export interface AlternateRoute {
+  route: TransitRoute;
+  label: string;           // e.g., "Fastest", "Shortest", "Scenic"
+  summary: string;         // e.g., "via Main St"
+  isFastest: boolean;
+  isShortest: boolean;
+}
+
 /**
  * Get directions for any travel mode
  */
@@ -624,6 +640,160 @@ export async function getDirectionsHome(
   homeBase: Coordinates
 ): Promise<TransitRoute | null> {
   return getTransitDirections(currentLocation, homeBase);
+}
+
+/**
+ * Get alternate routes with preferences (avoid highways, tolls, etc.)
+ * Returns up to 3 route options
+ */
+export async function getAlternateRoutes(
+  origin: Coordinates,
+  destination: Coordinates,
+  mode: TravelMode = 'DRIVE',
+  preferences?: RoutePreferences
+): Promise<AlternateRoute[]> {
+  // Check offline status first
+  if (!checkOnline()) {
+    const fallback = createFallbackRoute(origin, destination, mode);
+    return [{
+      route: fallback,
+      label: 'Offline Route',
+      summary: 'Estimated route (offline)',
+      isFastest: true,
+      isShortest: true,
+    }];
+  }
+
+  try {
+    // Build avoid modifiers based on preferences
+    const routeModifiers: any = {};
+    if (preferences?.avoidHighways) routeModifiers.avoidHighways = true;
+    if (preferences?.avoidTolls) routeModifiers.avoidTolls = true;
+    if (preferences?.avoidFerries) routeModifiers.avoidFerries = true;
+
+    const requestBody: any = {
+      origin: {
+        location: {
+          latLng: {
+            latitude: origin.latitude,
+            longitude: origin.longitude,
+          },
+        },
+      },
+      destination: {
+        location: {
+          latLng: {
+            latitude: destination.latitude,
+            longitude: destination.longitude,
+          },
+        },
+      },
+      travelMode: mode,
+      computeAlternativeRoutes: true, // Request alternate routes
+      languageCode: getLanguageCode(),
+      units: 'METRIC',
+    };
+
+    // Add route modifiers if any preferences set
+    if (Object.keys(routeModifiers).length > 0) {
+      requestBody.routeModifiers = routeModifiers;
+    }
+
+    // Add traffic awareness for driving
+    if (mode === 'DRIVE') {
+      requestBody.routingPreference = 'TRAFFIC_AWARE';
+    }
+
+    const response = await fetch(ROUTES_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': config.googlePlacesApiKey,
+        'X-Goog-FieldMask': 'routes.legs,routes.distanceMeters,routes.duration,routes.polyline,routes.description,routes.routeLabels',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Routes API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.routes || data.routes.length === 0) {
+      return [];
+    }
+
+    // Find fastest and shortest routes
+    let fastestDuration = Infinity;
+    let shortestDistance = Infinity;
+
+    const parsedRoutes = data.routes.map((route: GoogleRoute) => {
+      const duration = Math.round(parseDuration(route.duration));
+      const distance = route.distanceMeters;
+
+      if (duration < fastestDuration) fastestDuration = duration;
+      if (distance < shortestDistance) shortestDistance = distance;
+
+      return {
+        duration,
+        distance,
+        route,
+      };
+    });
+
+    // Build alternate routes with labels
+    return parsedRoutes.map((parsed: any, index: number) => {
+      const route = parsed.route as GoogleRoute;
+      const duration = parsed.duration;
+      const distance = parsed.distance;
+
+      // Parse the route
+      const steps: TransitStep[] = route.legs.flatMap((leg) =>
+        leg.steps.map((step) => ({
+          mode: mode === 'WALK' ? 'walk' as const : 'taxi' as const,
+          instruction: step.navigationInstruction?.instructions || 'Continue',
+          duration: parseDuration(step.staticDuration),
+          distance: step.distanceMeters,
+        }))
+      );
+
+      const transitRoute: TransitRoute = {
+        steps,
+        totalDuration: duration,
+        totalDistance: distance,
+        polyline: route.polyline?.encodedPolyline || '',
+      };
+
+      const isFastest = duration === fastestDuration;
+      const isShortest = distance === shortestDistance;
+
+      // Generate label
+      let label = `Route ${index + 1}`;
+      if (isFastest && isShortest) {
+        label = 'Best';
+      } else if (isFastest) {
+        label = 'Fastest';
+      } else if (isShortest) {
+        label = 'Shortest';
+      }
+
+      // Generate summary from route description or first step
+      const summary = (route as any).description ||
+        steps[0]?.instruction?.substring(0, 30) + '...' ||
+        `${Math.round(distance / 1000)} km`;
+
+      return {
+        route: transitRoute,
+        label,
+        summary,
+        isFastest,
+        isShortest,
+      };
+    });
+  } catch (error) {
+    return [];
+  }
 }
 
 /**

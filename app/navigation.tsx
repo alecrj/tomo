@@ -59,9 +59,11 @@ import {
   Share2,
   Gauge,
   Bookmark,
+  Settings,
+  AlertCircle,
 } from 'lucide-react-native';
 import { colors, spacing, borders, shadows, typography } from '../constants/theme';
-import { getDirections, getMultiWaypointRoute, TravelMode } from '../services/routes';
+import { getDirections, getMultiWaypointRoute, getAlternateRoutes, TravelMode, AlternateRoute, RoutePreferences } from '../services/routes';
 import { smartNavigationChat, NavigationContext, NearbyPlace, SmartNavigationResponse } from '../services/openai';
 import { searchNearby } from '../services/places';
 import { useNavigationStore } from '../stores/useNavigationStore';
@@ -216,6 +218,17 @@ export default function NavigationScreen() {
   const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
   const [currentSpeed, setCurrentSpeed] = useState<number | null>(null); // m/s
 
+  // Alternate routes state
+  const [alternateRoutes, setAlternateRoutes] = useState<AlternateRoute[]>([]);
+  const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
+  const [showRoutePicker, setShowRoutePicker] = useState(false);
+  const [routePreferences, setRoutePreferences] = useState<RoutePreferences>({
+    avoidHighways: false,
+    avoidTolls: false,
+    avoidFerries: false,
+  });
+  const [showPreferences, setShowPreferences] = useState(false);
+
   // Chat state
   const [showChat, setShowChat] = useState(false);
   const [chatInput, setChatInput] = useState('');
@@ -248,7 +261,7 @@ export default function NavigationScreen() {
     return bearing;
   }, []);
 
-  // Fetch route on mount and when travel mode changes
+  // Fetch route on mount and when travel mode/preferences change
   useEffect(() => {
     async function fetchRoute() {
       if (coordinates && currentDestination?.coordinates) {
@@ -273,32 +286,44 @@ export default function NavigationScreen() {
         setIsLoadingRoute(true);
         safeHaptics.impact(ImpactFeedbackStyle.Light);
 
-        const fetchedRoute = await getDirections(
-          fromCoords,
-          toCoords,
-          travelMode
-        );
-
-        if (fetchedRoute) {
-          // Debug: Log route result
-          console.log('[Navigation] Route result:', {
-            duration: fetchedRoute.totalDuration,
-            distance: fetchedRoute.totalDistance,
-            steps: fetchedRoute.steps?.length,
-          });
-
-          setRoute(fetchedRoute);
-          startNavigation(currentDestination, fetchedRoute);
-          setCurrentStepIndex(0);
-          setLastSpokenStep(-1);
+        // For driving mode, fetch alternate routes with preferences
+        if (travelMode === 'DRIVE') {
+          const alternates = await getAlternateRoutes(fromCoords, toCoords, 'DRIVE', routePreferences);
+          if (alternates.length > 0) {
+            setAlternateRoutes(alternates);
+            setSelectedRouteIndex(0);
+            const selectedRoute = alternates[0].route;
+            setRoute(selectedRoute);
+            startNavigation(currentDestination, selectedRoute);
+            setCurrentStepIndex(0);
+            setLastSpokenStep(-1);
+          }
         } else {
-          console.log('[Navigation] No route returned');
+          // For walking and transit, use single route
+          setAlternateRoutes([]);
+          const fetchedRoute = await getDirections(fromCoords, toCoords, travelMode);
+
+          if (fetchedRoute) {
+            // Debug: Log route result
+            console.log('[Navigation] Route result:', {
+              duration: fetchedRoute.totalDuration,
+              distance: fetchedRoute.totalDistance,
+              steps: fetchedRoute.steps?.length,
+            });
+
+            setRoute(fetchedRoute);
+            startNavigation(currentDestination, fetchedRoute);
+            setCurrentStepIndex(0);
+            setLastSpokenStep(-1);
+          } else {
+            console.log('[Navigation] No route returned');
+          }
         }
         setIsLoadingRoute(false);
       }
     }
     fetchRoute();
-  }, [currentDestination?.id, travelMode]);
+  }, [currentDestination?.id, travelMode, routePreferences]);
 
   // Recalculate route when waypoints change
   useEffect(() => {
@@ -547,6 +572,30 @@ export default function NavigationScreen() {
     setLastSpokenStep(-1);
   };
 
+  // Select an alternate route
+  const handleSelectRoute = (index: number) => {
+    if (index === selectedRouteIndex || !alternateRoutes[index]) return;
+    safeHaptics.impact(ImpactFeedbackStyle.Medium);
+    setSelectedRouteIndex(index);
+    const newRoute = alternateRoutes[index].route;
+    setRoute(newRoute);
+    if (currentDestination) {
+      startNavigation(currentDestination, newRoute);
+    }
+    setCurrentStepIndex(0);
+    setLastSpokenStep(-1);
+    setShowRoutePicker(false);
+  };
+
+  // Toggle route preference
+  const togglePreference = (pref: keyof RoutePreferences) => {
+    safeHaptics.impact(ImpactFeedbackStyle.Light);
+    setRoutePreferences(prev => ({
+      ...prev,
+      [pref]: !prev[pref],
+    }));
+  };
+
   // Handlers
   const handleEndRoute = () => {
     safeHaptics.impact(ImpactFeedbackStyle.Medium);
@@ -788,7 +837,24 @@ export default function NavigationScreen() {
           longitudeDelta: 0.005,
         }}
       >
-        {/* Route polyline */}
+        {/* Alternate route polylines (gray, behind selected route) */}
+        {alternateRoutes.map((altRoute, index) => {
+          if (index === selectedRouteIndex) return null; // Skip selected route
+          const polylineCoords = altRoute.route.polyline ? decodePolyline(altRoute.route.polyline) : [];
+          if (polylineCoords.length === 0) return null;
+          return (
+            <Polyline
+              key={`alt-${index}`}
+              coordinates={polylineCoords}
+              strokeColor="#888888"
+              strokeWidth={4}
+              tappable
+              onPress={() => handleSelectRoute(index)}
+            />
+          );
+        })}
+
+        {/* Selected route polyline */}
         {routeCoordinates.length > 0 && (
           <>
             <Polyline coordinates={routeCoordinates} strokeColor="#000000" strokeWidth={10} />
@@ -1293,6 +1359,152 @@ export default function NavigationScreen() {
           <TouchableOpacity style={styles.shareButton} onPress={handleShareETA}>
             <Share2 size={20} color={colors.text.primary} />
           </TouchableOpacity>
+
+          {/* Route options button - only show when driving with alternates */}
+          {travelMode === 'DRIVE' && alternateRoutes.length > 1 && (
+            <TouchableOpacity
+              style={styles.shareButton}
+              onPress={() => setShowRoutePicker(true)}
+            >
+              <Route size={20} color={colors.accent.primary} />
+            </TouchableOpacity>
+          )}
+
+          {/* Preferences button - only show when driving */}
+          {travelMode === 'DRIVE' && (
+            <TouchableOpacity
+              style={[
+                styles.shareButton,
+                (routePreferences.avoidHighways || routePreferences.avoidTolls) && styles.prefsActive,
+              ]}
+              onPress={() => setShowPreferences(true)}
+            >
+              <Settings size={20} color={colors.text.primary} />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* Route Picker Modal */}
+      {showRoutePicker && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.routePickerModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Choose Route</Text>
+              <TouchableOpacity onPress={() => setShowRoutePicker(false)}>
+                <X size={24} color={colors.text.secondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.routeList}>
+              {alternateRoutes.map((altRoute, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.routeOption,
+                    index === selectedRouteIndex && styles.routeOptionSelected,
+                  ]}
+                  onPress={() => handleSelectRoute(index)}
+                >
+                  <View style={styles.routeOptionHeader}>
+                    <View style={styles.routeLabel}>
+                      {altRoute.isFastest && <Clock size={14} color={colors.accent.primary} />}
+                      {altRoute.isShortest && !altRoute.isFastest && <Route size={14} color={colors.status.success} />}
+                      <Text style={[
+                        styles.routeLabelText,
+                        index === selectedRouteIndex && styles.routeLabelTextSelected,
+                      ]}>
+                        {altRoute.label}
+                      </Text>
+                    </View>
+                    {index === selectedRouteIndex && (
+                      <Check size={20} color={colors.accent.primary} />
+                    )}
+                  </View>
+                  <Text style={styles.routeSummary}>{altRoute.summary}</Text>
+                  <View style={styles.routeStats}>
+                    <Text style={styles.routeStatText}>
+                      {formatDuration(altRoute.route.totalDuration)}
+                    </Text>
+                    <Text style={styles.routeStatDivider}>•</Text>
+                    <Text style={styles.routeStatText}>
+                      {(altRoute.route.totalDistance / 1000).toFixed(1)} km
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      )}
+
+      {/* Preferences Modal */}
+      {showPreferences && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.preferencesModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Route Options</Text>
+              <TouchableOpacity onPress={() => setShowPreferences(false)}>
+                <X size={24} color={colors.text.secondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.preferencesList}>
+              <TouchableOpacity
+                style={styles.preferenceItem}
+                onPress={() => togglePreference('avoidHighways')}
+              >
+                <View style={styles.preferenceInfo}>
+                  <AlertCircle size={20} color={colors.text.secondary} />
+                  <Text style={styles.preferenceText}>Avoid Highways</Text>
+                </View>
+                <View style={[
+                  styles.preferenceToggle,
+                  routePreferences.avoidHighways && styles.preferenceToggleActive,
+                ]}>
+                  {routePreferences.avoidHighways && (
+                    <Check size={14} color={colors.text.inverse} />
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.preferenceItem}
+                onPress={() => togglePreference('avoidTolls')}
+              >
+                <View style={styles.preferenceInfo}>
+                  <AlertCircle size={20} color={colors.text.secondary} />
+                  <Text style={styles.preferenceText}>Avoid Tolls</Text>
+                </View>
+                <View style={[
+                  styles.preferenceToggle,
+                  routePreferences.avoidTolls && styles.preferenceToggleActive,
+                ]}>
+                  {routePreferences.avoidTolls && (
+                    <Check size={14} color={colors.text.inverse} />
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.preferenceItem}
+                onPress={() => togglePreference('avoidFerries')}
+              >
+                <View style={styles.preferenceInfo}>
+                  <AlertCircle size={20} color={colors.text.secondary} />
+                  <Text style={styles.preferenceText}>Avoid Ferries</Text>
+                </View>
+                <View style={[
+                  styles.preferenceToggle,
+                  routePreferences.avoidFerries && styles.preferenceToggleActive,
+                ]}>
+                  {routePreferences.avoidFerries && (
+                    <Check size={14} color={colors.text.inverse} />
+                  )}
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       )}
     </View>
@@ -1837,5 +2049,130 @@ const styles = StyleSheet.create({
   },
   chatSendButtonDisabled: {
     backgroundColor: colors.background.tertiary,
+  },
+
+  // Modal styles
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.surface.modalOverlay,
+    justifyContent: 'flex-end',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.default,
+  },
+  modalTitle: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.semibold,
+    color: colors.text.primary,
+  },
+
+  // Route picker modal
+  routePickerModal: {
+    backgroundColor: colors.background.secondary,
+    borderTopLeftRadius: borders.radius.xl,
+    borderTopRightRadius: borders.radius.xl,
+    maxHeight: '60%',
+  },
+  routeList: {
+    padding: spacing.lg,
+  },
+  routeOption: {
+    backgroundColor: colors.surface.card,
+    borderRadius: borders.radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  routeOptionSelected: {
+    borderColor: colors.accent.primary,
+    backgroundColor: colors.accent.muted,
+  },
+  routeOptionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  routeLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  routeLabelText: {
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+    color: colors.text.primary,
+  },
+  routeLabelTextSelected: {
+    color: colors.accent.primary,
+  },
+  routeSummary: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.secondary,
+    marginBottom: spacing.sm,
+  },
+  routeStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  routeStatText: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.tertiary,
+  },
+  routeStatDivider: {
+    color: colors.text.tertiary,
+  },
+
+  // Preferences modal
+  preferencesModal: {
+    backgroundColor: colors.background.secondary,
+    borderTopLeftRadius: borders.radius.xl,
+    borderTopRightRadius: borders.radius.xl,
+  },
+  preferencesList: {
+    padding: spacing.lg,
+  },
+  preferenceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.default,
+  },
+  preferenceInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  preferenceText: {
+    fontSize: typography.sizes.base,
+    color: colors.text.primary,
+  },
+  preferenceToggle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.background.tertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.border.default,
+  },
+  preferenceToggleActive: {
+    backgroundColor: colors.accent.primary,
+    borderColor: colors.accent.primary,
+  },
+  prefsActive: {
+    borderWidth: 2,
+    borderColor: colors.accent.primary,
   },
 });
