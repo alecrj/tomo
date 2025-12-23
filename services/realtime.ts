@@ -173,7 +173,9 @@ function handleDataChannelMessage(event: MessageEvent, callbacks: RealtimeCallba
         break;
 
       case 'response.audio.done':
-        updateVoiceActivityState('idle');
+        // NOTE: Don't set 'idle' here - audio.done fires per audio segment,
+        // but transcript deltas may still be coming. Only response.done
+        // marks the complete end of the response.
         break;
 
       case 'response.done':

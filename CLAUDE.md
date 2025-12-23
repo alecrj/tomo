@@ -1,8 +1,88 @@
 # Tomo - AI Travel Companion
 
-## Current Status (Session 24)
+---
+
+## 🚨 CRITICAL: SECURITY & SCALABILITY ROADMAP (Session 25)
 
 **Last Updated:** December 23, 2024
+
+### ⚠️ BEFORE ANY PUBLIC RELEASE, COMPLETE PHASES 1-2
+
+This app is ~95% feature complete but has **critical security issues** that must be fixed before shipping. A FAANG-level audit identified the following:
+
+### Current Security Gaps
+
+| Issue | Severity | Risk |
+|-------|----------|------|
+| **API keys in client bundle** | 🔴 CRITICAL | Keys can be extracted, $10k+ in charges |
+| **No rate limiting** | 🔴 HIGH | Spam could bankrupt API budget |
+| **No error monitoring** | 🟡 MEDIUM | Crashes invisible in production |
+| **Memory leaks** | 🟡 MEDIUM | App crashes, 1-star reviews |
+| **No input validation** | 🟡 MEDIUM | Prompt injection risk |
+| **0% test coverage** | 🟡 MEDIUM | Regressions go unnoticed |
+
+### The 4-Phase Plan
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    TOMO SHIP STRATEGY                           │
+├─────────────────────────────────────────────────────────────────┤
+│   PHASE 1          PHASE 2          PHASE 3         PHASE 4    │
+│   CRITICAL         QUALITY          FEATURE         SCALE      │
+│   SECURITY         GATES            COMPLETE        & POLISH   │
+│                                                                 │
+│   [3-4 days]       [3-4 days]       [As needed]     [Ongoing]  │
+│                                                                 │
+│   • Backend proxy  • CI/CD          • Final features• More tests│
+│   • Error monitor  • Core tests     • User feedback • Analytics │
+│   • Memory fixes   • Rate limiting  • Bug fixes     • a11y/i18n │
+│   • Logger setup   • Input valid.   • Device test   • Optimize  │
+│                                                                 │
+│   ⛔ BLOCKS SHIP   ⛔ BLOCKS SHIP   ✈️ SHIP IT      🔄 ITERATE  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Phase 1: Critical Security (MUST DO FIRST)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Backend API proxy (Supabase Edge Functions) | ⬜ TODO | Move API keys server-side |
+| Sentry error monitoring | ⬜ TODO | See crashes in production |
+| Memory leak fixes (conversation limits) | ⬜ TODO | Prevent storage overflow |
+| Logger utility (replace console.log) | ⬜ TODO | Structured logging |
+| Remove EXPO_PUBLIC API keys from client | ⬜ TODO | After proxy is ready |
+
+### Phase 2: Quality Gates
+
+| Task | Status | Notes |
+|------|--------|-------|
+| GitHub Actions CI/CD | ⬜ TODO | Auto test on every PR |
+| Core tests (services + stores) | ⬜ TODO | ~20-30 tests for critical paths |
+| Rate limiting on chat | ⬜ TODO | Prevent API abuse |
+| Input sanitization | ⬜ TODO | Prevent prompt injection |
+
+### Phase 3: Ship
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Final device testing | ⬜ TODO | Real iPhone, all features |
+| TestFlight submission | ⬜ TODO | Beta testing |
+| Collect user feedback | ⬜ TODO | Iterate based on feedback |
+
+### Phase 4: Scale (Ongoing)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Increase test coverage | ⬜ TODO | Target 60%+ |
+| Analytics integration | ⬜ TODO | Understand usage |
+| Performance optimization | ⬜ TODO | Based on real data |
+| Accessibility (a11y) | ⬜ TODO | VoiceOver support |
+
+**📋 Detailed implementation guide: See `SECURITY.md`**
+
+---
+
+## Current Status (Session 24)
 
 **Map Solution:** Apple Maps tiles + Google APIs for places/routes data.
 
@@ -10,32 +90,11 @@
 
 **Major Features Added:**
 - ✅ **Marker panning fix** - Marker no longer moves/rotates when panning map
-  - Explicit `flat={false}` and `rotation={0}` on Marker
-  - Direction cone only shows in following mode
-  - Uses expo-location's `watchHeadingAsync` (same as Apple/Google Maps)
-
 - ✅ **Speed indicator** - Shows current speed in km/h in bottom bar
-  - Only displays when moving > 0.5 m/s
-  - Uses `Location.watchPositionAsync()` for real-time tracking
-
 - ✅ **Share ETA** - Button to share arrival time with others
-  - Uses React Native Share API
-  - Includes destination name, ETA time, and distance
-
 - ✅ **Alternate routes (driving)** - Up to 3 route options
-  - Gray polylines for unselected routes (tappable to select)
-  - Route picker modal showing Best/Fastest/Shortest labels
-  - Routes labeled with duration and distance
-
 - ✅ **Route preferences** - Avoid highways/tolls/ferries
-  - Settings modal with toggle options
-  - Preferences button shows active state when options set
-  - Routes recalculate when preferences change
-
-- ✅ **Save route** - Bookmark routes for later
-  - New `useSavedRoutesStore` for persistent storage
-  - Tracks use count and last used time
-  - Visual feedback when saved (green bookmark)
+- ✅ **Saved places** - Bookmark places for later (changed from saved routes)
 
 ### Offline Maps Research
 
