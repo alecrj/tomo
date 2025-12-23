@@ -1,37 +1,81 @@
 # Tomo - AI Travel Companion
 
-## Current Status (Session 23 - Continued)
+## Current Status (Session 24)
 
-**Last Updated:** December 22, 2024
+**Last Updated:** December 23, 2024
 
-**Map Solution:** Apple Maps tiles + Google APIs for places/routes data. Google Maps tiles had persistent rendering issues.
+**Map Solution:** Apple Maps tiles + Google APIs for places/routes data.
 
-### Session 23 Progress (Continued)
+### Session 24 Progress - Navigation Enhancements Complete
 
-**Navigation Enhancements (Part 2):**
-- ✅ Fixed direction cone rotation (negated heading value)
-- ✅ **Expandable step list UI** - tap turn header to see all navigation steps
-  - Shows current step highlighted
-  - Past steps shown with checkmark
-  - Transit steps show line names
-  - Distance and time for each step
-  - Final destination at bottom
-- ✅ Added comprehensive debug logging for route time discrepancy investigation
+**Major Features Added:**
+- ✅ **Marker panning fix** - Marker no longer moves/rotates when panning map
+  - Explicit `flat={false}` and `rotation={0}` on Marker
+  - Direction cone only shows in following mode
+  - Uses expo-location's `watchHeadingAsync` (same as Apple/Google Maps)
 
-**Previous Navigation Work:**
-- ✅ Travel mode selector (Walk/Transit/Drive)
-- ✅ Custom user location marker with direction cone (like Google Maps)
-- ✅ Transit support with train/bus icons and line names
-- ✅ Voice guidance ready (requires native rebuild for expo-speech)
-- ✅ Routes API uses user's language preference
-- ✅ Real coordinates from Google Places
+- ✅ **Speed indicator** - Shows current speed in km/h in bottom bar
+  - Only displays when moving > 0.5 m/s
+  - Uses `Location.watchPositionAsync()` for real-time tracking
 
-**Debug Logging Added:**
-- `[OpenAI]` - Tracks GPT coordinates vs Google Places coordinates
-- `[Routes]` - Tracks Routes API requests and responses
-- `[Home]` - Tracks destination coordinates when "Take me there" is tapped
+- ✅ **Share ETA** - Button to share arrival time with others
+  - Uses React Native Share API
+  - Includes destination name, ETA time, and distance
 
-Check console logs when testing to diagnose any remaining route time issues.
+- ✅ **Alternate routes (driving)** - Up to 3 route options
+  - Gray polylines for unselected routes (tappable to select)
+  - Route picker modal showing Best/Fastest/Shortest labels
+  - Routes labeled with duration and distance
+
+- ✅ **Route preferences** - Avoid highways/tolls/ferries
+  - Settings modal with toggle options
+  - Preferences button shows active state when options set
+  - Routes recalculate when preferences change
+
+- ✅ **Save route** - Bookmark routes for later
+  - New `useSavedRoutesStore` for persistent storage
+  - Tracks use count and last used time
+  - Visual feedback when saved (green bookmark)
+
+### Offline Maps Research
+
+For true offline maps, **MapLibre React Native** is the recommended solution:
+
+**Official OfflineManager API:**
+- `createPack()` - Download tiles for specific region/zoom levels
+- `invalidatePack()` - Update tiles without full re-download
+- Packs automatically used by MapViews with same style
+
+**Implementation Requirements:**
+```bash
+npm install @maplibre/maplibre-react-native
+```
+
+**Key Considerations:**
+- Requires custom dev client (not Expo Go compatible)
+- Need tile source (MapTiler, Stadia Maps, or self-hosted)
+- V11 alpha has better New Architecture support
+- Some tile providers have GZIP issues on mobile
+
+**Recommended Approach for Tomo:**
+1. Continue using Apple Maps tiles (current setup)
+2. Cache viewed areas automatically
+3. Show "Offline" banner when no connection
+4. Queue messages for when connection returns (already implemented)
+
+**Sources:**
+- [MapLibre OfflineManager](https://maplibre.org/maplibre-react-native/docs/modules/offline-manager/)
+- [MapLibre React Native GitHub](https://github.com/maplibre/maplibre-react-native)
+
+---
+
+### Previous Session Work
+
+**Session 23 - Expandable Step List:**
+- Tap turn header to see all navigation steps
+- Past steps shown with checkmark
+- Transit steps show line names
+- Distance and time for each step
 
 ### App Structure
 
