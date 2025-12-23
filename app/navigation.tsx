@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -69,7 +69,7 @@ import { searchNearby } from '../services/places';
 import { useNavigationStore } from '../stores/useNavigationStore';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useTripStore } from '../stores/useTripStore';
-import { useSavedRoutesStore } from '../stores/useSavedRoutesStore';
+import { useSavedPlacesStore } from '../stores/useSavedPlacesStore';
 import { decodePolyline } from '../utils/polyline';
 import { TypingIndicator } from '../components/TypingIndicator';
 import type { TransitRoute, Coordinates } from '../types';
@@ -203,7 +203,8 @@ export default function NavigationScreen() {
   const waypoints = useNavigationStore((state) => state.waypoints);
   const coordinates = useLocationStore((state) => state.coordinates);
   const addVisit = useTripStore((state) => state.addVisit);
-  const saveRouteToStore = useSavedRoutesStore((state) => state.saveRoute);
+  const savedPlaces = useSavedPlacesStore((state) => state.places);
+  const savePlace = useSavedPlacesStore((state) => state.savePlace);
 
   // Local state
   const [route, setRoute] = useState<TransitRoute | null>(null);
@@ -230,7 +231,16 @@ export default function NavigationScreen() {
     avoidFerries: false,
   });
   const [showPreferences, setShowPreferences] = useState(false);
-  const [isRouteSaved, setIsRouteSaved] = useState(false);
+
+  // Check if current destination is already saved
+  const isPlaceSaved = useMemo(() => {
+    if (!currentDestination) return false;
+    return savedPlaces.some(p =>
+      p.name === currentDestination.title ||
+      (p.coordinates?.latitude === currentDestination.coordinates.latitude &&
+       p.coordinates?.longitude === currentDestination.coordinates.longitude)
+    );
+  }, [currentDestination, savedPlaces]);
 
   // Chat state
   const [showChat, setShowChat] = useState(false);
@@ -599,21 +609,19 @@ export default function NavigationScreen() {
     }));
   };
 
-  // Save current route
-  const handleSaveRoute = () => {
-    if (!currentDestination || !route || !coordinates) return;
+  // Save current destination as a place
+  const handleSavePlace = () => {
+    if (!currentDestination || isPlaceSaved) return;
 
     safeHaptics.notification(NotificationFeedbackType.Success);
-    saveRouteToStore({
+    savePlace({
+      placeId: currentDestination.id || `nav_${Date.now()}`,
       name: currentDestination.title,
-      origin: coordinates,
-      destination: currentDestination.coordinates,
-      destinationName: currentDestination.title,
-      destinationAddress: currentDestination.address,
-      route: route,
-      travelMode: travelMode,
+      address: currentDestination.address,
+      coordinates: currentDestination.coordinates,
+      rating: currentDestination.rating,
+      photo: currentDestination.photos?.[0],
     });
-    setIsRouteSaved(true);
   };
 
   // Handlers
@@ -1403,19 +1411,19 @@ export default function NavigationScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Save route button */}
+          {/* Save place button */}
           <TouchableOpacity
             style={[
               styles.shareButton,
-              isRouteSaved && styles.savedActive,
+              isPlaceSaved && styles.savedActive,
             ]}
-            onPress={handleSaveRoute}
-            disabled={isRouteSaved}
+            onPress={handleSavePlace}
+            disabled={isPlaceSaved}
           >
             <Bookmark
               size={20}
-              color={isRouteSaved ? colors.text.inverse : colors.text.primary}
-              fill={isRouteSaved ? colors.text.inverse : 'transparent'}
+              color={isPlaceSaved ? colors.text.inverse : colors.text.primary}
+              fill={isPlaceSaved ? colors.text.inverse : 'transparent'}
             />
           </TouchableOpacity>
         </View>

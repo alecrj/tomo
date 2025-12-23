@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,34 +7,29 @@ import {
   TouchableOpacity,
   StatusBar,
   Image,
+  Dimensions,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-// Animations disabled temporarily for stability
-// import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import {
   Map,
-  Heart,
+  Bookmark,
   MapPin,
   Navigation,
   Trash2,
-  CheckCircle,
-  Utensils,
-  Coffee,
-  Landmark,
-  ShoppingBag,
+  Check,
+  Star,
+  Clock,
+  ChevronRight,
 } from 'lucide-react-native';
 import { colors, spacing, typography, borders, shadows } from '../../constants/theme';
 import { useSavedPlacesStore } from '../../stores/useSavedPlacesStore';
 import { useLocationStore } from '../../stores/useLocationStore';
 import { safeHaptics, ImpactFeedbackStyle, NotificationFeedbackType } from '../../utils/haptics';
 
-const FILTERS = [
-  { id: 'all', label: 'All' },
-  { id: 'food', label: 'Food' },
-  { id: 'attraction', label: 'See' },
-  { id: 'shop', label: 'Shop' },
-];
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CARD_WIDTH = SCREEN_WIDTH - spacing.lg * 2;
 
 export default function SavedScreen() {
   const router = useRouter();
@@ -46,58 +41,54 @@ export default function SavedScreen() {
   const coordinates = useLocationStore((state) => state.coordinates);
 
   // Local state
-  const [selectedFilter, setSelectedFilter] = useState('all');
+  const [showVisited, setShowVisited] = useState(true);
 
-  // Group places by city
-  const placesByCity = useMemo(() => {
-    const grouped: Record<string, typeof places> = {};
-
-    places.forEach((place) => {
-      const city = place.city || 'Saved';
-      if (!grouped[city]) {
-        grouped[city] = [];
+  // Sort places by distance (nearest first), then by whether visited
+  const sortedPlaces = useMemo(() => {
+    return [...places].sort((a, b) => {
+      // Unvisited first
+      if (a.visited !== b.visited) {
+        return a.visited ? 1 : -1;
       }
-      grouped[city].push(place);
+      // Then by distance
+      if (coordinates && a.coordinates && b.coordinates) {
+        const distA = getDistanceValue(coordinates, a.coordinates);
+        const distB = getDistanceValue(coordinates, b.coordinates);
+        return distA - distB;
+      }
+      return 0;
     });
+  }, [places, coordinates]);
 
-    // Filter by category if needed
-    if (selectedFilter !== 'all') {
-      Object.keys(grouped).forEach((city) => {
-        grouped[city] = grouped[city].filter((p) => {
-          const name = p.name.toLowerCase();
-          switch (selectedFilter) {
-            case 'food':
-              return name.includes('restaurant') || name.includes('cafe') || name.includes('bar');
-            case 'attraction':
-              return name.includes('museum') || name.includes('temple') || name.includes('park');
-            case 'shop':
-              return name.includes('shop') || name.includes('market') || name.includes('mall');
-            default:
-              return true;
-          }
-        });
-      });
-    }
+  // Filter out visited if toggle is off
+  const filteredPlaces = useMemo(() => {
+    if (showVisited) return sortedPlaces;
+    return sortedPlaces.filter(p => !p.visited);
+  }, [sortedPlaces, showVisited]);
 
-    return grouped;
-  }, [places, selectedFilter]);
+  // Stats
+  const visitedCount = places.filter(p => p.visited).length;
+  const unvisitedCount = places.length - visitedCount;
 
-  // Calculate distance to place
-  const getDistance = (placeCoords?: { latitude: number; longitude: number }) => {
-    if (!coordinates || !placeCoords) return null;
-
-    const R = 6371; // Earth's radius in km
-    const dLat = ((placeCoords.latitude - coordinates.latitude) * Math.PI) / 180;
-    const dLon = ((placeCoords.longitude - coordinates.longitude) * Math.PI) / 180;
+  // Calculate distance value in km
+  function getDistanceValue(from: { latitude: number; longitude: number }, to: { latitude: number; longitude: number }) {
+    const R = 6371;
+    const dLat = ((to.latitude - from.latitude) * Math.PI) / 180;
+    const dLon = ((to.longitude - from.longitude) * Math.PI) / 180;
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((coordinates.latitude * Math.PI) / 180) *
-        Math.cos((placeCoords.latitude * Math.PI) / 180) *
+      Math.cos((from.latitude * Math.PI) / 180) *
+        Math.cos((to.latitude * Math.PI) / 180) *
         Math.sin(dLon / 2) *
         Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const distance = R * c;
+    return R * c;
+  }
 
+  // Format distance for display
+  const formatDistance = (placeCoords?: { latitude: number; longitude: number }) => {
+    if (!coordinates || !placeCoords) return null;
+    const distance = getDistanceValue(coordinates, placeCoords);
     if (distance < 1) {
       return `${Math.round(distance * 1000)}m`;
     }
@@ -105,7 +96,7 @@ export default function SavedScreen() {
   };
 
   // Handle navigation
-  const handleNavigate = (place: typeof places[0]) => {
+  const handleNavigate = useCallback((place: typeof places[0]) => {
     if (!place.coordinates) return;
     safeHaptics.impact(ImpactFeedbackStyle.Medium);
     router.push({
@@ -117,19 +108,30 @@ export default function SavedScreen() {
         lng: place.coordinates.longitude,
       },
     });
-  };
+  }, [router]);
 
   // Handle mark visited
-  const handleMarkVisited = (placeId: string) => {
+  const handleMarkVisited = useCallback((placeId: string, currentlyVisited: boolean) => {
     safeHaptics.notification(NotificationFeedbackType.Success);
     markVisited(placeId);
-  };
+  }, [markVisited]);
 
-  // Handle delete
-  const handleDelete = (placeId: string) => {
+  // Handle delete with confirmation
+  const handleDelete = useCallback((placeId: string, placeName: string) => {
     safeHaptics.impact(ImpactFeedbackStyle.Medium);
-    removePlace(placeId);
-  };
+    Alert.alert(
+      'Remove Place',
+      `Remove "${placeName}" from saved places?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => removePlace(placeId)
+        },
+      ]
+    );
+  }, [removePlace]);
 
   // Open map view
   const handleMapView = () => {
@@ -148,11 +150,17 @@ export default function SavedScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Saved</Text>
+          <View>
+            <Text style={styles.headerTitle}>Saved Places</Text>
+            {!isEmpty && (
+              <Text style={styles.headerSubtitle}>
+                {unvisitedCount} to visit{visitedCount > 0 ? ` · ${visitedCount} visited` : ''}
+              </Text>
+            )}
+          </View>
           {!isEmpty && (
             <TouchableOpacity style={styles.mapButton} onPress={handleMapView}>
-              <Map size={20} color={colors.accent.primary} />
-              <Text style={styles.mapButtonText}>Map View</Text>
+              <Map size={20} color={colors.text.inverse} />
             </TouchableOpacity>
           )}
         </View>
@@ -160,52 +168,40 @@ export default function SavedScreen() {
         {isEmpty ? (
           /* Empty state */
           <View style={styles.emptyState}>
-            <View>
-              <Heart size={48} color={colors.text.tertiary} />
+            <View style={styles.emptyIconContainer}>
+              <Bookmark size={32} color={colors.text.tertiary} />
             </View>
-            <Text style={styles.emptyTitle}>No saved places</Text>
+            <Text style={styles.emptyTitle}>No saved places yet</Text>
             <Text style={styles.emptySubtitle}>
-              Save places from chat or the map to find them here
+              When you find places you love, save them here for easy access
             </Text>
             <TouchableOpacity
               style={styles.exploreButton}
               onPress={() => router.push('/(tabs)/map')}
             >
-              <Text style={styles.exploreButtonText}>Explore the map</Text>
+              <Map size={18} color={colors.text.inverse} />
+              <Text style={styles.exploreButtonText}>Explore Map</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
-            {/* Filter chips */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.filtersContainer}
-              contentContainerStyle={styles.filtersContent}
-            >
-              {FILTERS.map((filter) => (
+            {/* Toggle visited */}
+            {visitedCount > 0 && (
+              <View style={styles.toggleContainer}>
                 <TouchableOpacity
-                  key={filter.id}
-                  style={[
-                    styles.filterChip,
-                    selectedFilter === filter.id && styles.filterChipActive,
-                  ]}
+                  style={styles.toggleButton}
                   onPress={() => {
                     safeHaptics.impact(ImpactFeedbackStyle.Light);
-                    setSelectedFilter(filter.id);
+                    setShowVisited(!showVisited);
                   }}
                 >
-                  <Text
-                    style={[
-                      styles.filterText,
-                      selectedFilter === filter.id && styles.filterTextActive,
-                    ]}
-                  >
-                    {filter.label}
-                  </Text>
+                  <View style={[styles.toggleCheck, showVisited && styles.toggleCheckActive]}>
+                    {showVisited && <Check size={12} color={colors.text.inverse} />}
+                  </View>
+                  <Text style={styles.toggleText}>Show visited places</Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              </View>
+            )}
 
             {/* Places list */}
             <ScrollView
@@ -213,88 +209,97 @@ export default function SavedScreen() {
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
             >
-              {Object.entries(placesByCity).map(([city, cityPlaces]) => (
-                <View key={city}>
-                  {cityPlaces.length > 0 && (
-                    <>
-                      <Text style={styles.cityTitle}>{city}</Text>
-                      {cityPlaces.map((place) => (
-                        <View
-                          key={place.placeId || place.name}
-                          style={[
-                            styles.placeCard,
-                            place.visited && styles.placeCardVisited,
-                          ]}
-                        >
-                          {place.photo ? (
-                            <Image
-                              source={{ uri: place.photo }}
-                              style={styles.placeImage}
-                            />
-                          ) : (
-                            <View style={styles.placePlaceholder}>
-                              <MapPin size={24} color={colors.text.tertiary} />
-                            </View>
-                          )}
-                          <View style={styles.placeContent}>
-                            <Text style={styles.placeName} numberOfLines={1}>
-                              {place.name}
-                            </Text>
-                            <View style={styles.placeMeta}>
-                              {place.rating && (
-                                <Text style={styles.placeRating}>
-                                  {place.rating.toFixed(1)}
-                                </Text>
-                              )}
-                              {place.priceLevel && (
-                                <Text style={styles.placePrice}>
-                                  {'$'.repeat(place.priceLevel)}
-                                </Text>
-                              )}
-                              {getDistance(place.coordinates) && (
-                                <Text style={styles.placeDistance}>
-                                  {getDistance(place.coordinates)}
-                                </Text>
-                              )}
-                            </View>
-                            {place.visited && (
-                              <View style={styles.visitedBadge}>
-                                <CheckCircle size={12} color={colors.status.success} />
-                                <Text style={styles.visitedText}>Visited</Text>
-                              </View>
-                            )}
-                          </View>
-                          <View style={styles.placeActions}>
-                            <TouchableOpacity
-                              style={styles.actionButton}
-                              onPress={() => place.placeId && handleMarkVisited(place.placeId)}
-                            >
-                              <CheckCircle
-                                size={18}
-                                color={place.visited ? colors.status.success : colors.text.tertiary}
-                              />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.actionButton}
-                              onPress={() => handleNavigate(place)}
-                            >
-                              <Navigation size={18} color={colors.accent.primary} />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.actionButton}
-                              onPress={() => place.placeId && handleDelete(place.placeId)}
-                            >
-                              <Trash2 size={18} color={colors.status.error} />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      ))}
-                    </>
+              {filteredPlaces.map((place, index) => (
+                <TouchableOpacity
+                  key={place.placeId || place.name}
+                  style={[
+                    styles.placeCard,
+                    place.visited && styles.placeCardVisited,
+                  ]}
+                  onPress={() => handleNavigate(place)}
+                  onLongPress={() => place.placeId && handleDelete(place.placeId, place.name)}
+                  activeOpacity={0.7}
+                >
+                  {/* Image */}
+                  {place.photo ? (
+                    <Image
+                      source={{ uri: place.photo }}
+                      style={styles.placeImage}
+                    />
+                  ) : (
+                    <View style={styles.placePlaceholder}>
+                      <MapPin size={24} color={colors.text.tertiary} />
+                    </View>
                   )}
-                </View>
+
+                  {/* Content */}
+                  <View style={styles.placeContent}>
+                    <View style={styles.placeHeader}>
+                      <Text style={styles.placeName} numberOfLines={1}>
+                        {place.name}
+                      </Text>
+                      {place.visited && (
+                        <View style={styles.visitedBadge}>
+                          <Check size={10} color={colors.status.success} />
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.placeMeta}>
+                      {place.rating && (
+                        <View style={styles.ratingContainer}>
+                          <Star size={12} color="#FFB800" fill="#FFB800" />
+                          <Text style={styles.ratingText}>{place.rating.toFixed(1)}</Text>
+                        </View>
+                      )}
+                      {place.priceLevel && (
+                        <Text style={styles.priceText}>
+                          {'$'.repeat(place.priceLevel)}
+                        </Text>
+                      )}
+                      {formatDistance(place.coordinates) && (
+                        <Text style={styles.distanceText}>
+                          {formatDistance(place.coordinates)}
+                        </Text>
+                      )}
+                    </View>
+
+                    {place.address && (
+                      <Text style={styles.addressText} numberOfLines={1}>
+                        {place.address}
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* Actions */}
+                  <View style={styles.placeActions}>
+                    <TouchableOpacity
+                      style={styles.visitedButton}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        place.placeId && handleMarkVisited(place.placeId, !!place.visited);
+                      }}
+                    >
+                      <Check
+                        size={16}
+                        color={place.visited ? colors.status.success : colors.text.tertiary}
+                      />
+                    </TouchableOpacity>
+                    <View style={styles.navigateButton}>
+                      <Navigation size={16} color={colors.accent.primary} />
+                    </View>
+                  </View>
+                </TouchableOpacity>
               ))}
 
-              <View style={{ height: 120 }} />
+              {/* Tip */}
+              <View style={styles.tipContainer}>
+                <Text style={styles.tipText}>
+                  Long press any place to remove it
+                </Text>
+              </View>
+
+              <View style={{ height: 100 }} />
             </ScrollView>
           </>
         )}
@@ -311,60 +316,61 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
+
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.muted,
+    paddingVertical: spacing.lg,
   },
   headerTitle: {
-    fontSize: typography.sizes.xl,
+    fontSize: typography.sizes['2xl'],
     fontWeight: typography.weights.bold,
     color: colors.text.primary,
   },
-  mapButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  mapButtonText: {
+  headerSubtitle: {
     fontSize: typography.sizes.sm,
-    color: colors.accent.primary,
-    fontWeight: typography.weights.semibold,
+    color: colors.text.secondary,
+    marginTop: 2,
+  },
+  mapButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.accent.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.md,
   },
 
-  // Filters
-  filtersContainer: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.muted,
-  },
-  filtersContent: {
+  // Toggle
+  toggleContainer: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  toggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.sm,
   },
-  filterChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borders.radius.full,
-    backgroundColor: colors.surface.card,
-    borderWidth: 1,
+  toggleCheck: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
     borderColor: colors.border.default,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  filterChipActive: {
+  toggleCheckActive: {
     backgroundColor: colors.accent.primary,
     borderColor: colors.accent.primary,
   },
-  filterText: {
+  toggleText: {
     fontSize: typography.sizes.sm,
-    color: colors.text.primary,
-    fontWeight: typography.weights.medium,
-  },
-  filterTextActive: {
-    color: colors.text.inverse,
+    color: colors.text.secondary,
   },
 
   // List
@@ -373,92 +379,120 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-  },
-  cityTitle: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.semibold,
-    color: colors.text.secondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: spacing.md,
-    marginTop: spacing.md,
   },
 
   // Place card
   placeCard: {
     flexDirection: 'row',
     backgroundColor: colors.surface.card,
-    borderRadius: borders.radius.lg,
+    borderRadius: borders.radius.xl,
     padding: spacing.md,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: colors.border.muted,
   },
   placeCardVisited: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
   placeImage: {
-    width: 60,
-    height: 60,
-    borderRadius: borders.radius.md,
-    marginRight: spacing.md,
+    width: 72,
+    height: 72,
+    borderRadius: borders.radius.lg,
   },
   placePlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: borders.radius.md,
+    width: 72,
+    height: 72,
+    borderRadius: borders.radius.lg,
     backgroundColor: colors.background.tertiary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.md,
   },
   placeContent: {
     flex: 1,
+    marginLeft: spacing.md,
     justifyContent: 'center',
   },
+  placeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   placeName: {
+    flex: 1,
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.semibold,
     color: colors.text.primary,
-    marginBottom: spacing.xs,
+  },
+  visitedBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.status.successMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   placeMeta: {
     flexDirection: 'row',
-    gap: spacing.md,
-  },
-  placeRating: {
-    fontSize: typography.sizes.sm,
-    color: colors.status.warning,
-    fontWeight: typography.weights.medium,
-  },
-  placePrice: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.tertiary,
-  },
-  placeDistance: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.tertiary,
-  },
-  visitedBadge: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.md,
     marginTop: spacing.xs,
   },
-  visitedText: {
-    fontSize: typography.sizes.xs,
-    color: colors.status.success,
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
+  ratingText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.text.primary,
+  },
+  priceText: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.tertiary,
+  },
+  distanceText: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.tertiary,
+  },
+  addressText: {
+    fontSize: typography.sizes.xs,
+    color: colors.text.tertiary,
+    marginTop: spacing.xs,
+  },
+
+  // Actions
   placeActions: {
     justifyContent: 'center',
-    gap: spacing.xs,
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingLeft: spacing.sm,
   },
-  actionButton: {
+  visitedButton: {
     width: 32,
     height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.background.tertiary,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  navigateButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.accent.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Tip
+  tipContainer: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+  },
+  tipText: {
+    fontSize: typography.sizes.xs,
+    color: colors.text.tertiary,
   },
 
   // Empty state
@@ -468,11 +502,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
   },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.background.tertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
   emptyTitle: {
     fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
     color: colors.text.primary,
-    marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
   emptySubtitle: {
@@ -480,13 +522,17 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     textAlign: 'center',
     marginBottom: spacing.xl,
+    lineHeight: 22,
   },
   exploreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
     backgroundColor: colors.accent.primary,
-    borderRadius: borders.radius.lg,
-    ...shadows.glowSoft,
+    borderRadius: borders.radius.full,
+    ...shadows.md,
   },
   exploreButtonText: {
     fontSize: typography.sizes.base,
