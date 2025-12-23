@@ -69,6 +69,7 @@ import { searchNearby } from '../services/places';
 import { useNavigationStore } from '../stores/useNavigationStore';
 import { useLocationStore } from '../stores/useLocationStore';
 import { useTripStore } from '../stores/useTripStore';
+import { useSavedRoutesStore } from '../stores/useSavedRoutesStore';
 import { decodePolyline } from '../utils/polyline';
 import { TypingIndicator } from '../components/TypingIndicator';
 import type { TransitRoute, Coordinates } from '../types';
@@ -202,6 +203,7 @@ export default function NavigationScreen() {
   const waypoints = useNavigationStore((state) => state.waypoints);
   const coordinates = useLocationStore((state) => state.coordinates);
   const addVisit = useTripStore((state) => state.addVisit);
+  const saveRouteToStore = useSavedRoutesStore((state) => state.saveRoute);
 
   // Local state
   const [route, setRoute] = useState<TransitRoute | null>(null);
@@ -228,6 +230,7 @@ export default function NavigationScreen() {
     avoidFerries: false,
   });
   const [showPreferences, setShowPreferences] = useState(false);
+  const [isRouteSaved, setIsRouteSaved] = useState(false);
 
   // Chat state
   const [showChat, setShowChat] = useState(false);
@@ -594,6 +597,23 @@ export default function NavigationScreen() {
       ...prev,
       [pref]: !prev[pref],
     }));
+  };
+
+  // Save current route
+  const handleSaveRoute = () => {
+    if (!currentDestination || !route || !coordinates) return;
+
+    safeHaptics.notification(NotificationFeedbackType.Success);
+    saveRouteToStore({
+      name: currentDestination.title,
+      origin: coordinates,
+      destination: currentDestination.coordinates,
+      destinationName: currentDestination.title,
+      destinationAddress: currentDestination.address,
+      route: route,
+      travelMode: travelMode,
+    });
+    setIsRouteSaved(true);
   };
 
   // Handlers
@@ -1382,6 +1402,22 @@ export default function NavigationScreen() {
               <Settings size={20} color={colors.text.primary} />
             </TouchableOpacity>
           )}
+
+          {/* Save route button */}
+          <TouchableOpacity
+            style={[
+              styles.shareButton,
+              isRouteSaved && styles.savedActive,
+            ]}
+            onPress={handleSaveRoute}
+            disabled={isRouteSaved}
+          >
+            <Bookmark
+              size={20}
+              color={isRouteSaved ? colors.text.inverse : colors.text.primary}
+              fill={isRouteSaved ? colors.text.inverse : 'transparent'}
+            />
+          </TouchableOpacity>
         </View>
       )}
 
@@ -2174,5 +2210,8 @@ const styles = StyleSheet.create({
   prefsActive: {
     borderWidth: 2,
     borderColor: colors.accent.primary,
+  },
+  savedActive: {
+    backgroundColor: colors.status.success,
   },
 });
